@@ -1,0 +1,15 @@
+{
+  "name": "ause-discovery",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": "24.20.0",
+    "pnpm": "11.25.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @ause-discovery/frontend build",
+    "lint": "pnpm --filter @ause-discovery/frontend lint",
+    "test": "pnpm --filter @ause-discovery/frontend test"
+  }
+}

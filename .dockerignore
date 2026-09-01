@@ -1,5 +1,10 @@
+.git/
+.github/
 .idea/
-**/**.env
+.memory/
+.DS_Store
+.env
+.env.*
 !.env.example
 node_modules/
 **/node_modules/
@@ -9,9 +14,8 @@ dist/
 coverage/
 playwright-report/
 test-results/
-backend/bin/
-backend/generated/*.gen.go
-backend/data/
-data/
-tmp/
 resources/
+data/
+backend/data/
+tmp/
+frontend/package-lock.json
