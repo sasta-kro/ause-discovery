@@ -2,36 +2,37 @@
 
 ## Purpose
 
-This directory preserves durable project context across sessions. `MEMORY.md` is a router, not a project journal or a storage location for detailed findings.
+This directory preserves durable AUSE Discovery project context across sessions. `MEMORY.md` is a router, not a project journal.
 
 ## Session bootstrap
 
-Read the following files in order before planning or implementation:
+Read these files in order before planning or implementation:
 
 1. `../AGENTS.md`
 2. `MEMORY.md`
 3. `project_context.md`
 4. `architectural_decision_logs.md`
-5. `mvp_implementation_status.md`, while the MVP remains active
-6. `lessons_learned.md`, when present
+5. `mvp_implementation_status.md`, after implementation begins
+6. `lessons_learned.md`, when substantive lessons exist
+
+Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-discovery_implementation_specification_v1.md` before implementation.
 
 ## Memory files
 
-- `project_context.md` contains the product intent, repository findings, MVP boundary, current plan, deferred work, and unresolved checks.
-- `architectural_decision_logs.md` contains accepted architecture decisions, reasons, alternatives, and consequences.
-- `mvp_implementation_status.md` contains the implemented runtime, verified behavior, and remaining external prerequisites.
-- `lessons_learned.md` is created only after a verified mistake or repeated failure produces a reusable lesson.
+- `project_context.md` contains durable product, repository, and implementation-baseline context.
+- `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
+- `mvp_implementation_status.md` will contain verified implementation state after application work begins.
+- `lessons_learned.md` remains reserved for verified reusable lessons.
 
 ## Maintenance rules
 
-- Read the relevant file before changing it.
-- Update an existing section instead of adding a duplicate entry.
+- Read a memory file before changing it.
+- Update an existing section instead of adding duplicates.
 - Store durable facts, accepted decisions, active constraints, and verified lessons.
-- Do not store raw command output, temporary debugging notes, speculative ideas, credentials, tokens, private keys, or `.env` values.
-- Record implementation details only when required to preserve intent or prevent repeated investigation.
-- Mark superseded decisions instead of silently rewriting their history.
+- Do not store raw command output, temporary notes, credentials, tokens, private keys, secret values, or full environment configuration.
+- Mark superseded decisions explicitly.
 - Keep this router short.
 
 ## Current checkpoint
 
-As of 2026-08-27, `riko_sasta` exists as an independent Git repository and the MVP runs end to end with Groq as the default language-model provider. Native MPS GPT-SoVITS synthesis, MLX Whisper transcription, service integration, browser behavior, microphone detection, and one complete spoken turn are verified. The active milestone adds observability, runtime status feedback, and subtitles. Read `mvp_implementation_status.md` before resuming implementation or verification.
+As of 2026-09-01, AUSE Discovery is a greenfield monorepo with Git initialized on `main`, a default Vite React frontend scaffold, an empty backend, an approved product specification, and an implementation specification. Application feature implementation has not started.
