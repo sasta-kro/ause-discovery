@@ -18,7 +18,7 @@ AUSE Discovery is a public searchable institutional archive of historical senior
 
 ## Repository state
 
-As of 2026-09-01:
+As of 2026-09-02:
 
 - Git is initialized on `main` with an initial commit;
 - `frontend/` contains a default npm-based Vite React scaffold that does not yet match the accepted pnpm and exact-pin baseline;
@@ -26,6 +26,18 @@ As of 2026-09-01:
 - root workspace manifests, migrations, backend source, application tests, Compose, and CI do not exist;
 - the implementation specification is `docs/ause-discovery_implementation_specification_v1.md`;
 - the domain glossary is `CONTEXT.md`.
+
+## Agentic implementation intent
+
+- The product specification owns requirements and product behavior.
+- The implementation guide is an architectural overlay and executable build map, not a restatement or compliance regime.
+- Root Sol reasoning owns architecture, cross-cutting contracts, and major implementation decisions.
+- Workers implement bounded areas and choose non-major local details without unnecessary escalation.
+- Recoverable unknowns and launch-time inputs never block unrelated local development.
+- GitHub ownership, registry ownership, final URLs, VM details, branding, and legal content affect only their direct integration or launch work.
+- Read-only workers should run without routine polling. Root context should receive final or meaningful milestone reports rather than mundane progress streams.
+- Coding workers may receive targeted milestone review where early correction prevents drift.
+- ADRs remain sparse. Verified reusable failure patterns belong in lessons learned; ordinary fixes do not.
 
 ## Accepted implementation baseline
 
@@ -37,6 +49,7 @@ As of 2026-09-01:
 - pgx, sqlc, and goose for PostgreSQL access and migrations.
 - TanStack Query, React Hook Form, Zod, CSS Modules, i18next, and semantic design tokens.
 - GitHub Actions and GHCR for validation and image publication.
+- Neutral local Go module and image identities until a permanent repository owner exists.
 - Default base path `/ause-discovery/`, with root deployment also tested.
 - Version-controlled YAML catalogs and taxonomy.
 - Persistent metadata-only CSV/XLSX import preview with atomic selected-row commit.
@@ -47,6 +60,6 @@ As of 2026-09-01:
 
 Recommendations, analytics, semantic search, report-body indexing, AI extraction, public accounts, taxonomy CMS, custom document viewers, Redis, message brokers, microservices, external-link Artifacts, automatic backup, and automated VM deployment remain outside MVP scope.
 
-## External prerequisites
+## External inputs
 
-GitHub ownership, initial approved academic catalog vocabulary, institutional taxonomy review, VM capacity and architecture, production URL, TLS ownership, approved branding, legal text, contact information, and final public Student ID privacy approval require external confirmation.
+GitHub ownership, initial approved academic catalog vocabulary, institutional taxonomy review, VM capacity and architecture, production URL, TLS ownership, approved branding, legal text, contact information, and final public Student ID privacy approval require external confirmation for their direct integration or launch tasks. They are not broad implementation prerequisites.

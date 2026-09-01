@@ -35,4 +35,4 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-01, AUSE Discovery is a greenfield monorepo with Git initialized on `main`, a default Vite React frontend scaffold, an empty backend, an approved product specification, and an implementation specification. Application feature implementation has not started.
+As of 2026-09-02, AUSE Discovery is a greenfield monorepo with Git initialized on `main`, a default Vite React frontend scaffold, an empty backend, an approved product specification, and an implementation guide designed for autonomous agentic coding. Application feature implementation has not started.

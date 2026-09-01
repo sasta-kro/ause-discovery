@@ -50,6 +50,20 @@ small, serial, tightly coupled, or time-sensitive MVP tasks.
 
 The goal is to keep the cost down. 
 
+### Autonomous Agentic Implementation
+
+The product specification defines product requirements. The implementation guide adds architecture, technical decisions, and sequencing without restating the full product specification.
+
+The root Sol agent decides architecture, cross-cutting contracts, security posture, persisted-data semantics, and other major implementation choices. Workers decide routine local implementation details inside their assigned boundaries. Multiple reasonable local approaches are not a reason to stop and request product-owner input.
+
+Recoverable unknowns and launch-time values do not block local implementation. GitHub ownership, repository URL, registry ownership, production hostname, VM details, branding, and final legal content affect only the work that directly consumes them. Neutral local configuration and fixtures allow unrelated work to continue.
+
+Escalate to the root agent when a decision changes product behavior, a fixed architecture boundary, a public contract, persisted compatibility, security posture, or another worker's owned area. Product-owner input is reserved for secrets, external authorization, destructive external actions, legally sensitive content, and genuinely irreversible product choices.
+
+Implementation guidance should be detailed enough to prevent drift without prescribing every private function, file, test helper, or coding step. Prefer working software and focused verification over process artifacts, compliance checklists, mandatory pull-request templates, or artificial work-package gates.
+
+ADRs are reserved for hard-to-reverse architecture decisions with meaningful tradeoffs. Verified recurring failure patterns belong in lessons learned. Ordinary bug fixes and routine local choices require neither.
+
 ### Model Routing
 
 * **Terra High** is the default worker for well-scoped engineering work: implementation, repository exploration, tests, refactoring, routine debugging, verification, and other bounded tasks.
@@ -82,6 +96,8 @@ The root owns coordination between workers and should keep task boundaries clear
 ### Context Preservation
 
 Keep the root context compact.
+
+While read-only workers are running, the root should wait for final or milestone reports instead of polling or ingesting routine progress output. Coding workers may receive targeted milestone checks when early correction can prevent architectural or cross-module drift.
 
 Workers should return concise, decision-relevant results rather than raw exploration output. Reports should normally include:
 
