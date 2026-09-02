@@ -4,8 +4,10 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"testing"
+	"time"
 
 	api "ause-discovery.local/backend/generated/api"
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/projects"
 	"github.com/google/uuid"
@@ -70,5 +72,29 @@ func TestAdminProjectResponseIncludesStoredAggregateState(t *testing.T) {
 	}
 	if response.ExtensionMetadata == nil || (*response.ExtensionMetadata)["source"] != "test" {
 		t.Fatalf("administrator response omitted extension metadata")
+	}
+}
+
+func TestArtifactResponseExposesPublicURLsOnlyForActiveContent(t *testing.T) {
+	artifactID := uuid.MustParse("018f0000-0000-7000-8000-000000000501")
+	projectID := uuid.MustParse("018f0000-0000-7000-8000-000000000502")
+	value := artifacts.Artifact{ID: artifactID, ProjectID: projectID, ArtifactType: "report", DisplayName: "Report", OriginalFilename: "report.pdf", MIMEType: "application/pdf", Extension: "pdf", ByteCount: 42, Status: "active", Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+
+	active := artifactResponse(value, "/ause-discovery/")
+	if active.ViewUrl == nil || active.DownloadUrl == nil {
+		t.Fatalf("active PDF URLs were view=%v download=%v", active.ViewUrl, active.DownloadUrl)
+	}
+	value.Status = "deleted"
+	deleted := artifactResponse(value, "/ause-discovery/")
+	if deleted.ViewUrl != nil || deleted.DownloadUrl != nil {
+		t.Fatalf("deleted Artifact exposed public URLs: %#v", deleted)
+	}
+}
+
+func TestArtifactContentDispositionUsesSafeFallbackAndUTF8Filename(t *testing.T) {
+	disposition := artifactContentDisposition("attachment", "résumé \"final\".pdf")
+	expected := `attachment; filename="r_sum_ _final_.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9%20%22final%22.pdf`
+	if disposition != expected {
+		t.Fatalf("content disposition was %q, expected %q", disposition, expected)
 	}
 }

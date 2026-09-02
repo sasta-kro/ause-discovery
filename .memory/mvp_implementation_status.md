@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-02: foundation, data contracts, and identity and core records complete; Artifact implementation is next.
+Status as of 2026-09-02: foundation, data contracts, identity and core records, and Artifacts complete; search implementation is next.
 
 ## Verified increments
 
@@ -41,9 +41,20 @@ Status as of 2026-09-02: foundation, data contracts, and identity and core recor
 - Backend tests pass against isolated temporary PostgreSQL databases. Frontend static checks, 20 component tests, root and subpath production builds, and the production-like Compose image build pass.
 - Authenticated HTTP smoke verification covers administrator creation and login, Person creation, Project draft creation, publication, public Project and Person reads, deletion visibility, restoration, and logout.
 
+### Artifacts
+
+- Opaque versioned filesystem keys, path containment, symlink rejection, streamed SHA-256 hashing, atomic finalization, per-file limits, and compensating cleanup protect Artifact bytes.
+- Artifact type and extension allowlists reject executable, HTML, SVG, script, disk-image, and macro-enabled Office uploads. Bounded server-side content detection rejects unsafe or mismatched file content.
+- Upload quota checks serialize through the Project row and maintain Project revisions, pending search state, and append-only audit records in the metadata transaction.
+- Metadata update, reversible deletion, quota-checked restoration, and immutable replacement preserve optimistic concurrency and existing bytes.
+- Public serving requires an active Artifact on a published Project. PDF inline view, safe UTF-8 download filenames, byte ranges, missing-content handling, and no-sniff responses are implemented.
+- Administrator Project editing includes accessible Artifact upload, metadata update, replacement, delete, and restore controls. Public Project pages expose PDF view and allowed Artifact download actions.
+- Backend unit and isolated PostgreSQL integration tests cover storage safety, size and type validation, lifecycle revisions, quota, search state, audit records, immutable replacement, cleanup, and public visibility.
+- Frontend static checks and 22 component tests pass. Authenticated HTTP smoke verification covers upload, partial PDF view with a `206` response, metadata update, replacement, public deletion visibility, restoration, and full administrator aggregate retrieval.
+
 ## Active implementation work
 
-- Artifacts, search, imports, audit administration, CI, operator documentation, and product-completion verification.
+- Search, imports, audit administration, CI, operator documentation, and product-completion verification.
 
 ## Known implementation constraints
 

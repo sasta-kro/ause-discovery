@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	api "ause-discovery.local/backend/generated/api"
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
@@ -27,17 +31,24 @@ const csrfCookieName = "ause_csrf"
 
 type Controller struct {
 	api.Unimplemented
-	Auth     auth.Service
-	People   people.Service
-	Projects projects.Service
-	Config   config.Config
+	Auth      auth.Service
+	Artifacts artifacts.Service
+	People    people.Service
+	Projects  projects.Service
+	Config    config.Config
 }
 type requestContextKey string
 
 const actorContextKey requestContextKey = "actor"
 
 func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler {
-	controller := Controller{Auth: auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL}, People: people.Service{Pool: pool}, Projects: projects.Service{Pool: pool}, Config: configuration}
+	controller := Controller{
+		Auth:      auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL},
+		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
+		People:    people.Service{Pool: pool},
+		Projects:  projects.Service{Pool: pool},
+		Config:    configuration,
+	}
 	router := chi.NewRouter()
 	router.Use(requestID, securityHeaders)
 	baseURL := strings.TrimSuffix(configuration.PublicBasePath, "/") + "/api/v1"
@@ -181,6 +192,120 @@ func (controller *Controller) ListAdminPeople(writer http.ResponseWriter, reques
 	}
 	writeJSON(writer, 200, response)
 }
+
+func (controller *Controller) UploadArtifact(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, _ api.UploadArtifactParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	form, file, fileHeader, cleanup, ok := controller.readArtifactMultipart(writer, request, "expected_project_revision", "artifact_type", "display_name")
+	if !ok {
+		return
+	}
+	defer cleanup()
+	defer file.Close()
+	expectedRevision, err := parseRevision(form["expected_project_revision"])
+	if err != nil {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+		return
+	}
+	result, err := controller.Artifacts.Upload(request.Context(), actor.UserID, uuid.UUID(projectID), expectedRevision, artifacts.UploadInput{
+		ArtifactType: form["artifact_type"], DisplayName: form["display_name"], OriginalFilename: fileHeader.Filename, ExpectedSize: fileHeader.Size, Content: file,
+	})
+	if errors.Is(err, artifacts.ErrRevisionConflict) {
+		project, projectErr := controller.Projects.Get(request.Context(), uuid.UUID(projectID), false)
+		if projectErr == nil {
+			revisionConflict(writer, request, project.Revision)
+		} else {
+			problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+		}
+		return
+	}
+	if controller.writeArtifactError(writer, request, uuid.Nil, err) {
+		return
+	}
+	writeJSON(writer, http.StatusCreated, artifactResponse(result, controller.Config.PublicBasePath))
+}
+
+func (controller *Controller) UpdateArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId, _ api.UpdateArtifactParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.UpdateArtifactRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	result, err := controller.Artifacts.Update(request.Context(), actor.UserID, uuid.UUID(artifactID), int64(body.ExpectedRevision), string(body.ArtifactType), body.DisplayName)
+	if controller.writeArtifactError(writer, request, uuid.UUID(artifactID), err) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, artifactResponse(result, controller.Config.PublicBasePath))
+}
+
+func (controller *Controller) DeleteArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId, _ api.DeleteArtifactParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.ExpectedRevisionRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	result, err := controller.Artifacts.Delete(request.Context(), actor.UserID, uuid.UUID(artifactID), int64(body.ExpectedRevision))
+	if controller.writeArtifactError(writer, request, uuid.UUID(artifactID), err) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, artifactResponse(result, controller.Config.PublicBasePath))
+}
+
+func (controller *Controller) RestoreArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId, _ api.RestoreArtifactParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.ExpectedRevisionRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	result, err := controller.Artifacts.Restore(request.Context(), actor.UserID, uuid.UUID(artifactID), int64(body.ExpectedRevision))
+	if controller.writeArtifactError(writer, request, uuid.UUID(artifactID), err) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, artifactResponse(result, controller.Config.PublicBasePath))
+}
+
+func (controller *Controller) ReplaceArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId, _ api.ReplaceArtifactParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	form, file, fileHeader, cleanup, ok := controller.readArtifactMultipart(writer, request, "expected_revision")
+	if !ok {
+		return
+	}
+	defer cleanup()
+	defer file.Close()
+	expectedRevision, err := parseRevision(form["expected_revision"])
+	if err != nil {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+		return
+	}
+	result, err := controller.Artifacts.Replace(request.Context(), actor.UserID, uuid.UUID(artifactID), expectedRevision, artifacts.ReplaceInput{OriginalFilename: fileHeader.Filename, ExpectedSize: fileHeader.Size, Content: file})
+	if controller.writeArtifactError(writer, request, uuid.UUID(artifactID), err) {
+		return
+	}
+	writeJSON(writer, http.StatusOK, artifactResponse(result, controller.Config.PublicBasePath))
+}
+
+func (controller *Controller) ViewArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId) {
+	controller.serveArtifact(writer, request, uuid.UUID(artifactID), true)
+}
+
+func (controller *Controller) DownloadArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId) {
+	controller.serveArtifact(writer, request, uuid.UUID(artifactID), false)
+}
+
 func (controller *Controller) CreateProject(writer http.ResponseWriter, request *http.Request, _ api.CreateProjectParams) {
 	actor, ok := controller.requireActor(writer, request, true)
 	if !ok {
@@ -624,11 +749,13 @@ func (controller *Controller) projectArtifacts(ctx context.Context, projectID uu
 		if err := rows.Scan(&value.Id, &value.ProjectId, &value.ArtifactType, &value.DisplayName, &value.OriginalFilename, &value.MimeType, &value.ByteCount, &value.Status, &value.Revision, &value.CreatedAt, &value.UpdatedAt, &value.DeletedAt); err != nil {
 			return nil, err
 		}
-		downloadURL := baseURL + value.Id.String() + "/download"
-		value.DownloadUrl = &downloadURL
-		if value.MimeType == "application/pdf" {
-			viewURL := baseURL + value.Id.String() + "/view"
-			value.ViewUrl = &viewURL
+		if value.Status == api.ArtifactStatusActive {
+			downloadURL := baseURL + value.Id.String() + "/download"
+			value.DownloadUrl = &downloadURL
+			if value.MimeType == "application/pdf" {
+				viewURL := baseURL + value.Id.String() + "/view"
+				value.ViewUrl = &viewURL
+			}
 		}
 		result = append(result, value)
 	}
@@ -662,6 +789,163 @@ func publishedAt(value projects.Project) time.Time {
 	}
 	return time.Now().UTC()
 }
+
+func artifactResponse(value artifacts.Artifact, publicBasePath string) api.Artifact {
+	response := api.Artifact{
+		Id: value.ID, ProjectId: value.ProjectID, ArtifactType: api.ArtifactType(value.ArtifactType), DisplayName: value.DisplayName,
+		OriginalFilename: value.OriginalFilename, MimeType: value.MIMEType, ByteCount: int(value.ByteCount), Status: api.ArtifactStatus(value.Status),
+		Revision: int(value.Revision), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, DeletedAt: value.DeletedAt,
+	}
+	if value.Status != "active" {
+		return response
+	}
+	baseURL := strings.TrimSuffix(publicBasePath, "/") + "/api/v1/artifacts/" + value.ID.String()
+	downloadURL := baseURL + "/download"
+	response.DownloadUrl = &downloadURL
+	if value.MIMEType == "application/pdf" && value.Extension == "pdf" {
+		viewURL := baseURL + "/view"
+		response.ViewUrl = &viewURL
+	}
+	return response
+}
+
+func (controller *Controller) readArtifactMultipart(writer http.ResponseWriter, request *http.Request, requiredFields ...string) (map[string]string, multipart.File, *multipart.FileHeader, func(), bool) {
+	if !strings.HasPrefix(strings.ToLower(request.Header.Get("Content-Type")), "multipart/form-data") {
+		problem(writer, request, http.StatusUnsupportedMediaType, "unsupported_media_type", "Unsupported media type", "A multipart form is required.")
+		return nil, nil, nil, func() {}, false
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, controller.Config.MaxArtifactBytes+(2<<20))
+	if err := request.ParseMultipartForm(1 << 20); err != nil {
+		if request.MultipartForm != nil {
+			_ = request.MultipartForm.RemoveAll()
+		}
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			problem(writer, request, http.StatusRequestEntityTooLarge, "artifact_too_large", "Artifact too large", "The upload exceeds the configured file limit.")
+		} else {
+			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The multipart form is invalid.")
+		}
+		return nil, nil, nil, func() {}, false
+	}
+	cleanup := func() { _ = request.MultipartForm.RemoveAll() }
+	allowedFields := map[string]bool{"file": true}
+	values := map[string]string{}
+	for _, field := range requiredFields {
+		allowedFields[field] = true
+		entries := request.MultipartForm.Value[field]
+		if len(entries) != 1 || strings.TrimSpace(entries[0]) == "" {
+			cleanup()
+			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", field+" is required exactly once.")
+			return nil, nil, nil, func() {}, false
+		}
+		values[field] = entries[0]
+	}
+	for field := range request.MultipartForm.Value {
+		if !allowedFields[field] {
+			cleanup()
+			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "Unexpected multipart field: "+field)
+			return nil, nil, nil, func() {}, false
+		}
+	}
+	for field := range request.MultipartForm.File {
+		if field != "file" {
+			cleanup()
+			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "Unexpected multipart file field: "+field)
+			return nil, nil, nil, func() {}, false
+		}
+	}
+	fileHeaders := request.MultipartForm.File["file"]
+	if len(fileHeaders) != 1 {
+		cleanup()
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "file is required exactly once.")
+		return nil, nil, nil, func() {}, false
+	}
+	file, err := fileHeaders[0].Open()
+	if err != nil {
+		cleanup()
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The uploaded file cannot be read.")
+		return nil, nil, nil, func() {}, false
+	}
+	return values, file, fileHeaders[0], cleanup, true
+}
+
+func parseRevision(value string) (int64, error) {
+	revision, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || revision <= 0 {
+		return 0, errors.New("expected revision must be a positive integer")
+	}
+	return revision, nil
+}
+
+func (controller *Controller) writeArtifactError(writer http.ResponseWriter, request *http.Request, artifactID uuid.UUID, err error) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, artifacts.ErrNotFound):
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+	case errors.Is(err, artifacts.ErrContentUnavailable):
+		problem(writer, request, http.StatusNotFound, "artifact_content_unavailable", "Artifact content unavailable", "The Artifact metadata exists, but its content is unavailable.")
+	case errors.Is(err, artifacts.ErrRevisionConflict):
+		revision, revisionErr := controller.Artifacts.CurrentRevision(request.Context(), artifactID)
+		if revisionErr != nil {
+			problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+		} else {
+			revisionConflict(writer, request, revision)
+		}
+	case errors.Is(err, artifacts.ErrContentTooLarge):
+		problem(writer, request, http.StatusRequestEntityTooLarge, "artifact_too_large", "Artifact too large", err.Error())
+	case errors.Is(err, artifacts.ErrProjectQuotaExceeded):
+		problem(writer, request, http.StatusBadRequest, "artifact_quota_exceeded", "Artifact quota exceeded", err.Error())
+	case errors.Is(err, artifacts.ErrEmptyContent), errors.Is(err, artifacts.ErrSizeMismatch), errors.Is(err, artifacts.ErrArtifactTypeMismatch), errors.Is(err, artifacts.ErrContentTypeMismatch), errors.Is(err, artifacts.ErrUnsafeContentType), errors.Is(err, artifacts.ErrInvalidState):
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+	default:
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+	}
+	return true
+}
+
+func (controller *Controller) serveArtifact(writer http.ResponseWriter, request *http.Request, artifactID uuid.UUID, inline bool) {
+	content, err := controller.Artifacts.OpenPublic(request.Context(), artifactID)
+	if err != nil {
+		if errors.Is(err, artifacts.ErrContentUnavailable) {
+			slog.Error("Artifact content unavailable", "artifact_id", artifactID, "request_id", requestIDValue(request.Context()))
+		}
+		controller.writeArtifactError(writer, request, artifactID, err)
+		return
+	}
+	defer content.File.Close()
+	if inline && (content.Artifact.Extension != "pdf" || content.Artifact.MIMEType != "application/pdf") {
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+		return
+	}
+	if content.Size != content.Artifact.ByteCount {
+		slog.Error("Artifact content size mismatch", "artifact_id", artifactID, "request_id", requestIDValue(request.Context()))
+		problem(writer, request, http.StatusNotFound, "artifact_content_unavailable", "Artifact content unavailable", "The Artifact metadata exists, but its content is unavailable.")
+		return
+	}
+	disposition := "attachment"
+	if inline {
+		disposition = "inline"
+	}
+	writer.Header().Set("Content-Type", content.Artifact.MIMEType)
+	writer.Header().Set("Content-Disposition", artifactContentDisposition(disposition, content.Artifact.OriginalFilename))
+	writer.Header().Set("Cache-Control", "public, max-age=300")
+	http.ServeContent(writer, request, content.Artifact.OriginalFilename, content.Artifact.UpdatedAt, content.File)
+}
+
+func artifactContentDisposition(disposition, filename string) string {
+	var fallback strings.Builder
+	for _, character := range filename {
+		if character < 0x20 || character > 0x7e || character == '"' || character == '\\' {
+			fallback.WriteByte('_')
+		} else {
+			fallback.WriteRune(character)
+		}
+	}
+	return disposition + `; filename="` + fallback.String() + `"; filename*=UTF-8''` + url.PathEscape(filename)
+}
+
 func decodeJSON(writer http.ResponseWriter, request *http.Request, target any) bool {
 	if !strings.HasPrefix(request.Header.Get("Content-Type"), "application/json") {
 		problem(writer, request, 415, "unsupported_media_type", "Unsupported media type", "")

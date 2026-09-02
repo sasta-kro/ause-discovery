@@ -56,6 +56,11 @@
 .fieldError { color: var(--color-danger); font-size: .9rem; }
 .formActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .assignmentGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.artifactUpload, .artifactControls { display: grid; gap: var(--space-3); align-items: end; }
+.artifactUpload { grid-template-columns: minmax(9rem, 1fr) minmax(12rem, 2fr) minmax(12rem, 2fr) auto; }
+.artifactAdminList { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.artifactEditor { border: 1px solid var(--color-line); border-radius: var(--radius-small); padding: var(--space-3); }
+.artifactControls { grid-template-columns: minmax(9rem, 1fr) minmax(12rem, 2fr) auto; margin-top: var(--space-3); }
 .notice, .error, .conflict { border-left: 3px solid var(--color-accent); margin-block: var(--space-3); padding: var(--space-3); }
 .error { border-color: var(--color-danger); background: var(--color-danger-wash); }
 .conflict { border-color: var(--color-warning); background: var(--color-warning-wash); }
@@ -65,4 +70,4 @@
 .dialogBackdrop { background: rgb(20 24 29 / .46); border: 0; inset: 0; padding: 1rem; position: fixed; width: 100%; }
 .dialog { background: var(--color-paper); border: 0; border-radius: var(--radius-small); box-shadow: var(--shadow-raised); margin: 12vh auto; max-width: 32rem; padding: var(--space-5); }
 .placeholder { border: 1px dashed var(--color-line-strong); color: var(--color-muted); padding: var(--space-5); }
-@media (max-width: 720px) { .headerInner { align-items: flex-start; flex-direction: column; padding-block: var(--space-3); } .searchBox { flex-direction: column; } .searchLayout, .detailGrid, .adminLayout, .assignmentGrid { grid-template-columns: 1fr; } .adminNav { border-bottom: 1px solid var(--color-line); border-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 0 var(--space-3); } }
+@media (max-width: 720px) { .headerInner { align-items: flex-start; flex-direction: column; padding-block: var(--space-3); } .searchBox { flex-direction: column; } .searchLayout, .detailGrid, .adminLayout, .assignmentGrid, .artifactUpload, .artifactControls { grid-template-columns: 1fr; } .adminNav { border-bottom: 1px solid var(--color-line); border-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 0 var(--space-3); } }

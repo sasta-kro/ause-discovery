@@ -36,4 +36,4 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-02, foundation, data-contract, and identity and core record increments are verified. Artifact implementation is the next technical MVP vertical. Repository work continues serially in one primary session.
+As of 2026-09-02, foundation, data-contract, identity and core record, and Artifact increments are verified. Search implementation is the next technical MVP vertical. Repository work continues serially in one primary session.
