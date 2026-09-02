@@ -4,6 +4,7 @@ WORKDIR /src/backend
 
 COPY backend/go.mod backend/go.sum ./
 COPY backend/cmd ./cmd
+COPY backend/generated ./generated
 COPY backend/internal ./internal
 COPY backend/migrations ./migrations
 

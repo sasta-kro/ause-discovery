@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-02: foundation and data contracts complete; application features in progress.
+Status as of 2026-09-02: foundation, data contracts, and identity and core records complete; Artifact implementation is next.
 
 ## Verified increments
 
@@ -27,9 +27,23 @@ Status as of 2026-09-02: foundation and data contracts complete; application fea
 - Generated sqlc, Go OpenAPI, and TypeScript OpenAPI output is deterministic across repeated generation.
 - A fresh isolated Compose project builds, migrates, starts healthy, synchronizes catalogs twice, and serves health and nested SPA routes under `/ause-discovery/`.
 
+### Identity and core records
+
+- Argon2id local credentials, opaque hashed sessions, independent CSRF tokens, idle and absolute expiry, session rotation, revocation, and database-backed login throttling are implemented.
+- Operator CLI commands create, reset, and disable administrator accounts without accepting passwords through flags or environment variables.
+- Append-only audit events cover identity, Person, and Project mutations, including bootstrap operations without an existing actor.
+- Person create, update, get, and list behavior enforces Student ID and optimistic revision rules.
+- Project aggregate create, replace, publish, delete, and restore behavior maintains ordered aliases, participation, taxonomy, revision, audit, and pending search state transactionally.
+- Public Project and Person projections remain PostgreSQL-backed and enforce published visibility.
+- HTTP transport enforces strict JSON, Problem Details, request IDs, security headers, authenticated mutation CSRF, same-origin checks, and trusted proxy boundaries.
+- Administrator Project responses include complete academic, participation, taxonomy, and Artifact state for safe form round trips.
+- The frontend provides search-first public routes, public Project and Person details, protected administration, Person maintenance, complete Project aggregate controls, revision-conflict preservation, and Project-specific delete confirmation.
+- Backend tests pass against isolated temporary PostgreSQL databases. Frontend static checks, 20 component tests, root and subpath production builds, and the production-like Compose image build pass.
+- Authenticated HTTP smoke verification covers administrator creation and login, Person creation, Project draft creation, publication, public Project and Person reads, deletion visibility, restoration, and logout.
+
 ## Active implementation work
 
-- Authentication, canonical records, Artifacts, search, imports, and complete public and administrator interfaces.
+- Artifacts, search, imports, audit administration, CI, operator documentation, and product-completion verification.
 
 ## Known implementation constraints
 

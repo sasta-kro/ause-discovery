@@ -195,7 +195,7 @@ func (controller *Controller) CreateProject(writer http.ResponseWriter, request 
 		problem(writer, request, 400, "validation_error", "Validation error", err.Error())
 		return
 	}
-	writeJSON(writer, 201, adminProjectResponse(project))
+	controller.writeProjectResult(writer, request, project, nil, http.StatusCreated)
 }
 func (controller *Controller) ReplaceProject(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, _ api.ReplaceProjectParams) {
 	actor, ok := controller.requireActor(writer, request, true)
@@ -234,7 +234,12 @@ func (controller *Controller) ListAdminProjects(writer http.ResponseWriter, requ
 	}
 	response := api.AdminProjectPage{Page: api.PageInfo{Limit: limit(params.Limit)}}
 	for _, item := range items {
-		response.Items = append(response.Items, adminProjectResponse(item))
+		responseItem, responseErr := controller.adminProjectResponse(request.Context(), item)
+		if responseErr != nil {
+			problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+		response.Items = append(response.Items, responseItem)
 	}
 	writeJSON(writer, 200, response)
 }
@@ -350,7 +355,12 @@ func (controller *Controller) writeProjectResult(writer http.ResponseWriter, req
 		problem(writer, request, 400, "validation_error", "Validation error", err.Error())
 		return
 	}
-	writeJSON(writer, status, adminProjectResponse(project))
+	response, responseErr := controller.adminProjectResponse(request.Context(), project)
+	if responseErr != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(writer, status, response)
 }
 func (controller *Controller) requireActor(writer http.ResponseWriter, request *http.Request, csrf bool) (auth.Actor, bool) {
 	cookie, err := request.Cookie(sessionCookieName)
@@ -463,8 +473,42 @@ func taxonomyInput(value *[]api.TaxonomyAssignmentInput) []projects.TaxonomyValu
 func personResponse(value people.Person) api.AdminPerson {
 	return api.AdminPerson{Id: value.ID, DisplayName: value.DisplayName, StudentId: value.StudentID, StaffId: value.StaffID, Revision: int(value.Revision), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
 }
-func adminProjectResponse(value projects.Project) api.AdminProject {
-	return api.AdminProject{Id: value.ID, ReferenceCode: value.ReferenceCode, Title: value.Title, Abstract: value.Abstract, AcademicYear: value.AcademicYear, Status: api.ProjectStatus(value.Status), Revision: int(value.Revision), TitleAliases: &value.TitleAliases, Artifacts: []api.Artifact{}, Participations: []api.Participation{}, Taxonomy: []api.TaxonomyValue{}, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
+func (controller *Controller) adminProjectResponse(ctx context.Context, value projects.Project) (api.AdminProject, error) {
+	program, err := controller.catalogReference(ctx, "program", value.ProgramVersionID)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	major, err := controller.catalogReference(ctx, "major", value.MajorVersionID)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	course, err := controller.catalogReference(ctx, "course", value.CourseVersionID)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	participations, err := controller.projectParticipations(ctx, value.ID)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	taxonomy, err := controller.projectTaxonomy(ctx, value.ID)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	artifacts, err := controller.projectArtifacts(ctx, value.ID, false)
+	if err != nil {
+		return api.AdminProject{}, err
+	}
+	return adminProjectResponse(value, program, major, course, participations, taxonomy, artifacts), nil
+}
+
+func adminProjectResponse(value projects.Project, program, major, course *api.CatalogReference, participations []api.Participation, taxonomy []api.TaxonomyValue, artifacts []api.Artifact) api.AdminProject {
+	var semester *api.Semester
+	if value.Semester != nil {
+		convertedSemester := api.Semester(*value.Semester)
+		semester = &convertedSemester
+	}
+	extensionMetadata := value.ExtensionMetadata
+	return api.AdminProject{Id: value.ID, ReferenceCode: value.ReferenceCode, Title: value.Title, Abstract: value.Abstract, AcademicYear: value.AcademicYear, Semester: semester, Program: program, Major: major, Course: course, Status: api.ProjectStatus(value.Status), Revision: int(value.Revision), TitleAliases: &value.TitleAliases, Artifacts: artifacts, Participations: participations, Taxonomy: taxonomy, ExtensionMetadata: &extensionMetadata, PublishedAt: value.PublishedAt, DeletedAt: value.DeletedAt, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt}
 }
 func (controller *Controller) publicProjectResponse(ctx context.Context, value projects.Project) (api.PublicProject, error) {
 	program, err := controller.catalogReference(ctx, "program", value.ProgramVersionID)
@@ -487,7 +531,7 @@ func (controller *Controller) publicProjectResponse(ctx context.Context, value p
 	if err != nil {
 		return api.PublicProject{}, err
 	}
-	artifacts, err := controller.projectArtifacts(ctx, value.ID)
+	artifacts, err := controller.projectArtifacts(ctx, value.ID, true)
 	if err != nil {
 		return api.PublicProject{}, err
 	}
@@ -562,8 +606,13 @@ func (controller *Controller) projectTaxonomy(ctx context.Context, projectID uui
 	return result, rows.Err()
 }
 
-func (controller *Controller) projectArtifacts(ctx context.Context, projectID uuid.UUID) ([]api.Artifact, error) {
-	rows, err := controller.Projects.Pool.Query(ctx, `SELECT id, project_id, type, display_name, original_filename, mime_type, byte_count, status, revision, created_at, updated_at, deleted_at FROM artifacts WHERE project_id = $1 AND status = 'active' ORDER BY created_at, id`, projectID)
+func (controller *Controller) projectArtifacts(ctx context.Context, projectID uuid.UUID, activeOnly bool) ([]api.Artifact, error) {
+	statement := `SELECT id, project_id, type, display_name, original_filename, mime_type, byte_count, status, revision, created_at, updated_at, deleted_at FROM artifacts WHERE project_id = $1`
+	if activeOnly {
+		statement += " AND status = 'active'"
+	}
+	statement += " ORDER BY created_at, id"
+	rows, err := controller.Projects.Pool.Query(ctx, statement, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -669,6 +718,25 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 func clientIP(request *http.Request, configuration config.Config) netip.Addr {
+	remoteAddress := remoteIP(request)
+	if !isTrustedProxy(remoteAddress, configuration.TrustedProxyCIDRs) {
+		return remoteAddress
+	}
+	clientAddress := remoteAddress
+	forwardedAddresses := strings.Split(request.Header.Get("X-Forwarded-For"), ",")
+	for index := len(forwardedAddresses) - 1; index >= 0; index-- {
+		address, err := netip.ParseAddr(strings.TrimSpace(forwardedAddresses[index]))
+		if err != nil {
+			return remoteAddress
+		}
+		clientAddress = address
+		if !isTrustedProxy(address, configuration.TrustedProxyCIDRs) {
+			return address
+		}
+	}
+	return clientAddress
+}
+func remoteIP(request *http.Request) netip.Addr {
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err != nil {
 		return netip.IPv4Unspecified()
@@ -676,14 +744,6 @@ func clientIP(request *http.Request, configuration config.Config) netip.Addr {
 	remoteAddress, err := netip.ParseAddr(host)
 	if err != nil {
 		return netip.IPv4Unspecified()
-	}
-	if !isTrustedProxy(remoteAddress, configuration.TrustedProxyCIDRs) {
-		return remoteAddress
-	}
-	for _, forwardedAddress := range strings.Split(request.Header.Get("X-Forwarded-For"), ",") {
-		if address, parseErr := netip.ParseAddr(strings.TrimSpace(forwardedAddress)); parseErr == nil {
-			return address
-		}
 	}
 	return remoteAddress
 }
@@ -693,7 +753,7 @@ func trustedOrigin(request *http.Request, configuration config.Config) bool {
 		return true
 	}
 	scheme := "http"
-	remoteAddress := clientIP(request, config.Config{})
+	remoteAddress := remoteIP(request)
 	if request.TLS != nil || (isTrustedProxy(remoteAddress, configuration.TrustedProxyCIDRs) && request.Header.Get("X-Forwarded-Proto") == "https") {
 		scheme = "https"
 	}

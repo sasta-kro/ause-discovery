@@ -61,6 +61,7 @@ services:
       AUSE_ARTIFACT_ROOT: ${AUSE_ARTIFACT_ROOT:-/var/lib/ause-discovery/artifacts}
       AUSE_IMPORT_TEMP_ROOT: ${AUSE_IMPORT_TEMP_ROOT:-/var/lib/ause-discovery/imports}
       AUSE_SESSION_SECRET: ${AUSE_SESSION_SECRET:-local-development-session-secret-change-before-production}
+      AUSE_TRUSTED_PROXY_CIDRS: ${AUSE_TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
     volumes:
       - artifact-data:/var/lib/ause-discovery
     depends_on:

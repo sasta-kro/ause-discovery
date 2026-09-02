@@ -81,7 +81,7 @@ func (service Service) Create(ctx context.Context, actorID uuid.UUID, input Inpu
 		if err := replaceChildren(ctx, transaction, projectID, input); err != nil {
 			return err
 		}
-		if _, err := generated.New(transaction).UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: "upsert"}); err != nil {
+		if _, err := generated.New(transaction).UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: "remove"}); err != nil {
 			return err
 		}
 		if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "project.created", TargetType: "project", TargetID: projectID}); err != nil {

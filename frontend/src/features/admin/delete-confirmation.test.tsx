@@ -8,11 +8,11 @@ import { DeleteConfirmation } from '../../app-shell'
 describe('delete confirmation accessibility', () => {
   it('exposes a labelled modal dialog and requires the confirmation phrase', () => {
     const onConfirm = vi.fn()
-    render(<I18nextProvider i18n={i18n}><DeleteConfirmation title="Record" onCancel={vi.fn()} onConfirm={onConfirm} /></I18nextProvider>)
+    render(<I18nextProvider i18n={i18n}><DeleteConfirmation confirmationValue="REF-001" onCancel={vi.fn()} onConfirm={onConfirm} /></I18nextProvider>)
     expect(screen.getByRole('dialog', { name: 'Delete project' })).toBeTruthy()
     const deleteButton = screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement
     expect(deleteButton.disabled).toBe(true)
-    fireEvent.change(screen.getByLabelText('Type DELETE to confirm'), { target: { value: 'DELETE' } })
+    fireEvent.change(screen.getByLabelText('Confirmation value'), { target: { value: 'REF-001' } })
     expect(deleteButton.disabled).toBe(false)
     fireEvent.click(deleteButton)
     expect(onConfirm).toHaveBeenCalledOnce()

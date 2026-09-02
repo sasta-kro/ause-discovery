@@ -14,7 +14,6 @@ Read these files in order before planning or implementation:
 4. `architectural_decision_logs.md`
 5. `mvp_implementation_status.md`, after implementation begins
 6. `lessons_learned.md`, when substantive lessons exist
-7. `session_handoff_2026-09-02.md`, while the interrupted MVP working tree remains uncommitted
 
 Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-discovery_implementation_specification_v1.md` before implementation.
 
@@ -24,7 +23,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 - `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
 - `mvp_implementation_status.md` will contain verified implementation state after application work begins.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
-- `session_handoff_2026-09-02.md` contains the interrupted working-tree state and single-agent continuation sequence.
+- `session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
 
 ## Maintenance rules
 
@@ -37,4 +36,4 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-02, foundation and data-contract increments are verified and committed. Identity, People, Project, HTTP, and frontend core work exists in an interrupted uncommitted working tree. The next session must follow `session_handoff_2026-09-02.md` and continue with one agent only.
+As of 2026-09-02, foundation, data-contract, and identity and core record increments are verified. Artifact implementation is the next technical MVP vertical. Repository work continues serially in one primary session.
