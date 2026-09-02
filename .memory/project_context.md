@@ -20,23 +20,23 @@ AUSE Discovery is a public searchable institutional archive of historical senior
 
 As of 2026-09-02:
 
-- Git is initialized on `main` with an initial commit;
-- `frontend/` contains a default npm-based Vite React scaffold that does not yet match the accepted pnpm and exact-pin baseline;
-- `backend/` is empty;
-- root workspace manifests, migrations, backend source, application tests, Compose, and CI do not exist;
+- Git is initialized on `main` with verified foundation and data-contract checkpoints;
+- the pnpm workspace, exact version pins, Go backend foundation, React frontend foundation, Compose stack, Nginx proxy, PostgreSQL schema, OpenAPI contract, generated clients, and catalog synchronization are implemented;
+- identity, People, Project, HTTP, CLI, and frontend core work exists in an interrupted uncommitted working tree;
+- Artifacts, Meilisearch integration, imports, final administration flows, CI, and product-completion verification remain incomplete;
 - the implementation specification is `docs/ause-discovery_implementation_specification_v1.md`;
 - the domain glossary is `CONTEXT.md`.
 
-## Agentic implementation intent
+## Implementation intent
 
 - The product specification owns requirements and product behavior.
 - The implementation guide is an architectural overlay and executable build map, not a restatement or compliance regime.
-- Root Sol reasoning owns architecture, cross-cutting contracts, and major implementation decisions.
-- Workers implement bounded areas and choose non-major local details without unnecessary escalation.
+- Repository work proceeds serially in one primary session that owns architecture, implementation, integration, and acceptance assessment.
+- Local implementation details follow existing contracts and the simplest compatible structure.
 - Recoverable unknowns and launch-time inputs never block unrelated local development.
 - GitHub ownership, registry ownership, final URLs, VM details, branding, and legal content affect only their direct integration or launch work.
-- Read-only workers should run without routine polling. Root context should receive final or meaningful milestone reports rather than mundane progress streams.
-- Coding workers may receive targeted milestone review where early correction prevents drift.
+- Focused tests run during each increment, with broader integration verification at coherent vertical boundaries.
+- Repeated full-stack verification is unnecessary when contracts, schema, dependencies, containers, and base-path behavior have not changed.
 - ADRs remain sparse. Verified reusable failure patterns belong in lessons learned; ordinary fixes do not.
 
 ## Accepted implementation baseline

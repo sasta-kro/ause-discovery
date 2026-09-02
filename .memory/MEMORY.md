@@ -14,6 +14,7 @@ Read these files in order before planning or implementation:
 4. `architectural_decision_logs.md`
 5. `mvp_implementation_status.md`, after implementation begins
 6. `lessons_learned.md`, when substantive lessons exist
+7. `session_handoff_2026-09-02.md`, while the interrupted MVP working tree remains uncommitted
 
 Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-discovery_implementation_specification_v1.md` before implementation.
 
@@ -23,6 +24,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 - `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
 - `mvp_implementation_status.md` will contain verified implementation state after application work begins.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
+- `session_handoff_2026-09-02.md` contains the interrupted working-tree state and single-agent continuation sequence.
 
 ## Maintenance rules
 
@@ -35,4 +37,4 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-02, AUSE Discovery is a greenfield monorepo with Git initialized on `main`, a default Vite React frontend scaffold, an empty backend, an approved product specification, and an implementation guide designed for autonomous agentic coding. Application feature implementation has not started.
+As of 2026-09-02, foundation and data-contract increments are verified and committed. Identity, People, Project, HTTP, and frontend core work exists in an interrupted uncommitted working tree. The next session must follow `session_handoff_2026-09-02.md` and continue with one agent only.

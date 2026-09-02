@@ -26,7 +26,7 @@
 
 **Decision:** OpenAPI 3.1 is the HTTP source of truth, with generated Go transport types and TypeScript client/types.
 
-**Reason:** Shared generated contracts reduce interface drift and implementation-agent invention.
+**Reason:** Shared generated contracts reduce interface drift and unsupported implementation invention.
 
 **Consequence:** Generated outputs are tracked and verified for drift in CI. Business handlers remain handwritten.
 
@@ -96,6 +96,6 @@
 
 **Decision:** Direct dependencies, toolchains, service versions, actions, and production images use exact pins.
 
-**Reason:** Reproducible agent implementation and production operation require known versions.
+**Reason:** Reproducible implementation and production operation require known versions.
 
 **Consequence:** Lockfiles and generated outputs are tracked. Container images use exact tags and manifest digests. Upgrades require explicit review.

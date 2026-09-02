@@ -2,7 +2,7 @@
 
 **Status:** Accepted implementation baseline
 
-**Document version:** 1.1.0
+**Document version:** 1.1.1
 
 **Date:** 2026-09-02
 
@@ -16,9 +16,9 @@ The product specification defines product scope, behavior, content, and acceptan
 
 This guide deliberately does not repeat every product requirement. Feature behavior that is not narrowed here comes directly from the product specification.
 
-Implementation agents use the documents in this order:
+Implementation work follows the documents in this order:
 
-1. `AGENTS.md` for repository and delegation rules.
+1. `AGENTS.md` for repository rules.
 2. `.memory/MEMORY.md` and routed project memory for durable context.
 3. `CONTEXT.md` for exact domain language.
 4. `docs/ause-discovery_specification_v1.md` for product requirements.
@@ -38,7 +38,7 @@ The following choices are fixed because divergence would create cross-cutting re
 - exact dependency and service versions;
 - lifecycle, transaction, concurrency, and security semantics stated in this guide.
 
-Implementation agents retain discretion over local details that do not change those choices, including:
+Implementation retains discretion over local details that do not change those choices, including:
 
 - private function and file decomposition;
 - unexported types;
@@ -50,7 +50,7 @@ Implementation agents retain discretion over local details that do not change th
 - minor indexes justified by query plans;
 - exact error wording when a stable error code is already defined.
 
-Root-agent review is required before changing a fixed choice. A local decision does not need an ADR, document update, or user confirmation merely because multiple valid implementations exist.
+Changing a fixed choice requires explicit architecture review and an ADR when the change is accepted. A local decision does not need an ADR, document update, or user confirmation merely because multiple valid implementations exist.
 
 ### 1.2 Autonomous Progress Rule
 
@@ -70,7 +70,7 @@ In particular, the following are not bootstrap prerequisites:
 
 Local defaults and configuration seams cover those values until deployment information exists. GitHub Actions publication, production deployment, and final content remain incomplete until their specific external inputs arrive, but unrelated application work continues.
 
-User input is reserved for secrets, external account authorization, destructive external actions, legally sensitive content, and genuinely irreversible product choices not settled by the specifications. Implementation uncertainty alone is handled through repository inspection, a reasonable local decision, verification, and escalation to the root agent when the decision is cross-cutting.
+User input is reserved for secrets, external account authorization, destructive external actions, legally sensitive content, and genuinely irreversible product choices not settled by the specifications. Implementation uncertainty alone is handled through repository inspection, a reasonable local decision, and focused verification. Cross-cutting decisions are recorded when they change an accepted architecture boundary.
 
 ### 1.3 Change Recording
 
@@ -228,7 +228,7 @@ The Go module path can be changed mechanically when a permanent repository path 
 
 ### 3.3 Root Commands
 
-The root `Makefile` is the stable interface used by humans and agents. At minimum:
+The root `Makefile` is the stable interface used by local development and automated validation. At minimum:
 
 ```text
 make doctor          verify required local tool versions
@@ -270,7 +270,7 @@ Ignored:
 - local database, Meilisearch, and Artifact data;
 - import uploads and temporary files;
 - test reports and browser traces unless intentionally added as fixtures;
-- editor, operating-system, and local-agent scratch files.
+- editor, operating-system, and local scratch files.
 
 ## 4. Exact Version Baseline
 
@@ -324,7 +324,7 @@ An absent host Go installation does not block work that can run through the pinn
 | `typescript-eslint` | `8.69.0` |
 | `prettier` | `3.9.6` |
 
-Supporting Vite and testing packages may be added at exact compatible versions. A new major framework, state library, component system, or data client requires root-agent approval.
+Supporting Vite and testing packages may be added at exact compatible versions. A new major framework, state library, component system, or data client requires an explicit architecture decision.
 
 ### 4.4 Backend Dependencies and Tools
 
@@ -1224,7 +1224,7 @@ Tests that need unavailable final institutional content use explicit determinist
 
 ## 16. Implementation Map
 
-This map is sequencing guidance, not a bureaucratic gate system. Agents can split or combine increments when file ownership and dependency order remain clear. A missing launch-time value does not stop an increment.
+This map is sequencing guidance, not a bureaucratic gate system. Increments may be split or combined when dependency order and coherent verification remain clear. A missing launch-time value does not stop an increment.
 
 ### 16.1 Foundation Increment
 
@@ -1386,44 +1386,30 @@ Useful verification:
 
 Final branding, legal text, production URL, registry ownership, and VM values are inserted when available. Their absence affects launch readiness, not application completion.
 
-## 17. Agent Execution Guidance
+## 17. Single-Agent Execution Guidance
 
-### 17.1 Root-Agent Responsibilities
+### 17.1 Operating Model
 
-The root Sol agent owns:
+Repository work proceeds serially in one primary session. The same implementation context owns architecture, coding, integration, and acceptance assessment.
 
-- architecture and interpretation of ambiguous cross-cutting requirements;
-- assignment of bounded implementation areas;
-- exclusive file ownership across concurrent workers;
-- resolution of contract conflicts;
-- review of major deviations and integration risk;
-- updates to this guide, ADRs, and durable memory when truly warranted;
-- final integration and acceptance assessment.
+- Inspect only the relevant specifications and code before editing.
+- Preserve fixed architecture and public contracts.
+- Complete a usable vertical or infrastructure increment rather than empty scaffolding.
+- Keep the working tree coherent and create Git checkpoints after meaningful verified additions.
+- Update this guide, ADRs, and durable memory only when the information is genuinely reusable.
+- Prefer focused verification during development and one broader integration pass at a coherent boundary.
+- Avoid repeated full-stack verification when contracts, schema, dependencies, containers, and base-path behavior have not changed.
 
-### 17.2 Worker Responsibilities
+### 17.2 Context and Verification
 
-Implementation workers own routine engineering inside an assigned boundary:
+- Review the current diff and routed memory before broad repository exploration.
+- Keep command output bounded and inspect detailed logs only when a failure requires them.
+- Test changed behavior close to the implementation boundary.
+- Run cross-system checks after a complete vertical is wired end to end.
+- Record failed approaches only when the failure mode is verified and reusable.
+- Keep ordinary fixes as code changes rather than process artifacts.
 
-- inspect relevant code and specifications before editing;
-- choose sensible local structure without requesting approval for every detail;
-- preserve fixed architecture and public contracts;
-- implement a usable vertical or infrastructure increment rather than empty scaffolding;
-- verify the changed behavior;
-- return a concise report with changes, checks, risks, and decisions needed.
-
-Workers escalate when a choice changes a fixed architecture boundary, public product behavior, persisted compatibility, security posture, or another worker's owned area. Workers do not escalate merely because several ordinary coding approaches are possible.
-
-### 17.3 Coordination and Context Use
-
-- Read-only exploration may run in parallel when questions are independent.
-- Coding workers receive exclusive ownership of files or project areas.
-- Root waits for final or milestone reports instead of consuming routine progress streams.
-- Coding progress receives targeted checks at meaningful boundaries, especially before schema, contract, or cross-module divergence becomes expensive.
-- Worker reports stay concise and decision-relevant.
-- Failed approaches become lessons only after the failure mode is verified and reusable.
-- Small fixes remain code changes, not process artifacts.
-
-### 17.4 Default Resolution of Unknowns
+### 17.3 Default Resolution of Unknowns
 
 When specifications do not settle a minor detail:
 
@@ -1433,7 +1419,7 @@ When specifications do not settle a minor detail:
 4. continue work;
 5. report the choice only when it matters to integration or future maintenance.
 
-When a major ambiguity appears, the worker returns the concrete conflict and recommended resolution to the root agent. The root agent decides without involving the product owner unless the choice is genuinely product-defining, externally destructive, credential-dependent, or legally sensitive.
+When a major ambiguity appears, inspect the accepted specifications and adjacent contracts, document the concrete conflict, and choose the least disruptive compatible resolution. Product-owner input remains reserved for choices that are genuinely product-defining, externally destructive, credential-dependent, or legally sensitive.
 
 ## 18. Explicit MVP Boundaries
 
@@ -1478,4 +1464,4 @@ External values remain visible in deployment readiness notes. None should be con
 
 The MVP implementation is technically complete when the product specification's in-scope journeys operate through the production-like Compose stack, the architecture in this guide is preserved, generated contracts and migrations reproduce cleanly, critical security and accessibility behavior is verified, persistent state survives restart, and Meilisearch can be destroyed and rebuilt from PostgreSQL.
 
-Production launch is a separate readiness decision. Launch additionally needs approved institutional content, deployment values, credentials, registry ownership, TLS, privacy approval, and an operator-backed persistence plan. Separating technical completion from launch readiness keeps agentic implementation moving while preserving honest deployment status.
+Production launch is a separate readiness decision. Launch additionally needs approved institutional content, deployment values, credentials, registry ownership, TLS, privacy approval, and an operator-backed persistence plan. Separating technical completion from launch readiness keeps implementation moving while preserving honest deployment status.
