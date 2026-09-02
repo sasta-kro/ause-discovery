@@ -302,6 +302,28 @@ func (q *Queries) FindPeopleByNormalizedName(ctx context.Context, normalizedName
 	return items, nil
 }
 
+const getPersonByID = `-- name: GetPersonByID :one
+SELECT id, display_name, normalized_name, student_id, staff_id, revision, created_at, updated_at
+FROM people
+WHERE id = $1
+`
+
+func (q *Queries) GetPersonByID(ctx context.Context, id pgtype.UUID) (Person, error) {
+	row := q.db.QueryRow(ctx, getPersonByID, id)
+	var i Person
+	err := row.Scan(
+		&i.ID,
+		&i.DisplayName,
+		&i.NormalizedName,
+		&i.StudentID,
+		&i.StaffID,
+		&i.Revision,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getPersonByStudentID = `-- name: GetPersonByStudentID :one
 SELECT id, display_name, normalized_name, student_id, staff_id, revision, created_at, updated_at
 FROM people
@@ -355,6 +377,83 @@ func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, 
 	return i, err
 }
 
+const getPublicProjectCore = `-- name: GetPublicProjectCore :one
+SELECT id, reference_code, title, abstract, academic_year, semester, program_version_id, major_version_id, course_version_id, status, pre_delete_status, extra_metadata, revision, published_at, deleted_at, created_at, updated_at
+FROM projects
+WHERE id = $1 AND status = 'published'
+`
+
+func (q *Queries) GetPublicProjectCore(ctx context.Context, id pgtype.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getPublicProjectCore, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.ReferenceCode,
+		&i.Title,
+		&i.Abstract,
+		&i.AcademicYear,
+		&i.Semester,
+		&i.ProgramVersionID,
+		&i.MajorVersionID,
+		&i.CourseVersionID,
+		&i.Status,
+		&i.PreDeleteStatus,
+		&i.ExtraMetadata,
+		&i.Revision,
+		&i.PublishedAt,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listPeople = `-- name: ListPeople :many
+SELECT id, display_name, normalized_name, student_id, staff_id, revision, created_at, updated_at
+FROM people
+WHERE $3 = ''
+   OR normalized_name LIKE '%' || $3 || '%'
+   OR student_id = $3
+   OR staff_id = $3
+ORDER BY display_name, id
+LIMIT $1 OFFSET $2
+`
+
+type ListPeopleParams struct {
+	Limit  int32
+	Offset int32
+	Query  interface{}
+}
+
+func (q *Queries) ListPeople(ctx context.Context, arg ListPeopleParams) ([]Person, error) {
+	rows, err := q.db.Query(ctx, listPeople, arg.Limit, arg.Offset, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Person
+	for rows.Next() {
+		var i Person
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.NormalizedName,
+			&i.StudentID,
+			&i.StaffID,
+			&i.Revision,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsForAdministration = `-- name: ListProjectsForAdministration :many
 SELECT id, reference_code, title, abstract, academic_year, semester, program_version_id, major_version_id, course_version_id, status, pre_delete_status, extra_metadata, revision, published_at, deleted_at, created_at, updated_at
 FROM projects
@@ -397,6 +496,40 @@ func (q *Queries) ListProjectsForAdministration(ctx context.Context, arg ListPro
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublicPersonProjectIDs = `-- name: ListPublicPersonProjectIDs :many
+SELECT project_participations.project_id, project_participations.role
+FROM project_participations
+JOIN projects ON projects.id = project_participations.project_id
+WHERE project_participations.person_id = $1
+  AND projects.status = 'published'
+ORDER BY projects.published_at DESC, projects.id
+`
+
+type ListPublicPersonProjectIDsRow struct {
+	ProjectID pgtype.UUID
+	Role      string
+}
+
+func (q *Queries) ListPublicPersonProjectIDs(ctx context.Context, personID pgtype.UUID) ([]ListPublicPersonProjectIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicPersonProjectIDs, personID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublicPersonProjectIDsRow
+	for rows.Next() {
+		var i ListPublicPersonProjectIDsRow
+		if err := rows.Scan(&i.ProjectID, &i.Role); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

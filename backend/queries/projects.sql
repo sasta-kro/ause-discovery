@@ -11,6 +11,11 @@ SELECT *
 FROM projects
 WHERE id = $1;
 
+-- name: GetPublicProjectCore :one
+SELECT *
+FROM projects
+WHERE id = $1 AND status = 'published';
+
 -- name: ListPublishedProjects :many
 SELECT *
 FROM projects
@@ -123,3 +128,26 @@ ORDER BY id;
 SELECT *
 FROM people
 WHERE student_id = $1;
+
+-- name: GetPersonByID :one
+SELECT *
+FROM people
+WHERE id = $1;
+
+-- name: ListPeople :many
+SELECT *
+FROM people
+WHERE sqlc.arg('query') = ''
+   OR normalized_name LIKE '%' || sqlc.arg('query') || '%'
+   OR student_id = sqlc.arg('query')
+   OR staff_id = sqlc.arg('query')
+ORDER BY display_name, id
+LIMIT $1 OFFSET $2;
+
+-- name: ListPublicPersonProjectIDs :many
+SELECT project_participations.project_id, project_participations.role
+FROM project_participations
+JOIN projects ON projects.id = project_participations.project_id
+WHERE project_participations.person_id = $1
+  AND projects.status = 'published'
+ORDER BY projects.published_at DESC, projects.id;

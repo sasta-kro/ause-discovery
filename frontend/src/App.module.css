@@ -1,0 +1,67 @@
+.page { min-height: 100vh; display: flex; flex-direction: column; }
+.skipLink { position: absolute; left: 1rem; top: -4rem; z-index: 20; background: var(--color-ink); color: var(--color-paper); padding: var(--space-2) var(--space-3); }
+.skipLink:focus { top: 1rem; }
+.header { border-bottom: 1px solid var(--color-line); background: color-mix(in srgb, var(--color-paper) 94%, transparent); }
+.headerInner, .footerInner, .main { width: min(100% - 2rem, var(--layout-width)); margin-inline: auto; }
+.headerInner { min-height: 4.5rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.brand { color: var(--color-ink); font-family: var(--font-display); font-size: 1.32rem; text-decoration: none; }
+.navigation { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.navigation a { color: var(--color-muted); text-decoration: none; }
+.navigation a[aria-current='page'] { color: var(--color-ink); text-decoration: underline; text-underline-offset: .35rem; }
+.main { flex: 1; padding-block: clamp(2rem, 5vw, 5rem); }
+.footer { margin-top: var(--space-6); border-top: 1px solid var(--color-line); color: var(--color-muted); }
+.footerInner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding-block: var(--space-5); font-size: .9rem; }
+.footerNav { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.footer a { color: inherit; }
+.hero { max-width: 53rem; padding-block: clamp(2rem, 8vw, 7rem); }
+.eyebrow { color: var(--color-accent); font-size: .78rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+.hero h1 { font-family: var(--font-display); font-size: clamp(2.6rem, 7vw, 5.5rem); font-weight: 500; letter-spacing: -.045em; line-height: .98; margin: var(--space-3) 0; }
+.lede { max-width: 42rem; color: var(--color-muted); font-size: 1.12rem; line-height: 1.7; }
+.searchBox { display: flex; gap: var(--space-2); margin-top: var(--space-5); }
+.searchBox input { flex: 1; }
+.button, .secondaryButton, .dangerButton { border: 1px solid transparent; border-radius: var(--radius-small); cursor: pointer; display: inline-flex; justify-content: center; padding: .72rem 1rem; text-decoration: none; font: inherit; }
+.button { background: var(--color-ink); color: var(--color-paper); }
+.secondaryButton { background: transparent; border-color: var(--color-line-strong); color: var(--color-ink); }
+.dangerButton { background: var(--color-danger); color: white; }
+.pageHeader { border-bottom: 1px solid var(--color-line); margin-bottom: var(--space-5); padding-bottom: var(--space-4); }
+.pageHeader h1 { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 500; letter-spacing: -.03em; margin: 0; }
+.searchLayout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-6); }
+.filterPanel { align-self: start; border-top: 2px solid var(--color-ink); padding-top: var(--space-3); }
+.filterGroup { border: 0; border-top: 1px solid var(--color-line); margin: var(--space-3) 0 0; padding: var(--space-3) 0 0; }
+.filterGroup legend { font-weight: 700; }
+.filterOption { display: flex; gap: .5rem; margin-top: .55rem; }
+.resultsHeader { display: flex; align-items: end; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.resultList, .projectList, .definitionList { display: grid; gap: var(--space-3); }
+.result { border-top: 1px solid var(--color-line); padding-top: var(--space-3); }
+.result h2 { font-family: var(--font-display); font-size: 1.45rem; font-weight: 500; margin: 0 0 .4rem; }
+.result h2 a { color: var(--color-ink); }
+.metadata, .tags { display: flex; flex-wrap: wrap; gap: .45rem .8rem; color: var(--color-muted); font-size: .9rem; }
+.tags { margin-top: var(--space-2); }
+.tag { border: 1px solid var(--color-line); border-radius: 999px; padding: .15rem .55rem; }
+.detailGrid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(13rem, 1fr); gap: var(--space-6); }
+.detailSection { border-top: 1px solid var(--color-line); margin-top: var(--space-5); padding-top: var(--space-3); }
+.detailSection h2 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 500; }
+.definitionList div { display: grid; gap: .2rem; }
+.definitionList dt { color: var(--color-muted); font-size: .85rem; }
+.definitionList dd { margin: 0; }
+.adminLayout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: var(--space-6); }
+.adminNav { border-right: 1px solid var(--color-line); display: grid; align-content: start; gap: .65rem; padding-right: var(--space-3); }
+.adminNav a { color: var(--color-muted); text-decoration: none; }
+.adminNav a[aria-current='page'] { color: var(--color-ink); font-weight: 700; }
+.panel { border: 1px solid var(--color-line); border-radius: var(--radius-small); padding: var(--space-4); }
+.form { display: grid; gap: var(--space-4); max-width: 48rem; }
+.field { display: grid; gap: .4rem; }
+.field input, .field textarea, .field select { width: 100%; box-sizing: border-box; }
+.field textarea { min-height: 9rem; resize: vertical; }
+.fieldError { color: var(--color-danger); font-size: .9rem; }
+.formActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.notice, .error, .conflict { border-left: 3px solid var(--color-accent); margin-block: var(--space-3); padding: var(--space-3); }
+.error { border-color: var(--color-danger); background: var(--color-danger-wash); }
+.conflict { border-color: var(--color-warning); background: var(--color-warning-wash); }
+.tableWrap { overflow-x: auto; }
+.table { border-collapse: collapse; width: 100%; }
+.table th, .table td { border-bottom: 1px solid var(--color-line); padding: .8rem .55rem; text-align: left; vertical-align: top; }
+.dialogBackdrop { background: rgb(20 24 29 / .46); border: 0; inset: 0; padding: 1rem; position: fixed; width: 100%; }
+.dialog { background: var(--color-paper); border: 0; border-radius: var(--radius-small); box-shadow: var(--shadow-raised); margin: 12vh auto; max-width: 32rem; padding: var(--space-5); }
+.placeholder { border: 1px dashed var(--color-line-strong); color: var(--color-muted); padding: var(--space-5); }
+@media (max-width: 720px) { .headerInner { align-items: flex-start; flex-direction: column; padding-block: var(--space-3); } .searchBox { flex-direction: column; } .searchLayout, .detailGrid, .adminLayout { grid-template-columns: 1fr; } .adminNav { border-bottom: 1px solid var(--color-line); border-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 0 var(--space-3); } }

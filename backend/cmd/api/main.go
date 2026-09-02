@@ -73,6 +73,8 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 
 	mux := http.NewServeMux()
 	httpserver.HealthHandler{DatabasePool: databasePool}.Register(mux, configuration.PublicBasePath)
+	apiPath := configuration.PublicBasePath + "api/v1/"
+	mux.Handle(apiPath, httpserver.NewAPIHandler(databasePool, configuration))
 
 	server := &http.Server{
 		Addr:              configuration.ListenAddress,
