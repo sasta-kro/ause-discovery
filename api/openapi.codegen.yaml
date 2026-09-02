@@ -1,4 +1,5 @@
-package: generated
+package: api
 generate:
+  chi-server: true
   models: true
-output: ../backend/generated/openapi.gen.go
+output: ../backend/generated/api/openapi.gen.go

@@ -1,0 +1,10 @@
+{
+  "name": "@ause-discovery/openapi-generator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "5.9.3"
+  }
+}

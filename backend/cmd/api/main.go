@@ -11,12 +11,28 @@ import (
 	"time"
 
 	"ause-discovery.local/backend/internal/platform/config"
+	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/platform/httpserver"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		configuration, err := config.Load(os.Getenv)
+		if err != nil {
+			os.Exit(1)
+		}
+		context, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		pool, err := pgxpool.New(context, configuration.DatabaseURL)
+		if err != nil {
+			os.Exit(1)
+		}
+		defer pool.Close()
+		if err := database.ApplyMigrations(context, pool); err != nil {
+			slog.Error("migration failed", "error", err)
+			os.Exit(1)
+		}
 		return
 	}
 

@@ -1,0 +1,18 @@
+programs:
+  - id: 018f0000-0000-7000-8000-000000000001
+    key: computer_science
+    versions:
+      - id: 018f0000-0000-7000-8000-000000000011
+        label: Computer Science
+        valid_from_year: 2020
+        major_required: false
+courses:
+  - id: 018f0000-0000-7000-8000-000000000021
+    key: senior_project
+    versions:
+      - id: 018f0000-0000-7000-8000-000000000031
+        label: Senior Project
+        code: CS499
+        valid_from_year: 2020
+        program_version_ids: [018f0000-0000-7000-8000-000000000011]
+majors: []

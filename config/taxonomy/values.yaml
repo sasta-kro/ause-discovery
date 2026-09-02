@@ -1,0 +1,34 @@
+values:
+  - {id: 018f0000-0000-7000-8000-000000000101, dimension: category, key: software_application, labels: {en: Software / Application}, sort_order: 1}
+  - {id: 018f0000-0000-7000-8000-000000000102, dimension: category, key: ai_data, labels: {en: AI / Data}, sort_order: 2}
+  - {id: 018f0000-0000-7000-8000-000000000103, dimension: category, key: research, labels: {en: Research}, sort_order: 3}
+  - {id: 018f0000-0000-7000-8000-000000000104, dimension: category, key: game, labels: {en: Game}, sort_order: 4}
+  - {id: 018f0000-0000-7000-8000-000000000105, dimension: category, key: hardware_iot, labels: {en: Hardware / IoT}, sort_order: 5}
+  - {id: 018f0000-0000-7000-8000-000000000111, dimension: platform, key: web, labels: {en: Web}, sort_order: 1}
+  - {id: 018f0000-0000-7000-8000-000000000112, dimension: platform, key: mobile, labels: {en: Mobile}, sort_order: 2}
+  - {id: 018f0000-0000-7000-8000-000000000113, dimension: platform, key: desktop, labels: {en: Desktop}, sort_order: 3}
+  - {id: 018f0000-0000-7000-8000-000000000114, dimension: platform, key: embedded_hardware, labels: {en: Embedded / Hardware}, sort_order: 4}
+  - {id: 018f0000-0000-7000-8000-000000000115, dimension: platform, key: game, labels: {en: Game}, sort_order: 5}
+  - {id: 018f0000-0000-7000-8000-000000000116, dimension: platform, key: other, labels: {en: Other}, sort_order: 6}
+  - {id: 018f0000-0000-7000-8000-000000000121, dimension: domain, key: education, labels: {en: Education}, sort_order: 1}
+  - {id: 018f0000-0000-7000-8000-000000000122, dimension: domain, key: business, labels: {en: Business}, sort_order: 2}
+  - {id: 018f0000-0000-7000-8000-000000000123, dimension: domain, key: e_commerce, labels: {en: E-commerce}, sort_order: 3}
+  - {id: 018f0000-0000-7000-8000-000000000124, dimension: domain, key: healthcare, labels: {en: Healthcare}, sort_order: 4}
+  - {id: 018f0000-0000-7000-8000-000000000125, dimension: domain, key: transportation, labels: {en: Transportation}, sort_order: 5}
+  - {id: 018f0000-0000-7000-8000-000000000126, dimension: domain, key: entertainment, labels: {en: Entertainment}, sort_order: 6}
+  - {id: 018f0000-0000-7000-8000-000000000127, dimension: domain, key: security, labels: {en: Security}, sort_order: 7}
+  - {id: 018f0000-0000-7000-8000-000000000128, dimension: domain, key: finance, labels: {en: Finance}, sort_order: 8}
+  - {id: 018f0000-0000-7000-8000-000000000129, dimension: domain, key: campus, labels: {en: Campus}, sort_order: 9}
+  - {id: 018f0000-0000-7000-8000-000000000130, dimension: domain, key: other, labels: {en: Other}, sort_order: 10}
+  - {id: 018f0000-0000-7000-8000-000000000141, dimension: topic, key: computer_vision, labels: {en: Computer Vision}, sort_order: 1}
+  - {id: 018f0000-0000-7000-8000-000000000142, dimension: topic, key: ocr, labels: {en: OCR}, sort_order: 2}
+  - {id: 018f0000-0000-7000-8000-000000000143, dimension: topic, key: nlp, labels: {en: NLP}, sort_order: 3}
+  - {id: 018f0000-0000-7000-8000-000000000144, dimension: topic, key: gamification, labels: {en: Gamification}, sort_order: 4}
+  - {id: 018f0000-0000-7000-8000-000000000145, dimension: topic, key: geolocation, labels: {en: Geolocation}, sort_order: 5}
+  - {id: 018f0000-0000-7000-8000-000000000151, dimension: technology, key: react, labels: {en: React}, sort_order: 1}
+  - {id: 018f0000-0000-7000-8000-000000000152, dimension: technology, key: go, labels: {en: Go}, sort_order: 2}
+  - {id: 018f0000-0000-7000-8000-000000000153, dimension: technology, key: postgresql, labels: {en: PostgreSQL}, sort_order: 3}
+  - {id: 018f0000-0000-7000-8000-000000000154, dimension: technology, key: opencv, labels: {en: OpenCV}, sort_order: 4}
+  - {id: 018f0000-0000-7000-8000-000000000155, dimension: technology, key: unity, labels: {en: Unity}, sort_order: 5}
+  - {id: 018f0000-0000-7000-8000-000000000156, dimension: technology, key: python, labels: {en: Python}, sort_order: 6}
+  - {id: 018f0000-0000-7000-8000-000000000157, dimension: technology, key: firebase, labels: {en: Firebase}, sort_order: 7}

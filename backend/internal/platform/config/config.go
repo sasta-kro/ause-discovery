@@ -11,38 +11,40 @@ import (
 )
 
 const (
-	defaultDatabaseURL              = "postgres://ause:ause@postgres:5432/ause_discovery?sslmode=disable"
-	defaultMeilisearchURL           = "http://meilisearch:7700"
-	defaultArtifactRoot             = "/var/lib/ause-discovery/artifacts"
-	defaultImportTemporaryRoot      = "/var/lib/ause-discovery/imports"
-	defaultMaxArtifactBytes  int64  = 262144000
-	defaultMaxProjectBytes   int64  = 2147483648
-	defaultSessionIdleTTL           = 30 * time.Minute
-	defaultSessionAbsoluteTTL       = 12 * time.Hour
+	defaultDatabaseURL               = "postgres://ause:ause@postgres:5432/ause_discovery?sslmode=disable"
+	defaultMeilisearchURL            = "http://meilisearch:7700"
+	defaultArtifactRoot              = "/var/lib/ause-discovery/artifacts"
+	defaultImportTemporaryRoot       = "/var/lib/ause-discovery/imports"
+	defaultMaxArtifactBytes    int64 = 262144000
+	defaultMaxProjectBytes     int64 = 2147483648
+	defaultSessionIdleTTL            = 30 * time.Minute
+	defaultSessionAbsoluteTTL        = 12 * time.Hour
 	defaultLogLevel                  = "info"
 	defaultListenAddress             = ":8080"
 	defaultMeilisearchIndex          = "projects"
+	defaultCatalogRoot               = "config"
 )
 
 type Config struct {
-	Environment               string
-	ListenAddress             string
-	PublicBasePath            string
-	DatabaseURL               string
-	MeilisearchURL            string
-	MeilisearchAPIKey         string
-	MeilisearchIndex          string
-	ArtifactRoot              string
-	ImportTemporaryRoot       string
-	MaxArtifactBytes          int64
-	MaxProjectArtifactBytes   int64
-	SessionIdleTTL            time.Duration
-	SessionAbsoluteTTL        time.Duration
-	SessionSecret             string
-	CookieSecure              bool
-	TrustedProxyCIDRs         []string
-	FeaturedProjectIDs        []string
-	LogLevel                  string
+	Environment             string
+	ListenAddress           string
+	PublicBasePath          string
+	DatabaseURL             string
+	MeilisearchURL          string
+	MeilisearchAPIKey       string
+	MeilisearchIndex        string
+	ArtifactRoot            string
+	ImportTemporaryRoot     string
+	MaxArtifactBytes        int64
+	MaxProjectArtifactBytes int64
+	SessionIdleTTL          time.Duration
+	SessionAbsoluteTTL      time.Duration
+	SessionSecret           string
+	CookieSecure            bool
+	TrustedProxyCIDRs       []string
+	FeaturedProjectIDs      []string
+	LogLevel                string
+	CatalogRoot             string
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -100,6 +102,7 @@ func Load(getenv func(string) string) (Config, error) {
 		TrustedProxyCIDRs:       splitCommaSeparated(getenv("AUSE_TRUSTED_PROXY_CIDRS")),
 		FeaturedProjectIDs:      splitCommaSeparated(getenv("AUSE_FEATURED_PROJECT_IDS")),
 		LogLevel:                valueOrDefault(getenv("AUSE_LOG_LEVEL"), defaultLogLevel),
+		CatalogRoot:             valueOrDefault(getenv("AUSE_CATALOG_ROOT"), defaultCatalogRoot),
 	}
 
 	if err := config.validateProductionSecrets(); err != nil {
@@ -109,8 +112,19 @@ func Load(getenv func(string) string) (Config, error) {
 	if !filepath.IsAbs(config.ArtifactRoot) || !filepath.IsAbs(config.ImportTemporaryRoot) {
 		return Config{}, errors.New("artifact and import temporary roots must be absolute paths")
 	}
+	if config.CatalogRoot == "" {
+		return Config{}, errors.New("catalog root cannot be empty")
+	}
 
 	return config, nil
+}
+
+func (config Config) AcademicCatalogPath() string {
+	return filepath.Join(config.CatalogRoot, "catalogs", "academic.yaml")
+}
+
+func (config Config) TaxonomyCatalogPath() string {
+	return filepath.Join(config.CatalogRoot, "taxonomy", "values.yaml")
 }
 
 func NormalizePublicBasePath(value string) (string, error) {
