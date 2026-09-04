@@ -40,21 +40,29 @@ type Person struct {
 }
 
 func (service Service) Create(ctx context.Context, actorID uuid.UUID, input Input) (Person, error) {
+	var result Person
+	err := database.InTransaction(ctx, service.Pool, func(transaction pgx.Tx) error {
+		var createErr error
+		result, createErr = service.CreateInTransaction(ctx, transaction, actorID, input)
+		return createErr
+	})
+	return result, err
+}
+
+func (service Service) CreateInTransaction(ctx context.Context, transaction pgx.Tx, actorID uuid.UUID, input Input) (Person, error) {
 	normalized, studentID, staffID, err := validate(input)
 	if err != nil {
 		return Person{}, err
 	}
 	personID := uuid.Must(uuid.NewV7())
-	var result generated.Person
-	err = database.InTransaction(ctx, service.Pool, func(transaction pgx.Tx) error {
-		var createErr error
-		result, createErr = generated.New(transaction).CreatePerson(ctx, generated.CreatePersonParams{ID: identity.UUID(personID), DisplayName: strings.TrimSpace(input.DisplayName), NormalizedName: normalized, StudentID: optionalText(studentID), StaffID: optionalText(staffID)})
-		if createErr != nil {
-			return createErr
-		}
-		return audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "person.created", TargetType: "person", TargetID: personID})
-	})
-	return fromRecord(result), err
+	record, err := generated.New(transaction).CreatePerson(ctx, generated.CreatePersonParams{ID: identity.UUID(personID), DisplayName: strings.TrimSpace(input.DisplayName), NormalizedName: normalized, StudentID: optionalText(studentID), StaffID: optionalText(staffID)})
+	if err != nil {
+		return Person{}, err
+	}
+	if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "person.created", TargetType: "person", TargetID: personID}); err != nil {
+		return Person{}, err
+	}
+	return fromRecord(record), nil
 }
 
 func (service Service) Update(ctx context.Context, actorID, personID uuid.UUID, expectedRevision int64, input Input) (Person, error) {

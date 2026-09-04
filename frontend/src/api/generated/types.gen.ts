@@ -385,6 +385,8 @@ export type ImportRow = {
     import_key: string;
     state: ImportRowState;
     selected: boolean;
+    warnings_acknowledged: boolean;
+    duplicate_resolution?: 'create' | 'skip';
     draft?: {
         [key: string]: unknown;
     };
@@ -417,7 +419,7 @@ export type ImportRowUpdate = {
     row_number: number;
     selected: boolean;
     acknowledge_warnings: boolean;
-    duplicate_resolution?: 'create' | 'skip' | 'null';
+    duplicate_resolution?: 'create' | 'skip';
 };
 
 export type UpdateImportRowsRequest = {

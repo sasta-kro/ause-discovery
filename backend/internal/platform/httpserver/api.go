@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -18,6 +19,7 @@ import (
 	api "ause-discovery.local/backend/generated/api"
 	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
+	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/projects"
@@ -34,6 +36,7 @@ type Controller struct {
 	api.Unimplemented
 	Auth      auth.Service
 	Artifacts artifacts.Service
+	Imports   importservice.Service
 	People    people.Service
 	Projects  projects.Service
 	Search    searchservice.Service
@@ -47,6 +50,7 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler
 	controller := Controller{
 		Auth:      auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL},
 		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
+		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
 		People:    people.Service{Pool: pool},
 		Projects:  projects.Service{Pool: pool},
 		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
@@ -84,14 +88,14 @@ func (controller *Controller) Login(writer http.ResponseWriter, request *http.Re
 	}
 	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: session.Token, Path: controller.Config.PublicBasePath, HttpOnly: true, Secure: controller.Config.CookieSecure, SameSite: http.SameSiteLaxMode, Expires: session.AbsoluteExpiresAt})
 	http.SetCookie(writer, &http.Cookie{Name: csrfCookieName, Value: session.CSRFToken, Path: controller.Config.PublicBasePath, Secure: controller.Config.CookieSecure, SameSite: http.SameSiteLaxMode, Expires: session.AbsoluteExpiresAt})
-	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: session.AbsoluteExpiresAt, User: api.SessionUser{Id: session.UserID, Username: session.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit"}}})
+	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: session.AbsoluteExpiresAt, User: api.SessionUser{Id: session.UserID, Username: session.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit", "import.execute"}}})
 }
 func (controller *Controller) GetSession(writer http.ResponseWriter, request *http.Request) {
 	actor, ok := controller.requireActor(writer, request, false)
 	if !ok {
 		return
 	}
-	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: actor.Session.AbsoluteExpiresAt, User: api.SessionUser{Id: actor.UserID, Username: actor.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit"}}})
+	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: actor.Session.AbsoluteExpiresAt, User: api.SessionUser{Id: actor.UserID, Username: actor.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit", "import.execute"}}})
 }
 func (controller *Controller) GetCsrfToken(writer http.ResponseWriter, request *http.Request) {
 	actor, ok := controller.requireActor(writer, request, false)
@@ -194,6 +198,127 @@ func (controller *Controller) ListAdminPeople(writer http.ResponseWriter, reques
 		response.Items = append(response.Items, personResponse(item))
 	}
 	writeJSON(writer, 200, response)
+}
+
+func (controller *Controller) CreateImport(writer http.ResponseWriter, request *http.Request, _ api.CreateImportParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	file, fileHeader, cleanup, ok := readImportMultipart(writer, request)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	defer file.Close()
+	batch, err := controller.Imports.CreatePreview(request.Context(), actor.UserID, fileHeader.Filename, fileHeader.Size, file)
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.Nil, err)
+		return
+	}
+	writeJSON(writer, http.StatusCreated, importBatchResponse(batch))
+}
+
+func (controller *Controller) GetImport(writer http.ResponseWriter, request *http.Request, batchID api.BatchId) {
+	if _, ok := controller.requireActor(writer, request, false); !ok {
+		return
+	}
+	batch, err := controller.Imports.Get(request.Context(), uuid.UUID(batchID))
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, importBatchResponse(batch))
+}
+
+func (controller *Controller) ListImportRows(writer http.ResponseWriter, request *http.Request, batchID api.BatchId, params api.ListImportRowsParams) {
+	if _, ok := controller.requireActor(writer, request, false); !ok {
+		return
+	}
+	offset, err := decodeImportCursor(params.Cursor)
+	if err != nil {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The import row cursor is invalid.")
+		return
+	}
+	batch, err := controller.Imports.Get(request.Context(), uuid.UUID(batchID))
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	pageLimit := limit(params.Limit)
+	rows, err := controller.Imports.ListRows(request.Context(), uuid.UUID(batchID), pageLimit, offset)
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	response := api.ImportRowPage{Items: []api.ImportRow{}, Page: api.PageInfo{Limit: pageLimit}}
+	for _, row := range rows {
+		item, responseErr := controller.importRowResponse(request.Context(), row)
+		if responseErr != nil {
+			problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+			return
+		}
+		response.Items = append(response.Items, item)
+	}
+	if offset+len(rows) < batch.TotalRows {
+		response.Page.NextCursor = encodeImportCursor(offset + len(rows))
+	}
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func (controller *Controller) UpdateImportRows(writer http.ResponseWriter, request *http.Request, batchID api.BatchId, _ api.UpdateImportRowsParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.UpdateImportRowsRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	updates := make([]importservice.RowUpdate, 0, len(body.Rows))
+	for _, row := range body.Rows {
+		var resolution *string
+		if row.DuplicateResolution != nil {
+			value := string(*row.DuplicateResolution)
+			resolution = &value
+		}
+		updates = append(updates, importservice.RowUpdate{RowNumber: row.RowNumber, Selected: row.Selected, AcknowledgeWarnings: row.AcknowledgeWarnings, DuplicateResolution: resolution})
+	}
+	batch, err := controller.Imports.UpdateRows(request.Context(), actor.UserID, uuid.UUID(batchID), int64(body.ExpectedRevision), updates)
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, importBatchResponse(batch))
+}
+
+func (controller *Controller) CommitImport(writer http.ResponseWriter, request *http.Request, batchID api.BatchId, _ api.CommitImportParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.ExpectedRevisionRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	result, err := controller.Imports.Commit(request.Context(), actor.UserID, uuid.UUID(batchID), int64(body.ExpectedRevision))
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, importCommitResponse(result))
+}
+
+func (controller *Controller) GetImportResult(writer http.ResponseWriter, request *http.Request, batchID api.BatchId) {
+	if _, ok := controller.requireActor(writer, request, false); !ok {
+		return
+	}
+	result, err := controller.Imports.GetResult(request.Context(), uuid.UUID(batchID))
+	if err != nil {
+		controller.writeImportError(writer, request, uuid.UUID(batchID), err)
+		return
+	}
+	writeJSON(writer, http.StatusOK, importCommitResponse(result))
 }
 
 func (controller *Controller) UploadArtifact(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, _ api.UploadArtifactParams) {
@@ -1043,6 +1168,182 @@ func artifactResponse(value artifacts.Artifact, publicBasePath string) api.Artif
 		response.ViewUrl = &viewURL
 	}
 	return response
+}
+
+func importBatchResponse(value importservice.Batch) api.ImportBatch {
+	return api.ImportBatch{
+		Id: value.ID, SourceFilename: value.SourceFilename, SourceSha256: value.SourceSHA256,
+		Format: api.ImportBatchFormat(value.Format), State: api.ImportState(value.State), TotalRows: value.TotalRows,
+		ValidRows: value.ValidRows, WarningRows: value.WarningRows, ErrorRows: value.ErrorRows,
+		Revision: int(value.Revision), CreatedAt: value.CreatedAt, ExpiresAt: value.ExpiresAt, CommittedAt: value.CommittedAt,
+	}
+}
+
+func importCommitResponse(value importservice.CommitResult) api.ImportCommitResult {
+	projectIDs := make([]api.Uuid, 0, len(value.CreatedProjectIDs))
+	for _, projectID := range value.CreatedProjectIDs {
+		projectIDs = append(projectIDs, projectID)
+	}
+	return api.ImportCommitResult{BatchId: value.BatchID, CommittedAt: value.CommittedAt, CreatedProjectIds: projectIDs, SkippedRows: value.SkippedRows}
+}
+
+func (controller *Controller) importRowResponse(ctx context.Context, value importservice.Row) (api.ImportRow, error) {
+	draftJSON, err := json.Marshal(value.Draft)
+	if err != nil {
+		return api.ImportRow{}, err
+	}
+	draft := map[string]any{}
+	if err := json.Unmarshal(draftJSON, &draft); err != nil {
+		return api.ImportRow{}, err
+	}
+	response := api.ImportRow{RowNumber: value.RowNumber, ImportKey: value.ImportKey, State: api.ImportRowState(value.State), Selected: value.Selected, WarningsAcknowledged: value.WarningsAcknowledged, Draft: &draft, Issues: []api.ImportIssue{}}
+	if value.DuplicateResolution != nil {
+		resolution := api.ImportRowDuplicateResolution(*value.DuplicateResolution)
+		response.DuplicateResolution = &resolution
+	}
+	for _, issue := range value.Issues {
+		message := issue.Message
+		response.Issues = append(response.Issues, api.ImportIssue{Field: issue.Field, Code: issue.Code, Severity: api.ImportIssueSeverity(issue.Severity), Message: &message})
+	}
+	if len(value.DuplicateCandidateIDs) > 0 {
+		candidates := make([]api.ProjectSummary, 0, len(value.DuplicateCandidateIDs))
+		for _, projectID := range value.DuplicateCandidateIDs {
+			candidate, err := controller.projectSummary(ctx, projectID)
+			if err != nil {
+				return api.ImportRow{}, err
+			}
+			candidates = append(candidates, candidate)
+		}
+		response.DuplicateCandidates = &candidates
+	}
+	return response, nil
+}
+
+func (controller *Controller) projectSummary(ctx context.Context, projectID uuid.UUID) (api.ProjectSummary, error) {
+	value, err := controller.Projects.Get(ctx, projectID, false)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	program, err := controller.catalogReference(ctx, "program", value.ProgramVersionID)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	major, err := controller.catalogReference(ctx, "major", value.MajorVersionID)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	course, err := controller.catalogReference(ctx, "course", value.CourseVersionID)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	participations, err := controller.projectParticipations(ctx, projectID)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	taxonomy, err := controller.projectTaxonomy(ctx, projectID)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	artifacts, err := controller.projectArtifacts(ctx, projectID, true)
+	if err != nil {
+		return api.ProjectSummary{}, err
+	}
+	publishedAt := value.UpdatedAt
+	if value.PublishedAt != nil {
+		publishedAt = *value.PublishedAt
+	}
+	response := api.ProjectSummary{
+		Id: value.ID, ReferenceCode: value.ReferenceCode, Title: valueOrEmpty(value.Title), AcademicYear: valueOrZero(value.AcademicYear),
+		Semester: api.Semester(valueOrEmpty(value.Semester)), Major: major, People: participations, Categories: filterTaxonomy(taxonomy, "category"),
+		Platforms: filterTaxonomy(taxonomy, "platform"), ArtifactCount: len(artifacts), PublishedAt: publishedAt,
+	}
+	if program != nil {
+		response.Program = *program
+	}
+	if course != nil {
+		response.Course = *course
+	}
+	return response, nil
+}
+
+func readImportMultipart(writer http.ResponseWriter, request *http.Request) (multipart.File, *multipart.FileHeader, func(), bool) {
+	if !strings.HasPrefix(strings.ToLower(request.Header.Get("Content-Type")), "multipart/form-data") {
+		problem(writer, request, http.StatusUnsupportedMediaType, "unsupported_media_type", "Unsupported media type", "A multipart form is required.")
+		return nil, nil, func() {}, false
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, importservice.MaximumUploadBytes+(2<<20))
+	if err := request.ParseMultipartForm(1 << 20); err != nil {
+		if request.MultipartForm != nil {
+			_ = request.MultipartForm.RemoveAll()
+		}
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			problem(writer, request, http.StatusRequestEntityTooLarge, "import_too_large", "Import too large", "The upload exceeds 25 MiB.")
+		} else {
+			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The multipart form is invalid.")
+		}
+		return nil, nil, func() {}, false
+	}
+	cleanup := func() { _ = request.MultipartForm.RemoveAll() }
+	if len(request.MultipartForm.Value) != 0 || len(request.MultipartForm.File) != 1 {
+		cleanup()
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "Only one file field is allowed.")
+		return nil, nil, func() {}, false
+	}
+	fileHeaders := request.MultipartForm.File["file"]
+	if len(fileHeaders) != 1 {
+		cleanup()
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "file is required exactly once.")
+		return nil, nil, func() {}, false
+	}
+	file, err := fileHeaders[0].Open()
+	if err != nil {
+		cleanup()
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The uploaded file cannot be read.")
+		return nil, nil, func() {}, false
+	}
+	return file, fileHeaders[0], cleanup, true
+}
+
+func encodeImportCursor(offset int) *string {
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset)))
+	return &encoded
+}
+
+func decodeImportCursor(cursor *api.Cursor) (int, error) {
+	if cursor == nil {
+		return 0, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(string(*cursor))
+	if err != nil {
+		return 0, err
+	}
+	offset, err := strconv.Atoi(string(decoded))
+	if err != nil || offset < 0 {
+		return 0, errors.New("invalid import cursor")
+	}
+	return offset, nil
+}
+
+func (controller *Controller) writeImportError(writer http.ResponseWriter, request *http.Request, batchID uuid.UUID, err error) {
+	switch {
+	case errors.Is(err, importservice.ErrNotFound), errors.Is(err, importservice.ErrResultUnavailable):
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+	case errors.Is(err, importservice.ErrRevisionConflict):
+		batch, getErr := controller.Imports.Get(request.Context(), batchID)
+		if getErr == nil {
+			revisionConflict(writer, request, batch.Revision)
+		} else {
+			problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+		}
+	case errors.Is(err, importservice.ErrInvalidState), errors.Is(err, importservice.ErrExpired):
+		problem(writer, request, http.StatusConflict, "import_state_conflict", "Import state conflict", err.Error())
+	case errors.Is(err, importservice.ErrInvalidFile), errors.Is(err, importservice.ErrInvalidSelection):
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+	default:
+		slog.Error("Import operation failed", "batch_id", batchID, "error", err, "request_id", requestIDValue(request.Context()))
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+	}
 }
 
 func (controller *Controller) readArtifactMultipart(writer http.ResponseWriter, request *http.Request, requiredFields ...string) (map[string]string, multipart.File, *multipart.FileHeader, func(), bool) {

@@ -122,6 +122,24 @@ func (e ImportIssueSeverity) Valid() bool {
 	}
 }
 
+// Defines values for ImportRowDuplicateResolution.
+const (
+	ImportRowDuplicateResolutionCreate ImportRowDuplicateResolution = "create"
+	ImportRowDuplicateResolutionSkip   ImportRowDuplicateResolution = "skip"
+)
+
+// Valid indicates whether the value is a known member of the ImportRowDuplicateResolution enum.
+func (e ImportRowDuplicateResolution) Valid() bool {
+	switch e {
+	case ImportRowDuplicateResolutionCreate:
+		return true
+	case ImportRowDuplicateResolutionSkip:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ImportRowState.
 const (
 	ImportRowStateCommitted ImportRowState = "committed"
@@ -154,19 +172,16 @@ func (e ImportRowState) Valid() bool {
 
 // Defines values for ImportRowUpdateDuplicateResolution.
 const (
-	Create ImportRowUpdateDuplicateResolution = "create"
-	Null   ImportRowUpdateDuplicateResolution = "null"
-	Skip   ImportRowUpdateDuplicateResolution = "skip"
+	ImportRowUpdateDuplicateResolutionCreate ImportRowUpdateDuplicateResolution = "create"
+	ImportRowUpdateDuplicateResolutionSkip   ImportRowUpdateDuplicateResolution = "skip"
 )
 
 // Valid indicates whether the value is a known member of the ImportRowUpdateDuplicateResolution enum.
 func (e ImportRowUpdateDuplicateResolution) Valid() bool {
 	switch e {
-	case Create:
+	case ImportRowUpdateDuplicateResolutionCreate:
 		return true
-	case Null:
-		return true
-	case Skip:
+	case ImportRowUpdateDuplicateResolutionSkip:
 		return true
 	default:
 		return false
@@ -618,14 +633,19 @@ type ImportIssueSeverity string
 
 // ImportRow defines model for ImportRow.
 type ImportRow struct {
-	Draft               *map[string]interface{} `json:"draft,omitempty"`
-	DuplicateCandidates *[]ProjectSummary       `json:"duplicate_candidates,omitempty"`
-	ImportKey           string                  `json:"import_key"`
-	Issues              []ImportIssue           `json:"issues"`
-	RowNumber           int                     `json:"row_number"`
-	Selected            bool                    `json:"selected"`
-	State               ImportRowState          `json:"state"`
+	Draft                *map[string]interface{}       `json:"draft,omitempty"`
+	DuplicateCandidates  *[]ProjectSummary             `json:"duplicate_candidates,omitempty"`
+	DuplicateResolution  *ImportRowDuplicateResolution `json:"duplicate_resolution,omitempty"`
+	ImportKey            string                        `json:"import_key"`
+	Issues               []ImportIssue                 `json:"issues"`
+	RowNumber            int                           `json:"row_number"`
+	Selected             bool                          `json:"selected"`
+	State                ImportRowState                `json:"state"`
+	WarningsAcknowledged bool                          `json:"warnings_acknowledged"`
 }
+
+// ImportRowDuplicateResolution defines model for ImportRow.DuplicateResolution.
+type ImportRowDuplicateResolution string
 
 // ImportRowPage defines model for ImportRowPage.
 type ImportRowPage struct {

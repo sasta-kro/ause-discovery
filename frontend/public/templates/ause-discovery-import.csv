@@ -1,0 +1,2 @@
+import_key,title,reference_code,abstract,academic_year,semester,program_key,major_key,course_key,title_aliases,students,advisors,co_advisors,committee_members,categories,platforms,domains,topics,technologies
+project-001,Example Project,REF-001,Example abstract,2026,first,computer_science,,senior_project,"[""Earlier Title""]","[{""display_name"":""Student Name"",""student_id"":""0123456""}]","[{""display_name"":""Advisor Name"",""staff_id"":""advisor-1""}]",[],[],"[""software_application""]","[""web""]",[],[],[]

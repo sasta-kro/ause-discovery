@@ -98,3 +98,16 @@ func TestArtifactContentDispositionUsesSafeFallbackAndUTF8Filename(t *testing.T)
 		t.Fatalf("content disposition was %q, expected %q", disposition, expected)
 	}
 }
+
+func TestImportCursorRoundTripAndRejectsMalformedValues(t *testing.T) {
+	cursor := encodeImportCursor(37)
+	apiCursor := api.Cursor(*cursor)
+	offset, err := decodeImportCursor(&apiCursor)
+	if err != nil || offset != 37 {
+		t.Fatalf("import cursor decoded to %d with error %v", offset, err)
+	}
+	invalid := api.Cursor("not-base64!")
+	if _, err := decodeImportCursor(&invalid); err == nil {
+		t.Fatal("expected malformed import cursor to fail")
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/platform/httpserver"
@@ -73,6 +74,7 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 		return err
 	}
 	go newSearchReconciler(databasePool, configuration, logger).Run(applicationContext)
+	go newImportCleaner(databasePool, configuration, logger).Run(applicationContext)
 
 	mux := http.NewServeMux()
 	httpserver.HealthHandler{DatabasePool: databasePool}.Register(mux, configuration.PublicBasePath)
@@ -103,6 +105,10 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 		defer cancel()
 		return server.Shutdown(shutdownContext)
 	}
+}
+
+func newImportCleaner(databasePool *pgxpool.Pool, configuration config.Config, logger *slog.Logger) importservice.Cleaner {
+	return importservice.Cleaner{Service: importservice.Service{Pool: databasePool, TemporaryRoot: configuration.ImportTemporaryRoot}, Logger: logger}
 }
 
 func newSearchReconciler(databasePool *pgxpool.Pool, configuration config.Config, logger *slog.Logger) searchservice.Reconciler {

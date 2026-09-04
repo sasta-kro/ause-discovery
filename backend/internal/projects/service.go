@@ -61,39 +61,45 @@ type Project struct {
 }
 
 func (service Service) Create(ctx context.Context, actorID uuid.UUID, input Input) (Project, error) {
+	var result Project
+	err := database.InTransaction(ctx, service.Pool, func(transaction pgx.Tx) error {
+		var createErr error
+		result, createErr = service.CreateInTransaction(ctx, transaction, actorID, input)
+		return createErr
+	})
+	return result, err
+}
+
+func (service Service) CreateInTransaction(ctx context.Context, transaction pgx.Tx, actorID uuid.UUID, input Input) (Project, error) {
 	if err := validateInput(input); err != nil {
 		return Project{}, err
 	}
 	projectID := uuid.Must(uuid.NewV7())
-	var result Project
-	err := database.InTransaction(ctx, service.Pool, func(transaction pgx.Tx) error {
-		if err := validateReferences(ctx, transaction, input); err != nil {
-			return err
-		}
-		metadata, err := json.Marshal(metadataOrEmpty(input.ExtensionMetadata))
-		if err != nil {
-			return err
-		}
-		record, err := generated.New(transaction).CreateProject(ctx, generated.CreateProjectParams{ID: identity.UUID(projectID), ReferenceCode: optionalText(input.ReferenceCode), Title: optionalText(input.Title), Abstract: optionalText(input.Abstract), AcademicYear: optionalInt(input.AcademicYear), Semester: optionalText(input.Semester), ProgramVersionID: optionalUUID(input.ProgramVersionID), MajorVersionID: optionalUUID(input.MajorVersionID), CourseVersionID: optionalUUID(input.CourseVersionID), ExtraMetadata: metadata})
-		if err != nil {
-			return err
-		}
-		if err := replaceChildren(ctx, transaction, projectID, input); err != nil {
-			return err
-		}
-		if _, err := generated.New(transaction).UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: "remove"}); err != nil {
-			return err
-		}
-		if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "project.created", TargetType: "project", TargetID: projectID}); err != nil {
-			return err
-		}
-		result = fromRecord(record)
-		result.TitleAliases = input.TitleAliases
-		result.Participations = input.Participations
-		result.TaxonomyValues = input.TaxonomyValues
-		return nil
-	})
-	return result, err
+	if err := validateReferences(ctx, transaction, input); err != nil {
+		return Project{}, err
+	}
+	metadata, err := json.Marshal(metadataOrEmpty(input.ExtensionMetadata))
+	if err != nil {
+		return Project{}, err
+	}
+	record, err := generated.New(transaction).CreateProject(ctx, generated.CreateProjectParams{ID: identity.UUID(projectID), ReferenceCode: optionalText(input.ReferenceCode), Title: optionalText(input.Title), Abstract: optionalText(input.Abstract), AcademicYear: optionalInt(input.AcademicYear), Semester: optionalText(input.Semester), ProgramVersionID: optionalUUID(input.ProgramVersionID), MajorVersionID: optionalUUID(input.MajorVersionID), CourseVersionID: optionalUUID(input.CourseVersionID), ExtraMetadata: metadata})
+	if err != nil {
+		return Project{}, err
+	}
+	if err := replaceChildren(ctx, transaction, projectID, input); err != nil {
+		return Project{}, err
+	}
+	if _, err := generated.New(transaction).UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: "remove"}); err != nil {
+		return Project{}, err
+	}
+	if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "project.created", TargetType: "project", TargetID: projectID}); err != nil {
+		return Project{}, err
+	}
+	result := fromRecord(record)
+	result.TitleAliases = input.TitleAliases
+	result.Participations = input.Participations
+	result.TaxonomyValues = input.TaxonomyValues
+	return result, nil
 }
 
 func (service Service) Replace(ctx context.Context, actorID, projectID uuid.UUID, expectedRevision int64, input Input) (Project, error) {
@@ -142,6 +148,10 @@ func (service Service) Replace(ctx context.Context, actorID, projectID uuid.UUID
 func (service Service) Publish(ctx context.Context, actorID, projectID uuid.UUID, expectedRevision int64) (Project, error) {
 	return service.transition(ctx, actorID, projectID, expectedRevision, "publish")
 }
+
+func (service Service) PublishInTransaction(ctx context.Context, transaction pgx.Tx, actorID, projectID uuid.UUID, expectedRevision int64) (Project, error) {
+	return service.transitionInTransaction(ctx, transaction, actorID, projectID, expectedRevision, "publish")
+}
 func (service Service) Restore(ctx context.Context, actorID, projectID uuid.UUID, expectedRevision int64) (Project, error) {
 	return service.transition(ctx, actorID, projectID, expectedRevision, "restore")
 }
@@ -176,34 +186,39 @@ func (service Service) Delete(ctx context.Context, actorID, projectID uuid.UUID,
 func (service Service) transition(ctx context.Context, actorID, projectID uuid.UUID, expectedRevision int64, kind string) (Project, error) {
 	var result Project
 	err := database.InTransaction(ctx, service.Pool, func(transaction pgx.Tx) error {
-		q := generated.New(transaction)
-		var record generated.Project
-		var err error
-		if kind == "publish" {
-			record, err = q.PublishProject(ctx, generated.PublishProjectParams{ID: identity.UUID(projectID), Revision: expectedRevision})
-		} else {
-			record, err = q.RestoreProject(ctx, generated.RestoreProjectParams{ID: identity.UUID(projectID), Revision: expectedRevision})
-		}
-		if errors.Is(err, pgx.ErrNoRows) {
-			return classifyRevision(ctx, transaction, projectID)
-		}
-		if err != nil {
-			return err
-		}
-		action := "upsert"
-		if record.Status != "published" {
-			action = "remove"
-		}
-		if _, err = q.UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: action}); err != nil {
-			return err
-		}
-		if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "project." + kind, TargetType: "project", TargetID: projectID}); err != nil {
-			return err
-		}
-		result = fromRecord(record)
-		return nil
+		var transitionErr error
+		result, transitionErr = service.transitionInTransaction(ctx, transaction, actorID, projectID, expectedRevision, kind)
+		return transitionErr
 	})
 	return result, err
+}
+
+func (service Service) transitionInTransaction(ctx context.Context, transaction pgx.Tx, actorID, projectID uuid.UUID, expectedRevision int64, kind string) (Project, error) {
+	q := generated.New(transaction)
+	var record generated.Project
+	var err error
+	if kind == "publish" {
+		record, err = q.PublishProject(ctx, generated.PublishProjectParams{ID: identity.UUID(projectID), Revision: expectedRevision})
+	} else {
+		record, err = q.RestoreProject(ctx, generated.RestoreProjectParams{ID: identity.UUID(projectID), Revision: expectedRevision})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Project{}, classifyRevision(ctx, transaction, projectID)
+	}
+	if err != nil {
+		return Project{}, err
+	}
+	action := "upsert"
+	if record.Status != "published" {
+		action = "remove"
+	}
+	if _, err = q.UpsertProjectSearchSync(ctx, generated.UpsertProjectSearchSyncParams{ProjectID: identity.UUID(projectID), DesiredRevision: record.Revision, DesiredAction: action}); err != nil {
+		return Project{}, err
+	}
+	if err := audit.AppendTx(ctx, transaction, audit.Event{ActorID: actorID, EventType: "project." + kind, TargetType: "project", TargetID: projectID}); err != nil {
+		return Project{}, err
+	}
+	return fromRecord(record), nil
 }
 
 func (service Service) Get(ctx context.Context, projectID uuid.UUID, publicOnly bool) (Project, error) {

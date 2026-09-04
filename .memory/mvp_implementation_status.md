@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, and search complete; import implementation is next.
+Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, search, and imports complete; product completion work is next.
 
 ## Verified increments
 
@@ -63,9 +63,20 @@ Status as of 2026-09-04: foundation, data contracts, identity and core records, 
 - Focused backend tests, the full backend suite, all 23 frontend tests, TypeScript checking, and the production frontend build pass.
 - Local PostgreSQL and Meilisearch smoke verification covers queued reconciliation to `synced`, filtered and alias search, exact Student ID search, complete rebuild, verified swap, and authenticated status with no pending or failed rows.
 
+### Imports
+
+- Strict CSV and XLSX adapters enforce exact headers, supported workbook structure, formula and macro rejection, bounded files, Student ID text preservation, and canonical Project import drafts.
+- Persistent PostgreSQL previews retain row validity, warnings, duplicate candidates, selections, acknowledgements, and duplicate resolutions across process restarts.
+- Commit revalidates selected rows against current catalogs, creates People and Projects in one transaction, publishes complete Projects, records search reconciliation and audit state, and returns an immutable result on repeated requests.
+- Expired batches scrub temporary source files and persisted draft payloads while retaining bounded operational metadata.
+- HTTP endpoints provide upload, paginated preview, row-decision updates, atomic commit, stable results, cursor validation, Problem Details, authentication, CSRF protection, and the `import.execute` session capability.
+- Administration provides template downloads, client-side file checks, persistent review pagination, warning acknowledgement, duplicate resolution, selection saving, guarded commit, and stable result display.
+- Bundled CSV and XLSX templates use shipped catalog keys and pass the production import adapters.
+- Focused adapter and PostgreSQL integration tests cover valid and rejected files, restart persistence, correction state, all-or-nothing rollback, repeated commit, search state, and expiry cleanup. Focused HTTP tests, the import interaction test, and TypeScript checking pass.
+
 ## Active implementation work
 
-- Imports, audit administration, CI, operator documentation, and product-completion verification.
+- Audit administration, CI, operator documentation, and product-completion verification.
 
 ## Known implementation constraints
 
