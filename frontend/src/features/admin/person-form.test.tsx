@@ -41,6 +41,12 @@ function renderForm() {
 
 const secondPersonID = '018f0000-0000-7000-8000-0000000000b2'
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((settle) => { resolve = settle })
+  return { promise, resolve }
+}
+
 function renderNavigableForm() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   let navigate: ((to: string) => void) | undefined
@@ -118,22 +124,33 @@ describe('administrator person editing', () => {
     expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('loads the correct record, revision, and target when navigating between People', async () => {
+  it('keeps newer reload state untouched when an older request finishes after navigation', async () => {
     const user = userEvent.setup()
     const secondPerson = { ...storedPerson, id: secondPersonID, display_name: 'Second Person', student_id: '7000002', revision: 7 }
     const firstRenamed = { ...storedPerson, display_name: 'First Person Renamed', revision: 4 }
-    let firstRecordLoaded = false
+    const secondRenamed = { ...secondPerson, display_name: 'Second Person Renamed', revision: 8 }
+    const firstInitial = deferred<{ data: typeof storedPerson }>()
+    const firstReload = deferred<{ data: typeof firstRenamed }>()
+    const secondInitial = deferred<{ data: typeof secondPerson }>()
+    const secondReload = deferred<{ data: typeof secondRenamed }>()
+    let firstInitialSent = false
+    let firstReloadStarted = false
+    let secondInitialSent = false
+    let secondReloadStarted = false
     apiMocks.getAdminPerson.mockImplementation(async ({ path }: { path?: { person_id?: string } }) => {
-      if (path?.person_id === secondPersonID) return { data: secondPerson }
-      if (!firstRecordLoaded) {
-        firstRecordLoaded = true
-        return { data: storedPerson }
+      if (path?.person_id === secondPersonID) {
+        if (!secondInitialSent) { secondInitialSent = true; return secondInitial.promise }
+        if (!secondReloadStarted) { secondReloadStarted = true; return secondReload.promise }
+        return { data: secondRenamed }
       }
-      await new Promise((resolve) => setTimeout(resolve, 150))
-      return { data: firstRenamed }
+      if (!firstInitialSent) { firstInitialSent = true; return firstInitial.promise }
+      firstReloadStarted = true
+      return firstReload.promise
     })
+    firstInitial.resolve({ data: storedPerson })
     apiMocks.updatePerson.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 4 })
-      .mockResolvedValue({ data: secondPerson })
+      .mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 8 })
+      .mockResolvedValue({ data: secondRenamed })
     const { navigate } = renderNavigableForm()
     const nameField = await screen.findByLabelText('Display name')
     await waitFor(() => expect((nameField as HTMLInputElement).value).toBe('Stored Name'))
@@ -142,17 +159,31 @@ describe('administrator person editing', () => {
     await user.type(nameField, 'First Person Local Edit')
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
     expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
-
     await user.click(screen.getByRole('button', { name: 'Reload current record' }))
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(true)
+
     navigate(`/admin/people/${secondPersonID}`)
+    secondInitial.resolve({ data: secondPerson })
     await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person'))
-    expect((screen.getByLabelText('Student ID') as HTMLInputElement).value).toBe('7000002')
     expect(screen.queryByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeNull()
 
-    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person'), { timeout: 400 })
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Reload current record' }))
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(true)
+
+    firstReload.resolve({ data: firstRenamed })
+    await Promise.resolve()
+    expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person')
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Reload current record' }) as HTMLButtonElement).disabled).toBe(true)
+
+    secondReload.resolve({ data: secondRenamed })
+    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person Renamed'))
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
-    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ path: { person_id: secondPersonID }, body: expect.objectContaining({ expected_revision: 7, display_name: 'Second Person' }) })))
+    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ path: { person_id: secondPersonID }, body: expect.objectContaining({ expected_revision: 8, display_name: 'Second Person Renamed' }) })))
   })
 
   it('reports unexpected edit failures and a missing record distinctly', async () => {

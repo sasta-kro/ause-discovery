@@ -29,14 +29,18 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
   const form = useForm<PersonValues>({ defaultValues: toValues() })
   const loadedRecordID = useRef<string | null>(null)
   const activePersonID = useRef(personId)
+  const reloadOwner = useRef(0)
 
   // A reload adopts only the actual server response, never cached data, so the
   // form and the revision used for the next save always describe one record.
   // The fetch uses a distinct cache entry so a failed reload cannot push the
-  // page-level query into its error state, and a response that arrives after
-  // navigation to another Person is applied to the cache only.
+  // page-level query into its error state. Each request owns the shared
+  // loading flag by token, and a response that arrives after navigation to
+  // another Person is applied to the cache only.
   const reloadRecord = async () => {
     const requestedID = personId
+    const owner = reloadOwner.current + 1
+    reloadOwner.current = owner
     setReloadFailed(false)
     setReloading(true)
     try {
@@ -46,14 +50,15 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
         staleTime: 0,
       })
       void client.setQueryData(['admin-person', requestedID], fresh)
+      if (owner !== reloadOwner.current) return
       if (requestedID !== activePersonID.current) return
       loadedRecordID.current = fresh.id
       form.reset(toValues(fresh))
       setConflict(false)
     } catch {
-      if (requestedID === activePersonID.current) setReloadFailed(true)
+      if (owner === reloadOwner.current && requestedID === activePersonID.current) setReloadFailed(true)
     } finally {
-      setReloading(false)
+      if (owner === reloadOwner.current) setReloading(false)
     }
   }
 

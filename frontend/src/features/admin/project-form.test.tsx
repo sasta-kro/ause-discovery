@@ -109,6 +109,7 @@ describe('administrator project form boundaries', () => {
   it('offers explicit reload for a lifecycle revision conflict without discarding form input', async () => {
     const user = userEvent.setup()
     apiMocks.deleteProject.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 3 })
+    apiMocks.replaceProject.mockResolvedValue({ data: storedProject(4) })
     renderAt(`/admin/projects/${projectID}/edit`)
     const titleField = await screen.findByLabelText('Project title')
     await waitFor(() => expect((titleField as HTMLInputElement).value).toBe('Stored Form Project'))
@@ -125,11 +126,22 @@ describe('administrator project form boundaries', () => {
     expect(document.activeElement === screen.getByRole('button', { name: 'Delete' })).toBe(true)
     expect((screen.getByLabelText('Project title') as HTMLInputElement).value).toBe('Unsaved Local Edit')
 
-    apiMocks.getAdminProject.mockResolvedValue({ data: storedProject(3) })
+    apiMocks.getAdminProject.mockRejectedValueOnce(new Error('reload failed'))
+    await user.click(screen.getAllByRole('button', { name: 'Reload current record' })[0])
+    expect(await screen.findByText('The current record could not be reloaded. Unsaved changes were preserved; retry the reload.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeTruthy()
+    expect((screen.getByLabelText('Project title') as HTMLInputElement).value).toBe('Unsaved Local Edit')
+    expect(screen.getByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+
+    apiMocks.getAdminProject.mockResolvedValueOnce({ data: storedProject(3) })
     await user.click(screen.getAllByRole('button', { name: 'Reload current record' })[0])
     await waitFor(() => expect((screen.getByLabelText('Project title') as HTMLInputElement).value).toBe('Stored Form Project'))
     await waitFor(() => expect(screen.queryByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeNull())
     expect(screen.queryByText('The Project change failed. Check the current state before retrying.')).toBeNull()
+    expect(screen.queryByText('The current record could not be reloaded. Unsaved changes were preserved; retry the reload.')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => expect(apiMocks.replaceProject).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ expected_revision: 3 }) })))
   })
 
   it('keeps the confirmation dialog open while deletion is pending', async () => {

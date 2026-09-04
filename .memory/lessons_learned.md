@@ -60,7 +60,7 @@ A `<button>` without an explicit `type` inside a `<form>` is a submit button. Mo
 
 ## Cursor bounds follow sort keys
 
-Opaque cursor length bounds must be derived from the worst contract-legal sort key, not chosen as a round number. A 300-character multi-byte display name inflates past a 1024-character base64url cursor and silently breaks the next page. Derive the bound from the encoded worst case (length × UTF-8 width plus envelope) with headroom, and test with a maximum-length Unicode value.
+Opaque cursor length bounds must be derived from the worst contract-legal sort key as actually serialized, not chosen as a round number. A 300-character multi-byte display name inflates past a 1024-character base64url cursor, and Go JSON escaping writes six bytes for characters such as `&`, pushing a 300-character escaped name past 2048. Derive the bound from the serialized worst case (UTF-8 width and JSON escapes plus envelope) with headroom, and test with maximum-length Unicode and escaped values.
 
 ## One-off fetches need distinct cache keys
 

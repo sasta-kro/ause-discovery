@@ -458,7 +458,7 @@ export function DeleteConfirmation({ confirmationValue, onCancel, onConfirm, pen
 }
 
 function DeleteRestoreControls({ project }: { project: AdminProject }) {
-  const { t } = useTranslation(); const { csrfToken } = useSession(); const client = useQueryClient(); const [confirming, setConfirming] = useState(false); const [conflict, setConflict] = useState(false)
+  const { t } = useTranslation(); const { csrfToken } = useSession(); const client = useQueryClient(); const [confirming, setConfirming] = useState(false); const [conflict, setConflict] = useState(false); const [reloading, setReloading] = useState(false); const [reloadFailed, setReloadFailed] = useState(false)
   const conflictRevision = useRef(0)
   const confirmationValue = projectDeleteConfirmation(project)
   const mutation = useMutation({ mutationFn: async (action: 'delete' | 'restore') => { if (!csrfToken) throw new Error('CSRF token unavailable'); const request = { path: { project_id: project.id }, body: { expected_revision: project.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true as const }; return action === 'delete' ? responseData(deleteProject({ ...request, body: { ...request.body, confirmation: confirmationValue } })) : responseData(restoreProject(request)) }, onMutate: () => { setConflict(false) }, onSuccess: (nextProject) => { setConflict(false); void client.setQueryData(['admin-project', project.id], nextProject); setConfirming(false) }, onError: (error) => { setConfirming(false); if (isProblem(error) && error.code === 'revision_conflict') { conflictRevision.current = project.revision; setConflict(true) } } })
@@ -468,15 +468,34 @@ function DeleteRestoreControls({ project }: { project: AdminProject }) {
   useEffect(() => {
     if (conflict && project.revision !== conflictRevision.current) {
       setConflict(false)
+      setReloadFailed(false)
       mutation.reset()
     }
   }, [conflict, project.revision, mutation])
-  const reloadRecord = () => { void client.invalidateQueries({ queryKey: ['admin-project', project.id] }) }
-  const conflictNotice = conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} type="button" onClick={reloadRecord}>{t('action.reload')}</button></div> : null
+  // The reload fetch uses a distinct cache entry so a failed reload cannot
+  // push the observed Project query into its error state and replace the form.
+  const reloadRecord = async () => {
+    setReloadFailed(false)
+    setReloading(true)
+    try {
+      const fresh = await client.fetchQuery({
+        queryKey: ['admin-project', project.id, 'reload'],
+        queryFn: async () => (await getAdminProject({ path: { project_id: project.id }, throwOnError: true })).data,
+        staleTime: 0,
+      })
+      void client.setQueryData(['admin-project', project.id], fresh)
+    } catch {
+      setReloadFailed(true)
+    } finally {
+      setReloading(false)
+    }
+  }
+  const conflictNotice = conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} disabled={reloading} type="button" onClick={() => void reloadRecord()}>{t('action.reload')}</button>{reloading ? <p role="status">{t('feedback.working')}</p> : null}</div> : null
+  const reloadFailureNotice = reloadFailed && !reloading ? <p className={styles.error} role="alert">{t('admin.projectReloadFailed')}</p> : null
   const failureNotice = mutation.isError && !conflict ? <p className={styles.error} role="alert">{t('admin.lifecycleFailed')}</p> : null
   const pendingNotice = mutation.isPending ? <p role="status">{t('feedback.working')}</p> : null
-  if (project.status === 'deleted') return <div><button className={styles.secondaryButton} disabled={mutation.isPending || !csrfToken} type="button" onClick={() => mutation.mutate('restore')}>{t('action.restore')}</button>{pendingNotice}{conflictNotice}{failureNotice}</div>
-  return <div>{confirming ? <DeleteConfirmation confirmationValue={confirmationValue} onCancel={() => setConfirming(false)} onConfirm={() => mutation.mutate('delete')} pending={mutation.isPending} /> : null}<button className={styles.dangerButton} disabled={!confirmationValue || mutation.isPending} type="button" onClick={() => setConfirming(true)}>{t('action.delete')}</button>{pendingNotice}{conflictNotice}{failureNotice}</div>
+  if (project.status === 'deleted') return <div><button className={styles.secondaryButton} disabled={mutation.isPending || !csrfToken} type="button" onClick={() => mutation.mutate('restore')}>{t('action.restore')}</button>{pendingNotice}{conflictNotice}{reloadFailureNotice}{failureNotice}</div>
+  return <div>{confirming ? <DeleteConfirmation confirmationValue={confirmationValue} onCancel={() => setConfirming(false)} onConfirm={() => mutation.mutate('delete')} pending={mutation.isPending} /> : null}<button className={styles.dangerButton} disabled={!confirmationValue || mutation.isPending} type="button" onClick={() => setConfirming(true)}>{t('action.delete')}</button>{pendingNotice}{conflictNotice}{reloadFailureNotice}{failureNotice}</div>
 }
 
 function AdminSearchPage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('admin.searchTitle')} /><AdminSearchMaintenance csrfToken={csrfToken} /></div> }
