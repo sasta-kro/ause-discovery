@@ -23,7 +23,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 - `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
 - `mvp_implementation_status.md` will contain verified implementation state after application work begins.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
-- `session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
+- `archives/session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
 
 ## Maintenance rules
 
@@ -36,7 +36,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, import, and audit administration increments are verified. Product completion work is next. Repository work continues serially in one primary session.
+As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, import, and audit administration increments are verified. Product completion work is next. Remaining increments proceed through the split author-review workflow described below.
 
 ## Implementation workflow
 

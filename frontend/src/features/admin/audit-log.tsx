@@ -27,12 +27,14 @@ export function AdminAuditLog() {
   const pending = auditQuery.isFetching
 
   const applyFilters = () => {
-    if (filters.actorId && !actorUUIDPattern.test(filters.actorId)) {
+    const actorId = filters.actorId.trim().toLowerCase()
+    if (actorId && !actorUUIDPattern.test(actorId)) {
       setInvalidActor(true)
       return
     }
     setInvalidActor(false)
-    setApplied({ ...filters })
+    setFilters({ ...filters, actorId })
+    setApplied({ action: filters.action, actorId })
     setCursor(null)
     setCursorHistory([])
   }
@@ -59,7 +61,7 @@ export function AdminAuditLog() {
     <form className={styles.form} onSubmit={(event) => { event.preventDefault(); applyFilters() }}>
       <FormField label={t('audit.actionFilter')}><input value={filters.action} onChange={(event) => setFilters({ ...filters, action: event.target.value })} /></FormField>
       <FormField label={t('audit.actorFilter')}><input value={filters.actorId} onChange={(event) => setFilters({ ...filters, actorId: event.target.value })} inputMode="text" spellCheck={false} /></FormField>
-      <div className={styles.formActions}><button className={styles.button} disabled={pending} type="submit">{t('action.filter')}</button><button className={styles.secondaryButton} disabled={pending} type="button" onClick={clearFilters}>{t('action.clear')}</button></div>
+      <div className={styles.formActions}><button className={styles.button} disabled={pending} type="submit">{t('action.filter')}</button><button className={styles.secondaryButton} disabled={pending} type="button" onClick={clearFilters}>{t('action.clear')}</button>{auditQuery.isError ? <button className={styles.secondaryButton} disabled={pending} type="button" onClick={() => { void auditQuery.refetch() }}>{t('audit.retry')}</button> : null}</div>
     </form>
     {invalidActor ? <p className={styles.error} role="alert">{t('audit.invalidActor')}</p> : null}
     {auditQuery.isError ? <p className={styles.error} role="alert">{t('audit.failed')}</p> : null}

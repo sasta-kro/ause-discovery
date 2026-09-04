@@ -88,11 +88,27 @@ describe('Administrator audit log', () => {
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
     await waitFor(() => expect(apiMocks.listAuditEvents).toHaveBeenCalledWith(expect.objectContaining({ query: { action: undefined, actor_id: undefined, cursor: undefined, limit: 20 } })))
 
-    apiMocks.listAuditEvents.mockRejectedValue(new Error('unavailable'))
+    apiMocks.listAuditEvents.mockRejectedValueOnce(new Error('unavailable'))
     await user.type(screen.getByLabelText('Action (exact match)'), 'person.created')
     await user.click(screen.getByRole('button', { name: 'Apply filters' }))
     const failureAlert = await screen.findByText('The audit listing failed. Adjust the filters and retry.')
-    expect(failureAlert.textContent).toContain('The audit listing failed. Adjust the filters and retry.')
     expect(failureAlert.getAttribute('role')).toBe('alert')
+
+    apiMocks.listAuditEvents.mockResolvedValue({ data: firstPage })
+    await user.click(screen.getByRole('button', { name: 'Retry request' }))
+    expect(await screen.findByText('project.created')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('accepts uppercase actor UUIDs by normalizing them before the request', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    expect(await screen.findByText('project.created')).toBeTruthy()
+
+    await user.type(screen.getByLabelText('Actor UUID'), actorID.toUpperCase())
+    await user.click(screen.getByRole('button', { name: 'Apply filters' }))
+    await waitFor(() => expect(apiMocks.listAuditEvents).toHaveBeenCalledWith(expect.objectContaining({ query: expect.objectContaining({ actor_id: actorID }) })))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect((screen.getByLabelText('Actor UUID') as HTMLInputElement).value).toBe(actorID)
   })
 })
