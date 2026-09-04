@@ -37,3 +37,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 ## Current checkpoint
 
 As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, and import increments are verified. Product completion work is next. Repository work continues serially in one primary session.
+
+## Implementation workflow
+
+Starting after commit `722a6ff`, each remaining vertical uses a split author-review workflow. A planning and review task writes one bounded implementation brief. A lower-cost coding task implements and commits that brief. The planning and review task then inspects the complete diff, commit history, focused verification evidence, and affected integration boundaries before accepting the increment or requesting corrections. Only an accepted increment becomes the baseline for the next brief.
