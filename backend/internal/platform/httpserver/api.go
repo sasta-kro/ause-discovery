@@ -18,6 +18,7 @@ import (
 
 	api "ause-discovery.local/backend/generated/api"
 	"ause-discovery.local/backend/internal/artifacts"
+	"ause-discovery.local/backend/internal/audit"
 	"ause-discovery.local/backend/internal/auth"
 	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/people"
@@ -32,8 +33,11 @@ import (
 const sessionCookieName = "ause_session"
 const csrfCookieName = "ause_csrf"
 
+var administratorPermissions = []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit", "import.execute", "audit.read"}
+
 type Controller struct {
 	api.Unimplemented
+	Audit     audit.Service
 	Auth      auth.Service
 	Artifacts artifacts.Service
 	Imports   importservice.Service
@@ -48,6 +52,7 @@ const actorContextKey requestContextKey = "actor"
 
 func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler {
 	controller := Controller{
+		Audit:     audit.Service{Pool: pool},
 		Auth:      auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL},
 		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
@@ -88,14 +93,14 @@ func (controller *Controller) Login(writer http.ResponseWriter, request *http.Re
 	}
 	http.SetCookie(writer, &http.Cookie{Name: sessionCookieName, Value: session.Token, Path: controller.Config.PublicBasePath, HttpOnly: true, Secure: controller.Config.CookieSecure, SameSite: http.SameSiteLaxMode, Expires: session.AbsoluteExpiresAt})
 	http.SetCookie(writer, &http.Cookie{Name: csrfCookieName, Value: session.CSRFToken, Path: controller.Config.PublicBasePath, Secure: controller.Config.CookieSecure, SameSite: http.SameSiteLaxMode, Expires: session.AbsoluteExpiresAt})
-	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: session.AbsoluteExpiresAt, User: api.SessionUser{Id: session.UserID, Username: session.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit", "import.execute"}}})
+	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: session.AbsoluteExpiresAt, User: api.SessionUser{Id: session.UserID, Username: session.Username, Permissions: administratorPermissions}})
 }
 func (controller *Controller) GetSession(writer http.ResponseWriter, request *http.Request) {
 	actor, ok := controller.requireActor(writer, request, false)
 	if !ok {
 		return
 	}
-	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: actor.Session.AbsoluteExpiresAt, User: api.SessionUser{Id: actor.UserID, Username: actor.Username, Permissions: []string{"project.create", "project.edit", "project.delete", "person.create", "person.edit", "import.execute"}}})
+	writeJSON(writer, http.StatusOK, api.SessionResponse{ExpiresAt: actor.Session.AbsoluteExpiresAt, User: api.SessionUser{Id: actor.UserID, Username: actor.Username, Permissions: administratorPermissions}})
 }
 func (controller *Controller) GetCsrfToken(writer http.ResponseWriter, request *http.Request) {
 	actor, ok := controller.requireActor(writer, request, false)
@@ -518,6 +523,36 @@ func (controller *Controller) GetSearchRebuild(writer http.ResponseWriter, reque
 		return
 	}
 	writeJSON(writer, http.StatusOK, searchRebuildResponse(operation))
+}
+
+func (controller *Controller) ListAuditEvents(writer http.ResponseWriter, request *http.Request, params api.ListAuditEventsParams) {
+	_, ok := controller.requireActor(writer, request, false)
+	if !ok {
+		return
+	}
+	query := audit.PageQuery{Cursor: cursorValue(params.Cursor), Limit: valueOrZero(params.Limit)}
+	if params.Action != nil {
+		query.Action = *params.Action
+	}
+	if params.ActorId != nil {
+		actorID := uuid.UUID(*params.ActorId)
+		query.ActorID = &actorID
+	}
+	page, err := controller.Audit.List(request.Context(), query)
+	if errors.Is(err, audit.ErrInvalidCursor) {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The audit cursor is invalid.")
+		return
+	}
+	if err != nil {
+		slog.Error("Audit listing failed", "error", err, "request_id", requestIDValue(request.Context()))
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	response := api.AuditEventPage{Items: []api.AuditEvent{}, Page: api.PageInfo{Limit: page.Limit, NextCursor: page.NextCursor}}
+	for _, item := range page.Items {
+		response.Items = append(response.Items, auditEventResponse(item))
+	}
+	writeJSON(writer, http.StatusOK, response)
 }
 
 func (controller *Controller) CreateProject(writer http.ResponseWriter, request *http.Request, _ api.CreateProjectParams) {
@@ -1149,6 +1184,22 @@ func searchRebuildResponse(operation searchservice.RebuildOperation) api.SearchR
 		TotalProjects: operation.TotalProjects, ProcessedProjects: operation.ProcessedProjects,
 		FailedProjects: &failedProjects, ErrorCode: operation.ErrorCode,
 	}
+}
+
+func auditEventResponse(value audit.PageItem) api.AuditEvent {
+	response := api.AuditEvent{Action: value.Action, ActorId: (*api.Uuid)(value.ActorID), CreatedAt: value.CreatedAt, Id: value.ID, Metadata: value.Metadata, ResourceType: value.TargetType, ResourceId: (*string)(nil)}
+	if value.TargetID != nil {
+		resourceID := value.TargetID.String()
+		response.ResourceId = &resourceID
+	}
+	return response
+}
+
+func cursorValue(value *api.Cursor) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func artifactResponse(value artifacts.Artifact, publicBasePath string) api.Artifact {

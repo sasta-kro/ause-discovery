@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, search, and imports complete; product completion work is next.
+Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, search, imports, and audit administration complete; product completion work is next.
 
 ## Verified increments
 
@@ -74,9 +74,18 @@ Status as of 2026-09-04: foundation, data contracts, identity and core records, 
 - Bundled CSV and XLSX templates use shipped catalog keys and pass the production import adapters.
 - Focused adapter and PostgreSQL integration tests cover valid and rejected files, restart persistence, correction state, all-or-nothing rollback, repeated commit, search state, and expiry cleanup. Focused HTTP tests, the import interaction test, and TypeScript checking pass.
 
+### Audit administration
+
+- `GET /admin/audit-events` requires an administrator session, filters by exact action and actor UUID, and pages with a stable keyset cursor ordered by `created_at DESC, id DESC`; malformed cursors return `400 validation_error` and missing sessions return `401`.
+- The audit response exposes nullable `actor_id` for bootstrap and failed-login events, always-present `resource_type`, nullable `resource_id`, and a required metadata object, with `event_type`, `target_type`, and `target_id` mapped at the HTTP boundary.
+- Session and login responses include `audit.read` in the single administrator permission list.
+- `/admin/audit` renders the real audit interface with exact filters, explicit Apply and Clear controls, system-actor labeling, text-only metadata in a compact definition list, cursor Next and Previous navigation, and loading, empty, invalid-filter, and request-error states.
+- Audit storage remains append-only: the SQL surface exposes no update or delete path for `audit_events`.
+- Focused verification: audit service unit tests, one PostgreSQL integration test for ordering, filters, nullable values, limit behavior, and two-page cursor pagination without duplicates; an HTTP boundary integration test covering 401, 400 cursor and parameter validation, successful null-actor and metadata mapping, and `audit.read`; the frontend audit interaction test; `tsc -b`; and an authenticated Compose smoke path verifying the unfiltered listing, exact action filter, cursor paging, bad-cursor `400`, missing-session `401`, and invalid actor `400` through a disposable administrator and disposable database.
+
 ## Active implementation work
 
-- Audit administration, CI, operator documentation, and product-completion verification.
+- CI, operator documentation, and product-completion verification.
 
 ## Known implementation constraints
 

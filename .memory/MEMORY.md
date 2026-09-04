@@ -36,7 +36,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, and import increments are verified. Product completion work is next. Repository work continues serially in one primary session.
+As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, import, and audit administration increments are verified. Product completion work is next. Repository work continues serially in one primary session.
 
 ## Implementation workflow
 

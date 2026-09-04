@@ -33,3 +33,11 @@ Do not run repository-wide formatters during a feature increment when existing f
 Import row responses must expose persisted warning acknowledgement and duplicate-resolution state. A refreshed review interface otherwise presents stale decisions even when the server has stored the correct commit inputs.
 
 Bundled import examples must use version-controlled catalog keys rather than display labels or invented values. Parsing the distributed CSV and XLSX templates through the production adapters provides a focused guard against examples that cannot produce a valid preview.
+
+## Containerized pnpm generation with host node_modules
+
+Running the pinned Node container against the host-installed workspace lets pnpm 11 attempt to purge the host-platform `node_modules` through its dependency-status check, which aborts without a TTY. Pure-JavaScript generator binaries can be invoked directly through their `.bin` shim inside the container, skipping pnpm entirely, when generation is the only requirement.
+
+## Stale persistent development database
+
+The persistent development Compose PostgreSQL was migrated with an early revision of the single initial migration, and goose cannot re-apply amended statements to a version already recorded. Schema-dependent smoke verification must create and migrate a disposable database inside that instance instead of using the shared development database.

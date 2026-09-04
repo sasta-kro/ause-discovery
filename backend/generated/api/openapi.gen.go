@@ -507,13 +507,15 @@ type ArtifactType string
 
 // AuditEvent defines model for AuditEvent.
 type AuditEvent struct {
-	Action       string                  `json:"action"`
-	ActorId      Uuid                    `json:"actor_id"`
-	CreatedAt    Timestamp               `json:"created_at"`
-	Id           Uuid                    `json:"id"`
-	Metadata     *map[string]interface{} `json:"metadata,omitempty"`
-	ResourceId   *string                 `json:"resource_id,omitempty"`
-	ResourceType *string                 `json:"resource_type,omitempty"`
+	Action string `json:"action"`
+
+	// ActorId Null when the event was recorded without an authenticated actor.
+	ActorId      *Uuid                  `json:"actor_id"`
+	CreatedAt    Timestamp              `json:"created_at"`
+	Id           Uuid                   `json:"id"`
+	Metadata     map[string]interface{} `json:"metadata"`
+	ResourceId   *string                `json:"resource_id"`
+	ResourceType string                 `json:"resource_type"`
 }
 
 // AuditEventPage defines model for AuditEventPage.

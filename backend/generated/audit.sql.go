@@ -51,28 +51,29 @@ func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventPara
 const listAuditEvents = `-- name: ListAuditEvents :many
 SELECT id, actor_id, event_type, target_type, target_id, metadata, created_at
 FROM audit_events
-WHERE ($3::uuid IS NULL OR actor_id = $3::uuid)
-  AND ($4::text IS NULL OR target_type = $4::text)
-  AND ($5::uuid IS NULL OR target_id = $5::uuid)
+WHERE ($2::text IS NULL OR event_type = $2::text)
+  AND ($3::uuid IS NULL OR actor_id = $3::uuid)
+  AND ($4::timestamptz IS NULL
+    OR (created_at, id) < ($4::timestamptz, $5::uuid))
 ORDER BY created_at DESC, id DESC
-LIMIT $1 OFFSET $2
+LIMIT $1
 `
 
 type ListAuditEventsParams struct {
-	Limit      int32
-	Offset     int32
-	ActorID    pgtype.UUID
-	TargetType pgtype.Text
-	TargetID   pgtype.UUID
+	Limit           int32
+	EventType       pgtype.Text
+	ActorID         pgtype.UUID
+	CursorCreatedAt pgtype.Timestamptz
+	CursorID        pgtype.UUID
 }
 
 func (q *Queries) ListAuditEvents(ctx context.Context, arg ListAuditEventsParams) ([]AuditEvent, error) {
 	rows, err := q.db.Query(ctx, listAuditEvents,
 		arg.Limit,
-		arg.Offset,
+		arg.EventType,
 		arg.ActorID,
-		arg.TargetType,
-		arg.TargetID,
+		arg.CursorCreatedAt,
+		arg.CursorID,
 	)
 	if err != nil {
 		return nil, err

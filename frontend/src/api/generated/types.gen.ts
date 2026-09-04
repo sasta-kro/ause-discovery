@@ -463,10 +463,13 @@ export type SearchRebuildOperation = {
 export type AuditEvent = {
     id: Uuid;
     action: string;
-    actor_id: Uuid;
-    resource_type?: string | null;
-    resource_id?: string | null;
-    metadata?: {
+    /**
+     * Null when the event was recorded without an authenticated actor.
+     */
+    actor_id: Uuid | null;
+    resource_type: string;
+    resource_id: string | null;
+    metadata: {
         [key: string]: unknown;
     };
     created_at: Timestamp;
@@ -1880,6 +1883,10 @@ export type ListAuditEventsData = {
 };
 
 export type ListAuditEventsErrors = {
+    /**
+     * Validation failed.
+     */
+    400: ValidationProblem;
     /**
      * RFC 9457 problem details.
      */
