@@ -58,6 +58,11 @@ jobs:
           tags: |
             ${{ env.API_IMAGE }}:${{ env.RELEASE_VERSION }}
             ${{ env.API_IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_VERSION }}
+            org.opencontainers.image.title=AUSE Discovery API
           push: ${{ env.PUSH_IMAGES == 'true' }}
           provenance: true
           sbom: true
@@ -74,6 +79,11 @@ jobs:
           tags: |
             ${{ env.WEB_IMAGE }}:${{ env.RELEASE_VERSION }}
             ${{ env.WEB_IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.RELEASE_VERSION }}
+            org.opencontainers.image.title=AUSE Discovery Web
           push: ${{ env.PUSH_IMAGES == 'true' }}
           provenance: true
           sbom: true

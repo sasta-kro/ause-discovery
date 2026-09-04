@@ -12,7 +12,7 @@ Use `make doctor` to inspect local tooling and available Docker fallbacks. Go co
 
 ## Quick local validation
 
-The Make targets mirror the CI jobs in `.github/workflows/validate.yml`:
+Local parity commands for the checks in `.github/workflows/validate.yml`. `make vuln-report` covers govulncheck and the pnpm audit; the container image scans run in CI only:
 
 ```sh
 make check-source       # action pins, frontend lint/tests/builds, Go format/vet/tests

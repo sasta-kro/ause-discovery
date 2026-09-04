@@ -1,10 +1,14 @@
 name: Validate
 
+# Branch pushes of any name are accepted at the trigger level; each job then
+# runs only for pull requests or for the repository default branch, which is
+# read from the event context so a branch rename cannot silently stop
+# validation. The branches filter excludes tag pushes.
 on:
   pull_request:
   push:
     branches:
-      - main
+      - '**'
 
 concurrency:
   group: validate-${{ github.ref }}
@@ -16,6 +20,7 @@ permissions:
 jobs:
   frontend:
     name: Frontend and workflow source checks
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -42,6 +47,7 @@ jobs:
 
   backend:
     name: Backend checks with PostgreSQL
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -77,6 +83,7 @@ jobs:
 
   drift:
     name: Generated-code drift
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -95,6 +102,7 @@ jobs:
 
   images:
     name: Application image builds
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -132,6 +140,7 @@ jobs:
 
   vulnerabilities:
     name: Dependency and image vulnerability reports
+    if: github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

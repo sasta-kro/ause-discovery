@@ -45,3 +45,7 @@ The persistent development Compose PostgreSQL was migrated with an early revisio
 ## Vacuous verification passes
 
 `docker compose --env-file <(command)` silently ignores a non-regular environment file and validates against default interpolation, producing a passing check that proves nothing about the intended overrides; pass a real file on disk. Similarly, checks driven by `git ls-files` pass vacuously while the target files are still untracked, so stage new files before treating such a check as evidence.
+
+## Default-branch workflow triggers
+
+GitHub Actions `on.push.branches` filters cannot reference the repository default branch dynamically, so a hardcoded branch name there silently stops validation after a branch rename. Accept branch pushes of any name in the trigger and gate each job with `github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch`, which also excludes tag pushes.
