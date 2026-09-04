@@ -41,3 +41,7 @@ Running the pinned Node container against the host-installed workspace lets pnpm
 ## Stale persistent development database
 
 The persistent development Compose PostgreSQL was migrated with an early revision of the single initial migration, and goose cannot re-apply amended statements to a version already recorded. Schema-dependent smoke verification must create and migrate a disposable database inside that instance instead of using the shared development database.
+
+## Vacuous verification passes
+
+`docker compose --env-file <(command)` silently ignores a non-regular environment file and validates against default interpolation, producing a passing check that proves nothing about the intended overrides; pass a real file on disk. Similarly, checks driven by `git ls-files` pass vacuously while the target files are still untracked, so stage new files before treating such a check as evidence.

@@ -1,0 +1,185 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend and workflow source checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Validate workflow action pins
+        run: make check-action-pins
+      - name: Lint and type-check
+        run: make lint
+      - name: Run component tests
+        run: pnpm --filter @ause-discovery/frontend test
+      - name: Build default base path
+        run: pnpm --filter @ause-discovery/frontend build
+      - name: Build root base path
+        run: VITE_PUBLIC_BASE_PATH=/ pnpm --filter @ause-discovery/frontend build
+
+  backend:
+    name: Backend checks with PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+        env:
+          POSTGRES_USER: ause
+          POSTGRES_PASSWORD: ause
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ause"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.0
+          cache-dependency-path: backend/go.sum
+      - name: Verify Go modules
+        run: make go-mod-verify
+      - name: Check Go formatting for tracked files
+        run: make check-go-format
+      - name: Vet Go packages
+        run: make go-vet
+      - name: Run backend tests with PostgreSQL integration
+        run: make go-test-integration GO_TEST_NETWORK=host GO_TEST_DATABASE_URL='postgres://ause:ause@localhost:5432/postgres?sslmode=disable'
+
+  drift:
+    name: Generated-code drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Regenerate and fail on drift
+        run: make generate-check
+
+  images:
+    name: Application image builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build API image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build web image with default base path
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: frontend/Dockerfile
+          build-args: |
+            VITE_PUBLIC_BASE_PATH=/ause-discovery/
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build web image with root base path
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: frontend/Dockerfile
+          build-args: |
+            VITE_PUBLIC_BASE_PATH=/
+          push: false
+          cache-from: type=gha
+
+  vulnerabilities:
+    name: Dependency and image vulnerability reports
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.0
+          cache-dependency-path: backend/go.sum
+      - name: Check Go vulnerabilities
+        working-directory: backend
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          govulncheck ./...
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.20.0
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Advisory: the lockfile audit also covers development tooling that is
+      # never shipped, so findings are triaged rather than auto-failing.
+      - name: Report pnpm lockfile findings
+        continue-on-error: true
+        run: pnpm audit --audit-level high
+      - name: Build application images
+        run: |
+          docker build -f backend/Dockerfile -t ause-discovery-api:vulnerabilities .
+          docker build -f frontend/Dockerfile -t ause-discovery-web:vulnerabilities .
+      # Advisory: image findings usually come from pinned upstream base images
+      # and are addressed through reviewed base-image updates, not silently.
+      - name: Report API image vulnerabilities
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ause-discovery-api:vulnerabilities
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      # Advisory: see the API image step above.
+      - name: Report web image vulnerabilities
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ause-discovery-web:vulnerabilities
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'

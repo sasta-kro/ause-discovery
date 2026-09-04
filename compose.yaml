@@ -1,8 +1,17 @@
 name: ause-discovery
 
+# Bounded log rotation for every service. Override or remove per service in a
+# Compose override file when the host uses its own log rotation.
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:18.6-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ause_discovery}
       POSTGRES_USER: ${POSTGRES_USER:-ause}
@@ -18,9 +27,10 @@ services:
     restart: unless-stopped
 
   meilisearch:
-    image: getmeili/meilisearch:v1.53.1@sha256:8d6643d86d71fad6ad3cba92cde7ccfce9e4d6c384bda67598eb553571c32431
+    image: getmeili/meilisearch:v1.53.1@sha256:8d664d3d86d71fad6ad3cba92cde7ccfce9e4d6c384bda67598eb553571c32431
+    logging: *default-logging
     environment:
-      MEILI_ENV: development
+      MEILI_ENV: ${MEILI_ENV:-development}
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-local-development-key-change-before-production}
     volumes:
       - meilisearch-data:/meili_data
@@ -33,7 +43,8 @@ services:
     restart: unless-stopped
 
   migrate:
-    image: ause-discovery-api:dev
+    image: ${AUSE_API_IMAGE:-ause-discovery-api:dev}
+    logging: *default-logging
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -47,7 +58,8 @@ services:
     restart: "no"
 
   api:
-    image: ause-discovery-api:dev
+    image: ${AUSE_API_IMAGE:-ause-discovery-api:dev}
+    logging: *default-logging
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -78,7 +90,8 @@ services:
     restart: unless-stopped
 
   web:
-    image: ause-discovery-web:dev
+    image: ${AUSE_WEB_IMAGE:-ause-discovery-web:dev}
+    logging: *default-logging
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -87,7 +100,7 @@ services:
     environment:
       AUSE_PUBLIC_BASE_PATH: ${AUSE_PUBLIC_BASE_PATH:-/ause-discovery/}
     ports:
-      - "8088:80"
+      - "${AUSE_WEB_PORT:-8088}:80"
     depends_on:
       api:
         condition: service_started
