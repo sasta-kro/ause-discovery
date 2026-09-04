@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from './app/i18n'
 import { AppRoutes, SessionProvider } from './app-shell'
@@ -97,5 +97,37 @@ describe('public search paging', () => {
 
     await user.click(screen.getByRole('button', { name: 'Search projects' }))
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ q: 'neural' }) })))
+  })
+
+  it('synchronizes the draft field when history navigation changes the URL query', async () => {
+    let navigate: ((delta: number) => void) | undefined
+    function NavigationProbe() {
+      navigate = useNavigate()
+      return null
+    }
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <I18nextProvider i18n={i18n}>
+          <MemoryRouter initialEntries={['/search']}>
+            <SessionProvider><NavigationProbe /><AppRoutes /></SessionProvider>
+          </MemoryRouter>
+        </I18nextProvider>
+      </QueryClientProvider>,
+    )
+    await screen.findByRole('heading', { name: 'First Page Result' })
+
+    await user.type(screen.getByLabelText('Search terms'), 'neural')
+    await user.click(screen.getByRole('button', { name: 'Search projects' }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ q: 'neural' }) })))
+
+    await user.clear(screen.getByLabelText('Search terms'))
+    await user.type(screen.getByLabelText('Search terms'), 'abandoned draft')
+    expect((screen.getByLabelText('Search terms') as HTMLInputElement).value).toBe('abandoned draft')
+
+    navigate?.(-1)
+    await waitFor(() => expect((screen.getByLabelText('Search terms') as HTMLInputElement).value).toBe(''))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ q: undefined }) })))
   })
 })

@@ -12,6 +12,7 @@ import (
 	"ause-discovery.local/backend/internal/audit"
 	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/platform/identity"
+	"ause-discovery.local/backend/internal/platform/pagecursor"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -240,29 +241,79 @@ func (service Service) Get(ctx context.Context, projectID uuid.UUID, publicOnly 
 	}
 	return result, nil
 }
-func (service Service) List(ctx context.Context, status *string, limit, offset int) ([]Project, error) {
+
+type ListPage struct {
+	Items      []Project
+	Limit      int
+	NextCursor *string
+}
+
+// List returns one keyset-ordered Project page. Ordering is updated_at then id
+// descending, the text filter matches title or reference code case-insensitively
+// after trimming, and the opaque cursor is the last returned row position.
+func (service Service) List(ctx context.Context, status *string, query string, limit int, cursor string) (ListPage, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	statement := `SELECT id,reference_code,title,abstract,academic_year,semester,program_version_id,major_version_id,course_version_id,status,pre_delete_status,extra_metadata,revision,published_at,deleted_at,created_at,updated_at FROM projects WHERE ($1::text IS NULL OR status=$1) ORDER BY updated_at DESC,id LIMIT $2 OFFSET $3`
-	rows, err := service.Pool.Query(ctx, statement, nullableString(status), limit, offset)
+	var position pagecursor.Cursor
+	if cursor != "" {
+		decoded, err := pagecursor.Decode(cursor)
+		if err != nil {
+			return ListPage{}, err
+		}
+		if _, err := time.Parse(time.RFC3339Nano, decoded.SortValue); err != nil {
+			return ListPage{}, pagecursor.ErrInvalid
+		}
+		position = decoded
+	}
+	trimmedQuery := strings.TrimSpace(query)
+	queryFilter := nullableString(&trimmedQuery)
+	if trimmedQuery == "" {
+		queryFilter = pgtype.Text{}
+	}
+	rows, err := service.Pool.Query(ctx, `SELECT id,reference_code,title,abstract,academic_year,semester,program_version_id,major_version_id,course_version_id,status,pre_delete_status,extra_metadata,revision,published_at,deleted_at,created_at,updated_at FROM projects
+WHERE ($1::text IS NULL OR status=$1)
+  AND ($2::text IS NULL OR coalesce(title,'') ILIKE '%' || $2::text || '%' OR coalesce(reference_code,'') ILIKE '%' || $2::text || '%')
+  AND ($4::timestamptz IS NULL OR (updated_at, id) < ($4::timestamptz, $5::uuid))
+ORDER BY updated_at DESC, id DESC LIMIT $3`, nullableString(status), queryFilter, limit+1, pgtype.Timestamptz{Time: cursorTime(position), Valid: cursor != ""}, identity.NullableUUID(position.ID))
 	if err != nil {
-		return nil, err
+		return ListPage{}, err
 	}
 	defer rows.Close()
 	items := []Project{}
 	for rows.Next() {
 		var record generated.Project
 		if err := rows.Scan(&record.ID, &record.ReferenceCode, &record.Title, &record.Abstract, &record.AcademicYear, &record.Semester, &record.ProgramVersionID, &record.MajorVersionID, &record.CourseVersionID, &record.Status, &record.PreDeleteStatus, &record.ExtraMetadata, &record.Revision, &record.PublishedAt, &record.DeletedAt, &record.CreatedAt, &record.UpdatedAt); err != nil {
-			return nil, err
+			return ListPage{}, err
 		}
 		item := fromRecord(record)
 		if err := loadChildren(ctx, service.Pool, &item); err != nil {
-			return nil, err
+			return ListPage{}, err
 		}
 		items = append(items, item)
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ListPage{}, err
+	}
+	page := ListPage{Items: items, Limit: limit}
+	if len(items) > limit {
+		page.Items = items[:limit]
+		last := page.Items[limit-1]
+		next, err := pagecursor.EncodeTime(last.UpdatedAt, last.ID)
+		if err != nil {
+			return ListPage{}, err
+		}
+		page.NextCursor = &next
+	}
+	return page, nil
+}
+
+func cursorTime(position pagecursor.Cursor) time.Time {
+	if position.SortValue == "" {
+		return time.Time{}
+	}
+	parsed, _ := time.Parse(time.RFC3339Nano, position.SortValue)
+	return parsed
 }
 
 func replaceChildren(ctx context.Context, transaction pgx.Tx, projectID uuid.UUID, input Input) error {

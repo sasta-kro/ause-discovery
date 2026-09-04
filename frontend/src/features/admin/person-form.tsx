@@ -26,14 +26,17 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
   const [generalFailure, setGeneralFailure] = useState(false)
   const form = useForm<PersonValues>({ defaultValues: toValues() })
   const loadedID = useRef<string | null>(null)
+  const [reloadRequested, setReloadRequested] = useState(false)
 
   useEffect(() => {
     const person = personQuery.data
-    if (person && loadedID.current !== person.id) {
+    if (!person) return
+    if (loadedID.current !== person.id || reloadRequested) {
       loadedID.current = person.id
+      setReloadRequested(false)
       form.reset(toValues(person))
     }
-  }, [form, personQuery.data])
+  }, [form, personQuery.data, reloadRequested])
 
   const mutation = useMutation({
     mutationFn: async (values: PersonValues) => {
@@ -57,7 +60,7 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
     return <div><h1>{t('admin.personForm')}</h1><p className={styles.error} role="alert">{notFound ? t('feedback.recordNotFound') : t('admin.requestFailed')}</p><p className={styles.formActions}><Link className={styles.secondaryButton} to="/admin/people">{t('admin.peopleTitle')}</Link></p></div>
   }
   return <div><h1>{t('admin.personForm')}</h1>
-    {conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} onClick={() => { setConflict(false); void client.invalidateQueries({ queryKey: ['admin-person', personId] }) }}>{t('action.reload')}</button></div> : null}
+    {conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} onClick={() => { setConflict(false); setReloadRequested(true); void client.invalidateQueries({ queryKey: ['admin-person', personId] }) }}>{t('action.reload')}</button></div> : null}
     {serverIssues.length ? <div className={styles.error} role="alert"><strong>{t('admin.serverIssues')}</strong><ul>{serverIssues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message ?? issue.field}</li>)}</ul></div> : null}
     {generalFailure ? <p className={styles.error} role="alert">{t('admin.personSaveFailed')}</p> : null}
     {mutation.isSuccess && !mutation.isPending ? <p role="status">{t('feedback.saved')}</p> : null}

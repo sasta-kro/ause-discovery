@@ -36,7 +36,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, import, audit administration, and CI with operator-readiness increments are verified. The product-coherence increment defined by `docs/increments/09-product-coherence.md` is implemented and submitted for independent review. Commit `45154a1` remains the accepted review baseline until that review accepts the increment; final product-completion verification follows acceptance and checkpoint advancement. Remaining work proceeds through the split author-review workflow described below.
+As of 2026-09-04, foundation, data-contract, identity and core record, Artifact, search, import, audit administration, and CI with operator-readiness increments are verified. The product-coherence increment defined by `docs/increments/09-product-coherence.md` is implemented with its first review correction, including the backend administrator list cursor contract, and is submitted for a further independent review round. Commit `45154a1` remains the accepted review baseline until that review accepts the increment; final product-completion verification follows acceptance and checkpoint advancement. Remaining work proceeds through the split author-review workflow described below.
 
 ## Implementation workflow
 

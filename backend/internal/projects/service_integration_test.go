@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"ause-discovery.local/backend/internal/platform/pagecursor"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -185,6 +187,137 @@ func seedProjectReferences(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	for _, statement := range statements {
 		if _, err := pool.Exec(ctx, statement); err != nil {
 			t.Fatalf("seed Project reference data: %v", err)
+		}
+	}
+}
+
+func TestProjectListFiltersAndPagesWithCursor(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+
+	ctx := context.Background()
+	pool := createProjectTestDatabase(t, ctx, databaseURL)
+	seedProjectReferences(t, ctx, pool)
+	service := Service{Pool: pool}
+	sharedTime := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
+	insertProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000301", "Alpha Discovery Engine", "REF-ALPHA", "draft", sharedTime)
+	insertProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000302", "Beta Search Interface", "", "published", sharedTime)
+	insertProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000303", "Other Work", "REF-GAMMA", "published", sharedTime.Add(-time.Hour))
+	insertProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000304", "", "", "deleted", sharedTime.Add(-2*time.Hour))
+
+	first, err := service.List(ctx, nil, "", 2, "")
+	if err != nil {
+		t.Fatalf("first page returned an error: %v", err)
+	}
+	if len(first.Items) != 2 || first.NextCursor == nil {
+		t.Fatalf("first page held %d items with cursor %v", len(first.Items), first.NextCursor)
+	}
+	assertListOrder(t, first.Items, "018f0000-0000-7000-8000-000000000302", "018f0000-0000-7000-8000-000000000301")
+	second, err := service.List(ctx, nil, "", 2, *first.NextCursor)
+	if err != nil {
+		t.Fatalf("second page returned an error: %v", err)
+	}
+	if second.NextCursor != nil {
+		t.Fatalf("final page exposed cursor %v", *second.NextCursor)
+	}
+	assertListOrder(t, second.Items, "018f0000-0000-7000-8000-000000000303", "018f0000-0000-7000-8000-000000000304")
+	seen := map[uuid.UUID]bool{}
+	for _, item := range append(append([]Project{}, first.Items...), second.Items...) {
+		if seen[item.ID] {
+			t.Fatalf("Project %s appeared on both pages", item.ID)
+		}
+		seen[item.ID] = true
+	}
+
+	trimmedCaseQuery, err := service.List(ctx, nil, "  discovery  ", 20, "")
+	if err != nil {
+		t.Fatalf("trimmed case-insensitive query returned an error: %v", err)
+	}
+	assertListOrder(t, trimmedCaseQuery.Items, "018f0000-0000-7000-8000-000000000301")
+	referenceQuery, err := service.List(ctx, nil, "gamma", 20, "")
+	if err != nil {
+		t.Fatalf("reference-code query returned an error: %v", err)
+	}
+	assertListOrder(t, referenceQuery.Items, "018f0000-0000-7000-8000-000000000303")
+	absentQuery, err := service.List(ctx, nil, "no-such-project", 20, "")
+	if err != nil || len(absentQuery.Items) != 0 || absentQuery.NextCursor != nil {
+		t.Fatalf("absent query returned %d items, cursor %v, error %v", len(absentQuery.Items), absentQuery.NextCursor, err)
+	}
+
+	published := "published"
+	statusPage, err := service.List(ctx, &published, "", 20, "")
+	if err != nil {
+		t.Fatalf("status filter returned an error: %v", err)
+	}
+	assertListOrder(t, statusPage.Items, "018f0000-0000-7000-8000-000000000302", "018f0000-0000-7000-8000-000000000303")
+
+	if _, err := service.List(ctx, nil, "", 2, "not-a-cursor"); !errors.Is(err, pagecursor.ErrInvalid) {
+		t.Fatalf("malformed cursor returned error %v", err)
+	}
+	nonTimeCursor, err := pagecursor.Encode("not-a-timestamp", uuid.MustParse("018f0000-0000-7000-8000-000000000301"))
+	if err != nil {
+		t.Fatalf("encode non-time cursor: %v", err)
+	}
+	if _, err := service.List(ctx, nil, "", 2, nonTimeCursor); !errors.Is(err, pagecursor.ErrInvalid) {
+		t.Fatalf("non-timestamp cursor returned error %v", err)
+	}
+}
+
+func insertProject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id, title, referenceCode, status string, updatedAt time.Time) {
+	t.Helper()
+	var titleArg *string
+	if title != "" {
+		titleArg = &title
+	}
+	var referenceArg *string
+	if referenceCode != "" {
+		referenceArg = &referenceCode
+	}
+	columns := []string{"id", "reference_code", "title", "status", "updated_at"}
+	placeholders := []string{"$1", "$2", "$3", "$4", "$5"}
+	args := []any{id, referenceArg, titleArg, status, updatedAt}
+	switch status {
+	case "published":
+		columns = append(columns, "abstract", "academic_year", "semester", "program_version_id", "course_version_id", "published_at")
+		placeholders = append(placeholders, "$6", "$7", "$8", "$9", "$10", "$11")
+		args = append(args, "A complete abstract used by list fixtures.", 2026, "first", "018f0000-0000-7000-8000-000000000011", "018f0000-0000-7000-8000-000000000031", updatedAt)
+	case "deleted":
+		columns = append(columns, "pre_delete_status", "deleted_at")
+		placeholders = append(placeholders, "$6", "$7")
+		args = append(args, "draft", updatedAt)
+	}
+	transaction, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin fixture transaction: %v", err)
+	}
+	defer transaction.Rollback(ctx)
+	statement := `INSERT INTO projects (` + strings.Join(columns, ", ") + `) VALUES (` + strings.Join(placeholders, ", ") + `)`
+	if _, err := transaction.Exec(ctx, statement, args...); err != nil {
+		t.Fatalf("insert Project: %v", err)
+	}
+	if status == "published" {
+		if _, err := transaction.Exec(ctx, `INSERT INTO project_participations (project_id, person_id, role, position) VALUES ($1, $2, 'student', 0), ($1, $3, 'advisor', 0)`, id, "018f0000-0000-7000-8000-000000000202", "018f0000-0000-7000-8000-000000000203"); err != nil {
+			t.Fatalf("insert published Project participation: %v", err)
+		}
+		if _, err := transaction.Exec(ctx, `INSERT INTO project_taxonomy_values (project_id, taxonomy_value_id, dimension, position) VALUES ($1, $2, 'category', 0), ($1, $3, 'platform', 0)`, id, "018f0000-0000-7000-8000-000000000101", "018f0000-0000-7000-8000-000000000111"); err != nil {
+			t.Fatalf("insert published Project taxonomy: %v", err)
+		}
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		t.Fatalf("commit fixture transaction: %v", err)
+	}
+}
+
+func assertListOrder(t *testing.T, items []Project, expected ...string) {
+	t.Helper()
+	if len(items) != len(expected) {
+		t.Fatalf("list held %d items, expected %d", len(items), len(expected))
+	}
+	for index, id := range expected {
+		if items[index].ID.String() != id {
+			t.Fatalf("item %d was %s, expected %s", index, items[index].ID, id)
 		}
 	}
 }

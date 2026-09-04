@@ -53,3 +53,7 @@ GitHub Actions `on.push.branches` filters cannot reference the repository defaul
 ## Stock Nginx configuration whitespace
 
 Directives in the stock `nginx.conf`, such as the PID path, use padded whitespace, so exact-string `sed` replacements silently miss them. Match flexible whitespace when rewriting stock configuration, and prove the rewrite by starting the container rather than trusting the build.
+
+## Buttons inside forms
+
+A `<button>` without an explicit `type` inside a `<form>` is a submit button. Modal or secondary controls rendered within a form tree then trigger the enclosing submit handler silently, corrupting unrelated state; component tests can mask this when each test runs in isolation. Declare `type="button"` on every non-submitting button.

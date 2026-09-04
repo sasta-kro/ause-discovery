@@ -43,13 +43,17 @@ describe('administrator person editing', () => {
   afterEach(cleanup)
   beforeEach(() => {
     vi.clearAllMocks()
-    apiMocks.getAdminPerson.mockResolvedValue({ data: storedPerson })
+    apiMocks.getAdminPerson.mockImplementation(async () => ({ data: storedPerson }))
   })
 
-  it('preserves entered values across a revision conflict and offers an explicit reload', async () => {
+  it('preserves entered values across a revision conflict and reloads the current server record', async () => {
     const user = userEvent.setup()
+    const refreshedPerson = { ...storedPerson, revision: 3 }
+    apiMocks.getAdminPerson.mockImplementation(async () => ({ data: storedPerson }))
+      .mockImplementationOnce(async () => ({ data: storedPerson }))
+      .mockImplementationOnce(async () => ({ data: refreshedPerson }))
     apiMocks.updatePerson.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 3 })
-      .mockResolvedValue({ data: { ...storedPerson, display_name: 'Stored Name', revision: 3 } })
+      .mockResolvedValue({ data: refreshedPerson })
     renderForm()
     const nameField = await screen.findByLabelText('Display name')
     expect((nameField as HTMLInputElement).value).toBe('Stored Name')
@@ -63,11 +67,10 @@ describe('administrator person editing', () => {
     expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Corrected Name')
 
     await user.click(screen.getByRole('button', { name: 'Reload current record' }))
-    await waitFor(() => expect(apiMocks.getAdminPerson).toHaveBeenCalledTimes(2))
-    expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Corrected Name')
+    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Stored Name'))
 
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
-    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ expected_revision: 2, display_name: 'Corrected Name' }) })))
+    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ expected_revision: 3, display_name: 'Stored Name' }) })))
     expect(await screen.findByText('The record was saved.')).toBeTruthy()
   })
 

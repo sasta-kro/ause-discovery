@@ -23,6 +23,7 @@ import (
 	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
+	"ause-discovery.local/backend/internal/platform/pagecursor"
 	"ause-discovery.local/backend/internal/projects"
 	searchservice "ause-discovery.local/backend/internal/search"
 	"github.com/go-chi/chi/v5"
@@ -193,13 +194,21 @@ func (controller *Controller) ListAdminPeople(writer http.ResponseWriter, reques
 	if params.Q != nil {
 		query = *params.Q
 	}
-	items, err := controller.People.List(request.Context(), query, limit(params.Limit), 0)
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = string(*params.Cursor)
+	}
+	page, err := controller.People.List(request.Context(), query, valueOrZero(params.Limit), cursor)
+	if errors.Is(err, pagecursor.ErrInvalid) {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The People list cursor is invalid.")
+		return
+	}
 	if err != nil {
 		problem(writer, request, 500, "internal_error", "Internal server error", "")
 		return
 	}
-	response := api.AdminPersonPage{Page: api.PageInfo{Limit: limit(params.Limit)}}
-	for _, item := range items {
+	response := api.AdminPersonPage{Items: []api.AdminPerson{}, Page: api.PageInfo{Limit: page.Limit, NextCursor: page.NextCursor}}
+	for _, item := range page.Items {
 		response.Items = append(response.Items, personResponse(item))
 	}
 	writeJSON(writer, 200, response)
@@ -601,13 +610,25 @@ func (controller *Controller) ListAdminProjects(writer http.ResponseWriter, requ
 		value := string(*params.Status)
 		status = &value
 	}
-	items, err := controller.Projects.List(request.Context(), status, limit(params.Limit), 0)
+	query := ""
+	if params.Q != nil {
+		query = *params.Q
+	}
+	cursor := ""
+	if params.Cursor != nil {
+		cursor = string(*params.Cursor)
+	}
+	page, err := controller.Projects.List(request.Context(), status, query, valueOrZero(params.Limit), cursor)
+	if errors.Is(err, pagecursor.ErrInvalid) {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "The Projects list cursor is invalid.")
+		return
+	}
 	if err != nil {
 		problem(writer, request, 500, "internal_error", "Internal server error", "")
 		return
 	}
-	response := api.AdminProjectPage{Page: api.PageInfo{Limit: limit(params.Limit)}}
-	for _, item := range items {
+	response := api.AdminProjectPage{Items: []api.AdminProject{}, Page: api.PageInfo{Limit: page.Limit, NextCursor: page.NextCursor}}
+	for _, item := range page.Items {
 		responseItem, responseErr := controller.adminProjectResponse(request.Context(), item)
 		if responseErr != nil {
 			problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")

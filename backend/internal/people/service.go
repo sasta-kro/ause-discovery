@@ -11,6 +11,7 @@ import (
 	"ause-discovery.local/backend/internal/audit"
 	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/platform/identity"
+	"ause-discovery.local/backend/internal/platform/pagecursor"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -94,24 +95,56 @@ func (service Service) Get(ctx context.Context, personID uuid.UUID) (Person, err
 	return fromRecord(record), err
 }
 
-func (service Service) List(ctx context.Context, query string, limit, offset int) ([]Person, error) {
+type ListPage struct {
+	Items      []Person
+	Limit      int
+	NextCursor *string
+}
+
+// List returns one keyset-ordered People page. Ordering is display_name then id
+// ascending, and the opaque cursor is the last returned row position.
+func (service Service) List(ctx context.Context, query string, limit int, cursor string) (ListPage, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := service.Pool.Query(ctx, `SELECT id, display_name, normalized_name, student_id, staff_id, revision, created_at, updated_at FROM people WHERE ($1 = '' OR normalized_name LIKE '%' || $1 || '%' OR student_id = $1 OR staff_id = $1) ORDER BY display_name, id LIMIT $2 OFFSET $3`, normalize(query), limit, offset)
+	var position pagecursor.Cursor
+	if cursor != "" {
+		decoded, err := pagecursor.Decode(cursor)
+		if err != nil {
+			return ListPage{}, err
+		}
+		position = decoded
+	}
+	rows, err := service.Pool.Query(ctx, `SELECT id, display_name, normalized_name, student_id, staff_id, revision, created_at, updated_at FROM people
+WHERE ($1 = '' OR normalized_name LIKE '%' || $1 || '%' OR student_id = $1 OR staff_id = $1)
+  AND ($3::text IS NULL OR (display_name, id) > ($3::text, $4::uuid))
+ORDER BY display_name, id LIMIT $2`, normalize(query), limit+1, position.SortValue, identity.NullableUUID(position.ID))
 	if err != nil {
-		return nil, err
+		return ListPage{}, err
 	}
 	defer rows.Close()
 	items := []Person{}
 	for rows.Next() {
 		var record generated.Person
 		if err := rows.Scan(&record.ID, &record.DisplayName, &record.NormalizedName, &record.StudentID, &record.StaffID, &record.Revision, &record.CreatedAt, &record.UpdatedAt); err != nil {
-			return nil, err
+			return ListPage{}, err
 		}
 		items = append(items, fromRecord(record))
 	}
-	return items, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ListPage{}, err
+	}
+	page := ListPage{Items: items, Limit: limit}
+	if len(items) > limit {
+		page.Items = items[:limit]
+		last := page.Items[limit-1]
+		next, err := pagecursor.Encode(last.DisplayName, last.ID)
+		if err != nil {
+			return ListPage{}, err
+		}
+		page.NextCursor = &next
+	}
+	return page, nil
 }
 
 func validate(input Input) (string, *string, *string, error) {
