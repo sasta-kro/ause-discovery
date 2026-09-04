@@ -154,39 +154,50 @@ func createPeopleTestDatabase(t *testing.T, ctx context.Context, databaseURL str
 	return pool
 }
 
-func TestPersonListCursorHandlesMaximumUnicodeNames(t *testing.T) {
+func TestPersonListCursorHandlesMaximumSortKeys(t *testing.T) {
 	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
 	}
 
 	ctx := context.Background()
-	pool := createPeopleTestDatabase(t, ctx, databaseURL)
-	service := Service{Pool: pool}
-	longThaiName := strings.Repeat("ก", 300)
-	followingThaiName := strings.Repeat("ก", 299) + "ข"
-	insertPerson(t, ctx, pool, "018f0000-0000-7000-8000-000000000501", longThaiName, longThaiName, "", "")
-	insertPerson(t, ctx, pool, "018f0000-0000-7000-8000-000000000502", followingThaiName, followingThaiName, "", "")
+	cases := []struct {
+		name                string
+		firstName           string
+		followingName       string
+		firstID             string
+		followingID         string
+		minimumCursorLength int
+	}{
+		{name: "multibyte name", firstName: strings.Repeat("ก", 300), followingName: strings.Repeat("ก", 299) + "ข", firstID: "018f0000-0000-7000-8000-000000000501", followingID: "018f0000-0000-7000-8000-000000000502", minimumCursorLength: 1024},
+		{name: "escaped name", firstName: strings.Repeat("&", 300), followingName: strings.Repeat("&", 299) + "0", firstID: "018f0000-0000-7000-8000-000000000511", followingID: "018f0000-0000-7000-8000-000000000512", minimumCursorLength: 2048},
+	}
+	for _, testCase := range cases {
+		pool := createPeopleTestDatabase(t, ctx, databaseURL)
+		service := Service{Pool: pool}
+		insertPerson(t, ctx, pool, testCase.firstID, testCase.firstName, testCase.firstName, "", "")
+		insertPerson(t, ctx, pool, testCase.followingID, testCase.followingName, testCase.followingName, "", "")
 
-	first, err := service.List(ctx, "", 1, "")
-	if err != nil {
-		t.Fatalf("first page returned an error: %v", err)
-	}
-	if len(first.Items) != 1 || first.NextCursor == nil {
-		t.Fatalf("first page held %d items with cursor %v", len(first.Items), first.NextCursor)
-	}
-	assertPeopleOrder(t, first.Items, "018f0000-0000-7000-8000-000000000501")
-	cursorLength := len(*first.NextCursor)
-	if cursorLength <= 1024 || cursorLength > 2048 {
-		t.Fatalf("cursor length was %d, expected a maximum-length Unicode name to stay within the 2048 contract bound", cursorLength)
-	}
+		first, err := service.List(ctx, "", 1, "")
+		if err != nil {
+			t.Fatalf("%s: first page returned an error: %v", testCase.name, err)
+		}
+		if len(first.Items) != 1 || first.NextCursor == nil {
+			t.Fatalf("%s: first page held %d items with cursor %v", testCase.name, len(first.Items), first.NextCursor)
+		}
+		assertPeopleOrder(t, first.Items, testCase.firstID)
+		cursorLength := len(*first.NextCursor)
+		if cursorLength <= testCase.minimumCursorLength || cursorLength > 4096 {
+			t.Fatalf("%s: cursor length was %d, expected it to exceed %d and stay within the 4096 contract bound", testCase.name, cursorLength, testCase.minimumCursorLength)
+		}
 
-	second, err := service.List(ctx, "", 1, *first.NextCursor)
-	if err != nil {
-		t.Fatalf("second page returned an error: %v", err)
+		second, err := service.List(ctx, "", 1, *first.NextCursor)
+		if err != nil {
+			t.Fatalf("%s: second page returned an error: %v", testCase.name, err)
+		}
+		if second.NextCursor != nil {
+			t.Fatalf("%s: final page exposed cursor %v", testCase.name, *second.NextCursor)
+		}
+		assertPeopleOrder(t, second.Items, testCase.followingID)
 	}
-	if second.NextCursor != nil {
-		t.Fatalf("final page exposed cursor %v", *second.NextCursor)
-	}
-	assertPeopleOrder(t, second.Items, "018f0000-0000-7000-8000-000000000502")
 }

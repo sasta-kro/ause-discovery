@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../../app/i18n'
 import { AdminPersonForm } from './person-form'
@@ -37,6 +37,28 @@ function renderForm() {
       </I18nextProvider>
     </QueryClientProvider>,
   )
+}
+
+const secondPersonID = '018f0000-0000-7000-8000-0000000000b2'
+
+function renderNavigableForm() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  let navigate: ((to: string) => void) | undefined
+  function NavigationProbe() {
+    navigate = useNavigate()
+    return null
+  }
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter initialEntries={[`/admin/people/${personID}`]}>
+          <NavigationProbe />
+          <Routes><Route element={<AdminPersonForm csrfToken="csrf-token" />} path="/admin/people/:personId" /></Routes>
+        </MemoryRouter>
+      </I18nextProvider>
+    </QueryClientProvider>,
+  )
+  return { navigate: (to: string) => navigate?.(to), unmount: view.unmount }
 }
 
 describe('administrator person editing', () => {
@@ -94,6 +116,43 @@ describe('administrator person editing', () => {
     expect(failure).toBeTruthy()
     expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Recoverable Edit')
     expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('loads the correct record, revision, and target when navigating between People', async () => {
+    const user = userEvent.setup()
+    const secondPerson = { ...storedPerson, id: secondPersonID, display_name: 'Second Person', student_id: '7000002', revision: 7 }
+    const firstRenamed = { ...storedPerson, display_name: 'First Person Renamed', revision: 4 }
+    let firstRecordLoaded = false
+    apiMocks.getAdminPerson.mockImplementation(async ({ path }: { path?: { person_id?: string } }) => {
+      if (path?.person_id === secondPersonID) return { data: secondPerson }
+      if (!firstRecordLoaded) {
+        firstRecordLoaded = true
+        return { data: storedPerson }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      return { data: firstRenamed }
+    })
+    apiMocks.updatePerson.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 4 })
+      .mockResolvedValue({ data: secondPerson })
+    const { navigate } = renderNavigableForm()
+    const nameField = await screen.findByLabelText('Display name')
+    await waitFor(() => expect((nameField as HTMLInputElement).value).toBe('Stored Name'))
+
+    await user.clear(nameField)
+    await user.type(nameField, 'First Person Local Edit')
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Reload current record' }))
+    navigate(`/admin/people/${secondPersonID}`)
+    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person'))
+    expect((screen.getByLabelText('Student ID') as HTMLInputElement).value).toBe('7000002')
+    expect(screen.queryByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeNull()
+
+    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Second Person'), { timeout: 400 })
+
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ path: { person_id: secondPersonID }, body: expect.objectContaining({ expected_revision: 7, display_name: 'Second Person' }) })))
   })
 
   it('reports unexpected edit failures and a missing record distinctly', async () => {

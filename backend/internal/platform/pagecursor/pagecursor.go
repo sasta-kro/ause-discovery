@@ -14,11 +14,12 @@ import (
 var ErrInvalid = errors.New("page cursor is invalid")
 
 const (
-	// The bound must cover the worst legal sort key: a 300-character Person
-	// display name of four-byte UTF-8 characters plus the JSON envelope stays
-	// under 1700 base64url characters. 2048 leaves headroom without admitting
-	// unbounded input.
-	maximumEncodedLength = 2048
+	// The bound must cover the worst contract-legal sort key as actually
+	// serialized: Go's JSON encoding writes six-byte &-style escapes for
+	// characters such as &, <, and >, so a 300-character name of escaped
+	// characters plus the envelope reaches roughly 2500 base64url characters.
+	// 4096 covers that with headroom without admitting unbounded input.
+	maximumEncodedLength = 4096
 	version              = 1
 )
 

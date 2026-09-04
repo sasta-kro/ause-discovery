@@ -128,6 +128,8 @@ describe('administrator project form boundaries', () => {
     apiMocks.getAdminProject.mockResolvedValue({ data: storedProject(3) })
     await user.click(screen.getAllByRole('button', { name: 'Reload current record' })[0])
     await waitFor(() => expect((screen.getByLabelText('Project title') as HTMLInputElement).value).toBe('Stored Form Project'))
+    await waitFor(() => expect(screen.queryByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeNull())
+    expect(screen.queryByText('The Project change failed. Check the current state before retrying.')).toBeNull()
   })
 
   it('keeps the confirmation dialog open while deletion is pending', async () => {

@@ -34,6 +34,42 @@ func TestCursorRoundTrip(t *testing.T) {
 	}
 }
 
+func TestCursorRoundTripWithEscapedAndMultibyteSortKeys(t *testing.T) {
+	id := uuid.MustParse("018f0000-0000-7000-8000-000000000001")
+	cases := []struct {
+		name          string
+		sortValue     string
+		minimumLength int
+	}{
+		{name: "escaped characters", sortValue: repeatRunes('&', 300), minimumLength: 2048},
+		{name: "multibyte characters", sortValue: repeatRunes('ก', 300), minimumLength: 1024},
+	}
+	for _, testCase := range cases {
+		encoded, err := Encode(testCase.sortValue, id)
+		if err != nil {
+			t.Fatalf("%s: Encode returned an error: %v", testCase.name, err)
+		}
+		if len(encoded) <= testCase.minimumLength || len(encoded) > 4096 {
+			t.Fatalf("%s: cursor length was %d, expected it to exceed %d and stay within 4096", testCase.name, len(encoded), testCase.minimumLength)
+		}
+		decoded, err := Decode(encoded)
+		if err != nil {
+			t.Fatalf("%s: Decode returned an error: %v", testCase.name, err)
+		}
+		if decoded.SortValue != testCase.sortValue || decoded.ID != id {
+			t.Fatalf("%s: cursor decoded to a different sort key", testCase.name)
+		}
+	}
+}
+
+func repeatRunes(character rune, count int) string {
+	value := make([]rune, count)
+	for index := range value {
+		value[index] = character
+	}
+	return string(value)
+}
+
 func TestDecodeRejectsMalformedValues(t *testing.T) {
 	valid := `{"v":1,"s":"2026-09-04T10:00:00Z","id":"018f0000-0000-7000-8000-000000000001"}`
 	invalid := map[string]string{
@@ -45,7 +81,7 @@ func TestDecodeRejectsMalformedValues(t *testing.T) {
 		"nil id":         encodeText(`{"v":1,"s":"x","id":"00000000-0000-0000-0000-000000000000"}`),
 		"unknown field":  encodeText(valid[:len(valid)-1] + `,"extra":1}`),
 		"trailing data":  encodeText(valid + " {}"),
-		"oversized":      encodeText(`{"v":1,"s":"` + pad(2000) + `","id":"018f0000-0000-7000-8000-000000000001"}`),
+		"oversized":      encodeText(`{"v":1,"s":"` + pad(4000) + `","id":"018f0000-0000-7000-8000-000000000001"}`),
 		"invalid id hex": encodeText(`{"v":1,"s":"x","id":"018f0000-0000-7000-8000-0000000000zz"}`),
 	}
 	for name, value := range invalid {

@@ -27,35 +27,31 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
   const [reloading, setReloading] = useState(false)
   const [reloadFailed, setReloadFailed] = useState(false)
   const form = useForm<PersonValues>({ defaultValues: toValues() })
-  const initialized = useRef(false)
-
-  useEffect(() => {
-    const person = personQuery.data
-    if (person && !initialized.current) {
-      initialized.current = true
-      form.reset(toValues(person))
-    }
-  }, [form, personQuery.data])
+  const loadedRecordID = useRef<string | null>(null)
+  const activePersonID = useRef(personId)
 
   // A reload adopts only the actual server response, never cached data, so the
   // form and the revision used for the next save always describe one record.
   // The fetch uses a distinct cache entry so a failed reload cannot push the
-  // page-level query into its error state.
+  // page-level query into its error state, and a response that arrives after
+  // navigation to another Person is applied to the cache only.
   const reloadRecord = async () => {
+    const requestedID = personId
     setReloadFailed(false)
     setReloading(true)
     try {
       const fresh = await client.fetchQuery({
-        queryKey: ['admin-person', personId, 'reload'],
-        queryFn: async () => (await getAdminPerson({ path: { person_id: personId }, throwOnError: true })).data,
+        queryKey: ['admin-person', requestedID, 'reload'],
+        queryFn: async () => (await getAdminPerson({ path: { person_id: requestedID }, throwOnError: true })).data,
         staleTime: 0,
       })
-      initialized.current = true
-      void client.setQueryData(['admin-person', personId], fresh)
+      void client.setQueryData(['admin-person', requestedID], fresh)
+      if (requestedID !== activePersonID.current) return
+      loadedRecordID.current = fresh.id
       form.reset(toValues(fresh))
       setConflict(false)
     } catch {
-      setReloadFailed(true)
+      if (requestedID === activePersonID.current) setReloadFailed(true)
     } finally {
       setReloading(false)
     }
@@ -76,6 +72,22 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
       setGeneralFailure(true)
     },
   })
+
+  // Navigation between Person routes reuses this component, so record changes
+  // adopt the new record's fields, revision, and clean feedback state.
+  useEffect(() => {
+    const person = personQuery.data
+    if (!person || loadedRecordID.current === person.id) return
+    loadedRecordID.current = person.id
+    activePersonID.current = person.id
+    form.reset(toValues(person))
+    setConflict(false)
+    setServerIssues([])
+    setGeneralFailure(false)
+    setReloadFailed(false)
+    setReloading(false)
+    mutation.reset()
+  }, [form, personQuery.data, mutation])
 
   if (personQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
   if (personQuery.isError) {
