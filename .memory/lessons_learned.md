@@ -19,3 +19,7 @@ The original Host header, including a non-default port, must reach same-origin v
 ## Filesystem and metadata transactions
 
 Filesystem finalization and PostgreSQL metadata cannot share one atomic transaction. Artifact uploads therefore require an opaque new storage identity, atomic same-filesystem rename, serialized metadata and quota checks, and compensating removal only for newly finalized bytes when validation or metadata persistence fails. Reversible business deletion must retain previously committed bytes.
+
+## Meilisearch task and filter contracts
+
+Meilisearch task identifiers are zero-based, so task ID `0` is valid and must not be treated as absent. Exact-match query branches must configure every referenced attribute as filterable before the index is populated or swapped. Live post-swap search is the focused boundary check for both contracts.

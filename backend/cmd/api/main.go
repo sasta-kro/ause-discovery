@@ -13,6 +13,8 @@ import (
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/platform/httpserver"
+	searchservice "ause-discovery.local/backend/internal/search"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -70,6 +72,7 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 	if err := databasePool.Ping(applicationContext); err != nil {
 		return err
 	}
+	go newSearchReconciler(databasePool, configuration, logger).Run(applicationContext)
 
 	mux := http.NewServeMux()
 	httpserver.HealthHandler{DatabasePool: databasePool}.Register(mux, configuration.PublicBasePath)
@@ -99,6 +102,20 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdownContext)
+	}
+}
+
+func newSearchReconciler(databasePool *pgxpool.Pool, configuration config.Config, logger *slog.Logger) searchservice.Reconciler {
+	return searchservice.Reconciler{
+		Pool: databasePool,
+		Index: searchservice.MeilisearchClient{
+			BaseURL:     configuration.MeilisearchURL,
+			APIKey:      configuration.MeilisearchAPIKey,
+			TaskTimeout: 10 * time.Second,
+		},
+		IndexUID: configuration.MeilisearchIndex,
+		WorkerID: "api-" + uuid.NewString(),
+		Logger:   logger,
 	}
 }
 

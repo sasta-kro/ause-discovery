@@ -12,6 +12,8 @@ import (
 	"ause-discovery.local/backend/internal/catalog"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
+	searchservice "ause-discovery.local/backend/internal/search"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/term"
 )
@@ -26,6 +28,9 @@ func main() {
 func run(arguments []string) error {
 	if len(arguments) >= 2 && arguments[0] == "admin" {
 		return runAdmin(arguments[1:])
+	}
+	if len(arguments) >= 2 && arguments[0] == "search" {
+		return runSearch(arguments[1:])
 	}
 	if len(arguments) != 2 {
 		return usageError()
@@ -64,6 +69,69 @@ func run(arguments []string) error {
 		return fmt.Errorf("synchronize catalog: %w", err)
 	}
 	fmt.Fprintln(os.Stdout, "catalog synchronization succeeded")
+	return nil
+}
+
+type searchCommand struct {
+	Kind      string
+	ProjectID uuid.UUID
+}
+
+func parseSearchCommand(arguments []string) (searchCommand, error) {
+	if len(arguments) == 1 && arguments[0] == "rebuild" {
+		return searchCommand{Kind: "rebuild"}, nil
+	}
+	if len(arguments) == 3 && arguments[0] == "reindex-project" && arguments[1] == "--project-id" {
+		projectID, err := uuid.Parse(arguments[2])
+		if err != nil {
+			return searchCommand{}, fmt.Errorf("project ID must be a UUID: %w", err)
+		}
+		return searchCommand{Kind: "reindex-project", ProjectID: projectID}, nil
+	}
+	return searchCommand{}, usageError()
+}
+
+func runSearch(arguments []string) error {
+	command, err := parseSearchCommand(arguments)
+	if err != nil {
+		return err
+	}
+	configuration, err := config.Load(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+	operationContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	databasePool, err := pgxpool.New(operationContext, configuration.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+	defer databasePool.Close()
+	if err := databasePool.Ping(operationContext); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	service := searchservice.Service{
+		Pool: databasePool,
+		Index: searchservice.MeilisearchClient{
+			BaseURL:     configuration.MeilisearchURL,
+			APIKey:      configuration.MeilisearchAPIKey,
+			TaskTimeout: 10 * time.Second,
+		},
+		IndexUID: configuration.MeilisearchIndex,
+	}
+	if command.Kind == "reindex-project" {
+		result, err := service.ReindexProject(operationContext, uuid.Nil, command.ProjectID)
+		if err != nil {
+			return fmt.Errorf("queue Project reindex: %w", err)
+		}
+		fmt.Fprintf(os.Stdout, "Project %s revision %d queued for search reconciliation\n", result.ProjectID, result.DesiredRevision)
+		return nil
+	}
+	operation, err := service.CreateRebuild(operationContext, uuid.Nil)
+	if err != nil {
+		return fmt.Errorf("queue search rebuild: %w", err)
+	}
+	fmt.Fprintf(os.Stdout, "search rebuild %s queued\n", operation.ID)
 	return nil
 }
 
@@ -161,5 +229,5 @@ func runMigrationStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | catalog validate|sync | migrations status")
+	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
 }

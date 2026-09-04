@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-02: foundation, data contracts, identity and core records, and Artifacts complete; search implementation is next.
+Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, and search complete; import implementation is next.
 
 ## Verified increments
 
@@ -52,9 +52,20 @@ Status as of 2026-09-02: foundation, data contracts, identity and core records, 
 - Backend unit and isolated PostgreSQL integration tests cover storage safety, size and type validation, lifecycle revisions, quota, search state, audit records, immutable replacement, cleanup, and public visibility.
 - Frontend static checks and 22 component tests pass. Authenticated HTTP smoke verification covers upload, partial PDF view with a `206` response, metadata update, replacement, public deletion visibility, restoration, and full administrator aggregate retrieval.
 
+### Search
+
+- PostgreSQL remains canonical while Meilisearch stores derived, rebuildable Project documents with a stable logical index and versioned physical rebuild indexes.
+- Published Project projections include aliases, academic references, ordered People roles, taxonomy, active Artifact availability, revisions, and sort fields while excluding private metadata and storage identities.
+- Query validation, exact seven-digit identifier precedence, deterministic cursor binding, OR-within-facet and AND-across-facet filtering, sorting, facet distribution, and bounded highlights are implemented.
+- The reconciliation worker uses leases, bounded retries, changed-revision protection, expired-lease recovery, and removal of no-longer-public Projects.
+- Full rebuilds configure a replacement index, populate stable pages, reconcile final published state under serialization, verify document counts, swap indexes, preserve the prior physical index, and record operation status and audit events.
+- Public search, authenticated status, Project reindex, and rebuild HTTP endpoints are implemented. The operator CLI supports Project reindex and full rebuild commands. Administration includes search availability, queue counts, Project reindex, rebuild progress, and failure display.
+- Focused backend tests, the full backend suite, all 23 frontend tests, TypeScript checking, and the production frontend build pass.
+- Local PostgreSQL and Meilisearch smoke verification covers queued reconciliation to `synced`, filtered and alias search, exact Student ID search, complete rebuild, verified swap, and authenticated status with no pending or failed rows.
+
 ## Active implementation work
 
-- Search, imports, audit administration, CI, operator documentation, and product-completion verification.
+- Imports, audit administration, CI, operator documentation, and product-completion verification.
 
 ## Known implementation constraints
 

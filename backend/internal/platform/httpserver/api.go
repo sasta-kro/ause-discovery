@@ -21,6 +21,7 @@ import (
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/projects"
+	searchservice "ause-discovery.local/backend/internal/search"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,6 +36,7 @@ type Controller struct {
 	Artifacts artifacts.Service
 	People    people.Service
 	Projects  projects.Service
+	Search    searchservice.Service
 	Config    config.Config
 }
 type requestContextKey string
@@ -47,6 +49,7 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler
 		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 		People:    people.Service{Pool: pool},
 		Projects:  projects.Service{Pool: pool},
+		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
 		Config:    configuration,
 	}
 	router := chi.NewRouter()
@@ -304,6 +307,92 @@ func (controller *Controller) ViewArtifact(writer http.ResponseWriter, request *
 
 func (controller *Controller) DownloadArtifact(writer http.ResponseWriter, request *http.Request, artifactID api.ArtifactId) {
 	controller.serveArtifact(writer, request, uuid.UUID(artifactID), false)
+}
+
+func (controller *Controller) SearchProjects(writer http.ResponseWriter, request *http.Request, params api.SearchProjectsParams) {
+	result, err := controller.Search.Search(request.Context(), searchQuery(params))
+	if errors.Is(err, searchservice.ErrInvalidFilter) || errors.Is(err, searchservice.ErrInvalidCursor) {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+		return
+	}
+	if errors.Is(err, searchservice.ErrSearchUnavailable) {
+		problem(writer, request, http.StatusServiceUnavailable, "search_unavailable", "Search unavailable", "Project detail pages remain available.")
+		return
+	}
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(writer, http.StatusOK, searchResponse(result))
+}
+
+func (controller *Controller) GetSearchStatus(writer http.ResponseWriter, request *http.Request) {
+	_, ok := controller.requireActor(writer, request, false)
+	if !ok {
+		return
+	}
+	status, err := controller.Search.SearchStatus(request.Context())
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	response := api.SearchStatus{Available: status.Available, PendingCount: status.PendingCount, FailedCount: status.FailedCount}
+	if status.ActiveRebuild != nil {
+		active := searchRebuildResponse(*status.ActiveRebuild)
+		response.ActiveRebuild = &active
+	}
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func (controller *Controller) ReindexProject(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, _ api.ReindexProjectParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	result, err := controller.Search.ReindexProject(request.Context(), actor.UserID, uuid.UUID(projectID))
+	if errors.Is(err, searchservice.ErrProjectNotFound) {
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+		return
+	}
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(writer, http.StatusAccepted, api.ReindexProjectResponse{ProjectId: result.ProjectID, DesiredRevision: int(result.DesiredRevision), State: api.SearchSyncState(result.State)})
+}
+
+func (controller *Controller) CreateSearchRebuild(writer http.ResponseWriter, request *http.Request, _ api.CreateSearchRebuildParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	operation, err := controller.Search.CreateRebuild(request.Context(), actor.UserID)
+	if errors.Is(err, searchservice.ErrRebuildActive) {
+		problem(writer, request, http.StatusConflict, "search_rebuild_active", "Search rebuild already active", "")
+		return
+	}
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(writer, http.StatusAccepted, searchRebuildResponse(operation))
+}
+
+func (controller *Controller) GetSearchRebuild(writer http.ResponseWriter, request *http.Request, operationID api.OperationId) {
+	_, ok := controller.requireActor(writer, request, false)
+	if !ok {
+		return
+	}
+	operation, err := controller.Search.GetRebuild(request.Context(), uuid.UUID(operationID))
+	if errors.Is(err, searchservice.ErrRebuildNotFound) {
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+		return
+	}
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	writeJSON(writer, http.StatusOK, searchRebuildResponse(operation))
 }
 
 func (controller *Controller) CreateProject(writer http.ResponseWriter, request *http.Request, _ api.CreateProjectParams) {
@@ -788,6 +877,153 @@ func publishedAt(value projects.Project) time.Time {
 		return *value.PublishedAt
 	}
 	return time.Now().UTC()
+}
+
+func searchQuery(params api.SearchProjectsParams) searchservice.Query {
+	query := searchservice.Query{Limit: limit(params.Limit)}
+	if params.Q != nil {
+		query.Text = *params.Q
+	}
+	if params.AcademicYear != nil {
+		academicYear := int(*params.AcademicYear)
+		query.AcademicYear = &academicYear
+	}
+	if params.Semester != nil {
+		semester := string(*params.Semester)
+		query.Semester = &semester
+	}
+	if params.ProgramKey != nil {
+		query.ProgramKeys = append([]string{}, (*params.ProgramKey)...)
+	}
+	if params.MajorKey != nil {
+		query.MajorKeys = append([]string{}, (*params.MajorKey)...)
+	}
+	if params.CourseKey != nil {
+		query.CourseKeys = append([]string{}, (*params.CourseKey)...)
+	}
+	if params.PersonId != nil {
+		query.PersonIDs = append([]uuid.UUID{}, (*params.PersonId)...)
+	}
+	if params.StudentId != nil {
+		studentID := string(*params.StudentId)
+		query.StudentID = &studentID
+	}
+	if params.AdvisorId != nil {
+		query.AdvisorIDs = append([]uuid.UUID{}, (*params.AdvisorId)...)
+	}
+	if params.CategoryKey != nil {
+		query.CategoryKeys = append([]string{}, (*params.CategoryKey)...)
+	}
+	if params.PlatformKey != nil {
+		query.PlatformKeys = append([]string{}, (*params.PlatformKey)...)
+	}
+	if params.DomainKey != nil {
+		query.DomainKeys = append([]string{}, (*params.DomainKey)...)
+	}
+	if params.TopicKey != nil {
+		query.TopicKeys = append([]string{}, (*params.TopicKey)...)
+	}
+	if params.TechnologyKey != nil {
+		query.TechnologyKeys = append([]string{}, (*params.TechnologyKey)...)
+	}
+	if params.ArtifactType != nil {
+		for _, artifactType := range *params.ArtifactType {
+			query.ArtifactTypes = append(query.ArtifactTypes, string(artifactType))
+		}
+	}
+	query.HasArtifacts = params.HasArtifacts
+	query.HasReport = params.HasReport
+	query.HasSlides = params.HasSlides
+	query.HasSourceCode = params.HasSourceCode
+	query.HasDataset = params.HasDataset
+	if params.Sort != nil {
+		query.Sort = string(*params.Sort)
+	}
+	if params.Cursor != nil {
+		query.Cursor = string(*params.Cursor)
+	}
+	return query
+}
+
+func searchResponse(result searchservice.Result) api.SearchResponse {
+	response := api.SearchResponse{
+		Items: []api.SearchResult{},
+		Page:  api.PageInfo{Limit: result.Limit, NextCursor: result.NextCursor},
+		Total: result.Total,
+		Facets: api.SearchFacets{
+			Programs:      searchFacets(result.Facets.Programs),
+			Majors:        searchFacets(result.Facets.Majors),
+			Courses:       searchFacets(result.Facets.Courses),
+			AcademicYears: searchFacets(result.Facets.AcademicYears),
+			People:        searchFacets(result.Facets.People),
+			Categories:    searchFacets(result.Facets.Categories),
+			Platforms:     searchFacets(result.Facets.Platforms),
+			Domains:       searchFacets(result.Facets.Domains),
+			Topics:        searchFacets(result.Facets.Topics),
+			Technologies:  searchFacets(result.Facets.Technologies),
+		},
+	}
+	for _, item := range result.Items {
+		searchResult := api.SearchResult{
+			Id: item.ID, ReferenceCode: item.ReferenceCode, Title: item.Title, AcademicYear: item.AcademicYear,
+			Semester: api.Semester(item.Semester), Program: searchCatalogReference(item.Program), Course: searchCatalogReference(item.Course),
+			People: searchParticipations(item.People), Categories: searchTaxonomyValues(item.Categories), Platforms: searchTaxonomyValues(item.Platforms),
+			ArtifactCount: item.ArtifactCount, PublishedAt: item.PublishedAt, Highlights: []api.SearchHighlight{},
+		}
+		if item.Major != nil {
+			major := searchCatalogReference(*item.Major)
+			searchResult.Major = &major
+		}
+		for _, highlight := range item.Highlights {
+			searchResult.Highlights = append(searchResult.Highlights, api.SearchHighlight{Field: api.SearchHighlightField(highlight.Field), Value: highlight.Value})
+		}
+		response.Items = append(response.Items, searchResult)
+	}
+	return response
+}
+
+func searchCatalogReference(value searchservice.CatalogReference) api.CatalogReference {
+	return api.CatalogReference{Id: value.ID, Key: value.Key, Label: value.Label}
+}
+
+func searchParticipations(values []searchservice.Participation) []api.Participation {
+	result := make([]api.Participation, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.Participation{
+			Person: api.PersonSummary{Id: value.Person.ID, DisplayName: value.Person.DisplayName, StudentId: value.Person.StudentID},
+			Role:   api.ParticipationRole(value.Role), SortOrder: value.SortOrder,
+		})
+	}
+	return result
+}
+
+func searchTaxonomyValues(values []searchservice.TaxonomyValue) []api.TaxonomyValue {
+	result := make([]api.TaxonomyValue, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.TaxonomyValue{
+			Id: value.ID, Dimension: api.TaxonomyDimension(value.Dimension), Key: value.Key, Labels: value.Labels,
+			Description: value.Description, SortOrder: value.SortOrder,
+		})
+	}
+	return result
+}
+
+func searchFacets(values []searchservice.Facet) []api.SearchFacet {
+	result := make([]api.SearchFacet, 0, len(values))
+	for _, value := range values {
+		result = append(result, api.SearchFacet{Key: value.Key, Count: value.Count})
+	}
+	return result
+}
+
+func searchRebuildResponse(operation searchservice.RebuildOperation) api.SearchRebuildOperation {
+	failedProjects := operation.FailedProjects
+	return api.SearchRebuildOperation{
+		Id: operation.ID, State: api.SearchRebuildState(operation.State), RequestedAt: operation.RequestedAt,
+		RequestedBy: operation.RequestedBy, StartedAt: operation.StartedAt, CompletedAt: operation.CompletedAt,
+		TotalProjects: operation.TotalProjects, ProcessedProjects: operation.ProcessedProjects,
+		FailedProjects: &failedProjects, ErrorCode: operation.ErrorCode,
+	}
 }
 
 func artifactResponse(value artifacts.Artifact, publicBasePath string) api.Artifact {
