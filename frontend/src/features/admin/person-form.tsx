@@ -24,19 +24,42 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
   const [conflict, setConflict] = useState(false)
   const [serverIssues, setServerIssues] = useState<Array<{ field: string; message?: string }>>([])
   const [generalFailure, setGeneralFailure] = useState(false)
+  const [reloading, setReloading] = useState(false)
+  const [reloadFailed, setReloadFailed] = useState(false)
   const form = useForm<PersonValues>({ defaultValues: toValues() })
-  const loadedID = useRef<string | null>(null)
-  const [reloadRequested, setReloadRequested] = useState(false)
+  const initialized = useRef(false)
 
   useEffect(() => {
     const person = personQuery.data
-    if (!person) return
-    if (loadedID.current !== person.id || reloadRequested) {
-      loadedID.current = person.id
-      setReloadRequested(false)
+    if (person && !initialized.current) {
+      initialized.current = true
       form.reset(toValues(person))
     }
-  }, [form, personQuery.data, reloadRequested])
+  }, [form, personQuery.data])
+
+  // A reload adopts only the actual server response, never cached data, so the
+  // form and the revision used for the next save always describe one record.
+  // The fetch uses a distinct cache entry so a failed reload cannot push the
+  // page-level query into its error state.
+  const reloadRecord = async () => {
+    setReloadFailed(false)
+    setReloading(true)
+    try {
+      const fresh = await client.fetchQuery({
+        queryKey: ['admin-person', personId, 'reload'],
+        queryFn: async () => (await getAdminPerson({ path: { person_id: personId }, throwOnError: true })).data,
+        staleTime: 0,
+      })
+      initialized.current = true
+      void client.setQueryData(['admin-person', personId], fresh)
+      form.reset(toValues(fresh))
+      setConflict(false)
+    } catch {
+      setReloadFailed(true)
+    } finally {
+      setReloading(false)
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: async (values: PersonValues) => {
@@ -44,7 +67,7 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
       return (await updatePerson({ path: { person_id: personId }, body: { expected_revision: personQuery.data.revision, display_name: values.displayName, student_id: values.studentId || null, staff_id: values.staffId || null }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true })).data
     },
     onSuccess: (person) => {
-      setConflict(false); setServerIssues([]); setGeneralFailure(false)
+      setConflict(false); setServerIssues([]); setGeneralFailure(false); setReloadFailed(false)
       void client.setQueryData(['admin-person', person.id], person)
     },
     onError: (error) => {
@@ -60,7 +83,8 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
     return <div><h1>{t('admin.personForm')}</h1><p className={styles.error} role="alert">{notFound ? t('feedback.recordNotFound') : t('admin.requestFailed')}</p><p className={styles.formActions}><Link className={styles.secondaryButton} to="/admin/people">{t('admin.peopleTitle')}</Link></p></div>
   }
   return <div><h1>{t('admin.personForm')}</h1>
-    {conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} onClick={() => { setConflict(false); setReloadRequested(true); void client.invalidateQueries({ queryKey: ['admin-person', personId] }) }}>{t('action.reload')}</button></div> : null}
+    {conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} disabled={reloading} onClick={() => void reloadRecord()} type="button">{t('action.reload')}</button>{reloading ? <p role="status">{t('feedback.working')}</p> : null}</div> : null}
+    {reloadFailed ? <p className={styles.error} role="alert">{t('admin.personReloadFailed')}</p> : null}
     {serverIssues.length ? <div className={styles.error} role="alert"><strong>{t('admin.serverIssues')}</strong><ul>{serverIssues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message ?? issue.field}</li>)}</ul></div> : null}
     {generalFailure ? <p className={styles.error} role="alert">{t('admin.personSaveFailed')}</p> : null}
     {mutation.isSuccess && !mutation.isPending ? <p role="status">{t('feedback.saved')}</p> : null}
@@ -68,7 +92,7 @@ export function AdminPersonForm({ csrfToken }: { csrfToken: string | null }) {
       <FormField label={t('fields.displayName')} error={form.formState.errors.displayName?.message}><input {...form.register('displayName', { required: t('feedback.required') })} /></FormField>
       <FormField label={t('fields.studentId')} error={form.formState.errors.studentId?.message}><input {...form.register('studentId', { validate: (value) => !value || studentIDPattern.test(value) || t('feedback.invalidStudentId') })} inputMode="numeric" /></FormField>
       <FormField label={t('fields.staffId')}><input {...form.register('staffId')} /></FormField>
-      <button className={styles.button} disabled={mutation.isPending || !csrfToken} type="submit">{t('action.saveDraft')}</button>
+      <button className={styles.button} disabled={mutation.isPending || reloading || !csrfToken} type="submit">{t('action.saveDraft')}</button>
     </form>
   </div>
 }

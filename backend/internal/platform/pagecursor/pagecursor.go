@@ -14,7 +14,11 @@ import (
 var ErrInvalid = errors.New("page cursor is invalid")
 
 const (
-	maximumEncodedLength = 1024
+	// The bound must cover the worst legal sort key: a 300-character Person
+	// display name of four-byte UTF-8 characters plus the JSON envelope stays
+	// under 1700 base64url characters. 2048 leaves headroom without admitting
+	// unbounded input.
+	maximumEncodedLength = 2048
 	version              = 1
 )
 

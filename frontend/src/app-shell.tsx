@@ -442,7 +442,7 @@ export function DeleteConfirmation({ confirmationValue, onCancel, onConfirm, pen
       return
     }
     if (event.key !== 'Tab' || !dialogRef.current) return
-    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, input')
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])')
     if (!focusable.length) return
     const first = focusable[0]
     const last = focusable[focusable.length - 1]
@@ -460,7 +460,7 @@ export function DeleteConfirmation({ confirmationValue, onCancel, onConfirm, pen
 function DeleteRestoreControls({ project }: { project: AdminProject }) {
   const { t } = useTranslation(); const { csrfToken } = useSession(); const client = useQueryClient(); const [confirming, setConfirming] = useState(false); const [conflict, setConflict] = useState(false)
   const confirmationValue = projectDeleteConfirmation(project)
-  const mutation = useMutation({ mutationFn: async (action: 'delete' | 'restore') => { if (!csrfToken) throw new Error('CSRF token unavailable'); const request = { path: { project_id: project.id }, body: { expected_revision: project.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true as const }; return action === 'delete' ? responseData(deleteProject({ ...request, body: { ...request.body, confirmation: confirmationValue } })) : responseData(restoreProject(request)) }, onSuccess: (nextProject) => { setConflict(false); void client.setQueryData(['admin-project', project.id], nextProject); setConfirming(false) }, onError: (error) => { if (isProblem(error) && error.code === 'revision_conflict') setConflict(true) } })
+  const mutation = useMutation({ mutationFn: async (action: 'delete' | 'restore') => { if (!csrfToken) throw new Error('CSRF token unavailable'); const request = { path: { project_id: project.id }, body: { expected_revision: project.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true as const }; return action === 'delete' ? responseData(deleteProject({ ...request, body: { ...request.body, confirmation: confirmationValue } })) : responseData(restoreProject(request)) }, onMutate: () => { setConflict(false) }, onSuccess: (nextProject) => { setConflict(false); void client.setQueryData(['admin-project', project.id], nextProject); setConfirming(false) }, onError: (error) => { setConfirming(false); if (isProblem(error) && error.code === 'revision_conflict') setConflict(true) } })
   const reloadRecord = () => { setConflict(false); void client.invalidateQueries({ queryKey: ['admin-project', project.id] }) }
   const conflictNotice = conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} type="button" onClick={reloadRecord}>{t('action.reload')}</button></div> : null
   const failureNotice = mutation.isError && !conflict ? <p className={styles.error} role="alert">{t('admin.lifecycleFailed')}</p> : null

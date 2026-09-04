@@ -60,4 +60,26 @@ describe('delete confirmation accessibility', () => {
     expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('keeps Tab focus on the only enabled control while pending', () => {
+    render(<I18nextProvider i18n={i18n}><DeleteConfirmation confirmationValue="REF-001" onCancel={vi.fn()} onConfirm={vi.fn()} pending /></I18nextProvider>)
+    const input = screen.getByLabelText('Confirmation value')
+    input.focus()
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('wraps Tab focus among the enabled controls', () => {
+    render(<I18nextProvider i18n={i18n}><DeleteConfirmation confirmationValue="REF-001" onCancel={vi.fn()} onConfirm={vi.fn()} /></I18nextProvider>)
+    const input = screen.getByLabelText('Confirmation value')
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    cancel.focus()
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab' })
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(cancel)
+  })
 })

@@ -121,6 +121,8 @@ describe('administrator project form boundaries', () => {
     await user.click(screen.getByRole('dialog').querySelectorAll('button')[0])
 
     expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement === screen.getByRole('button', { name: 'Delete' })).toBe(true)
     expect((screen.getByLabelText('Project title') as HTMLInputElement).value).toBe('Unsaved Local Edit')
 
     apiMocks.getAdminProject.mockResolvedValue({ data: storedProject(3) })

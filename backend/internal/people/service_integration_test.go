@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,4 +152,41 @@ func createPeopleTestDatabase(t *testing.T, ctx context.Context, databaseURL str
 		_, _ = connection.Exec(ctx, "DROP DATABASE IF EXISTS "+databaseName+" WITH (FORCE)")
 	})
 	return pool
+}
+
+func TestPersonListCursorHandlesMaximumUnicodeNames(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+
+	ctx := context.Background()
+	pool := createPeopleTestDatabase(t, ctx, databaseURL)
+	service := Service{Pool: pool}
+	longThaiName := strings.Repeat("ก", 300)
+	followingThaiName := strings.Repeat("ก", 299) + "ข"
+	insertPerson(t, ctx, pool, "018f0000-0000-7000-8000-000000000501", longThaiName, longThaiName, "", "")
+	insertPerson(t, ctx, pool, "018f0000-0000-7000-8000-000000000502", followingThaiName, followingThaiName, "", "")
+
+	first, err := service.List(ctx, "", 1, "")
+	if err != nil {
+		t.Fatalf("first page returned an error: %v", err)
+	}
+	if len(first.Items) != 1 || first.NextCursor == nil {
+		t.Fatalf("first page held %d items with cursor %v", len(first.Items), first.NextCursor)
+	}
+	assertPeopleOrder(t, first.Items, "018f0000-0000-7000-8000-000000000501")
+	cursorLength := len(*first.NextCursor)
+	if cursorLength <= 1024 || cursorLength > 2048 {
+		t.Fatalf("cursor length was %d, expected a maximum-length Unicode name to stay within the 2048 contract bound", cursorLength)
+	}
+
+	second, err := service.List(ctx, "", 1, *first.NextCursor)
+	if err != nil {
+		t.Fatalf("second page returned an error: %v", err)
+	}
+	if second.NextCursor != nil {
+		t.Fatalf("final page exposed cursor %v", *second.NextCursor)
+	}
+	assertPeopleOrder(t, second.Items, "018f0000-0000-7000-8000-000000000502")
 }

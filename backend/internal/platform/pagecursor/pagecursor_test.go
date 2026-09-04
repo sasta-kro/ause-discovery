@@ -45,7 +45,7 @@ func TestDecodeRejectsMalformedValues(t *testing.T) {
 		"nil id":         encodeText(`{"v":1,"s":"x","id":"00000000-0000-0000-0000-000000000000"}`),
 		"unknown field":  encodeText(valid[:len(valid)-1] + `,"extra":1}`),
 		"trailing data":  encodeText(valid + " {}"),
-		"oversized":      encodeText(`{"v":1,"s":"` + pad(900) + `","id":"018f0000-0000-7000-8000-000000000001"}`),
+		"oversized":      encodeText(`{"v":1,"s":"` + pad(2000) + `","id":"018f0000-0000-7000-8000-000000000001"}`),
 		"invalid id hex": encodeText(`{"v":1,"s":"x","id":"018f0000-0000-7000-8000-0000000000zz"}`),
 	}
 	for name, value := range invalid {

@@ -57,3 +57,11 @@ Directives in the stock `nginx.conf`, such as the PID path, use padded whitespac
 ## Buttons inside forms
 
 A `<button>` without an explicit `type` inside a `<form>` is a submit button. Modal or secondary controls rendered within a form tree then trigger the enclosing submit handler silently, corrupting unrelated state; component tests can mask this when each test runs in isolation. Declare `type="button"` on every non-submitting button.
+
+## Cursor bounds follow sort keys
+
+Opaque cursor length bounds must be derived from the worst contract-legal sort key, not chosen as a round number. A 300-character multi-byte display name inflates past a 1024-character base64url cursor and silently breaks the next page. Derive the bound from the encoded worst case (length × UTF-8 width plus envelope) with headroom, and test with a maximum-length Unicode value.
+
+## One-off fetches need distinct cache keys
+
+A `fetchQuery` against a key observed by a live page query writes its failure into that shared entry, flipping the page into its error branch even when the failure is handled locally. Use a separate key for one-off fetches and copy successful results into the observed entry with `setQueryData`.

@@ -46,32 +46,54 @@ describe('administrator person editing', () => {
     apiMocks.getAdminPerson.mockImplementation(async () => ({ data: storedPerson }))
   })
 
-  it('preserves entered values across a revision conflict and reloads the current server record', async () => {
+  it('reloads the actual server response after a conflict and saves with the refreshed record', async () => {
     const user = userEvent.setup()
-    const refreshedPerson = { ...storedPerson, revision: 3 }
-    apiMocks.getAdminPerson.mockImplementation(async () => ({ data: storedPerson }))
-      .mockImplementationOnce(async () => ({ data: storedPerson }))
-      .mockImplementationOnce(async () => ({ data: refreshedPerson }))
+    const renamedPerson = { ...storedPerson, display_name: 'Server Renamed Person', revision: 3 }
+    apiMocks.getAdminPerson.mockImplementationOnce(async () => ({ data: storedPerson }))
+    apiMocks.getAdminPerson.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      return { data: renamedPerson }
+    })
     apiMocks.updatePerson.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 3 })
-      .mockResolvedValue({ data: refreshedPerson })
+      .mockResolvedValue({ data: renamedPerson })
     renderForm()
     const nameField = await screen.findByLabelText('Display name')
-    expect((nameField as HTMLInputElement).value).toBe('Stored Name')
+    await waitFor(() => expect((nameField as HTMLInputElement).value).toBe('Stored Name'))
 
     await user.clear(nameField)
-    await user.type(nameField, 'Corrected Name')
+    await user.type(nameField, 'Local Edit')
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
-
-    const conflict = await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')
-    expect(conflict).toBeTruthy()
-    expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Corrected Name')
+    expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+    expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Local Edit')
 
     await user.click(screen.getByRole('button', { name: 'Reload current record' }))
-    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Stored Name'))
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(true)
+    await waitFor(() => expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Server Renamed Person'), { timeout: 2000 })
 
     await user.click(screen.getByRole('button', { name: 'Save draft' }))
-    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ expected_revision: 3, display_name: 'Stored Name' }) })))
+    await waitFor(() => expect(apiMocks.updatePerson).toHaveBeenLastCalledWith(expect.objectContaining({ body: expect.objectContaining({ expected_revision: 3, display_name: 'Server Renamed Person' }) })))
     expect(await screen.findByText('The record was saved.')).toBeTruthy()
+  })
+
+  it('preserves entered values when the reload request itself fails', async () => {
+    const user = userEvent.setup()
+    apiMocks.getAdminPerson.mockImplementationOnce(async () => ({ data: storedPerson }))
+    apiMocks.getAdminPerson.mockRejectedValueOnce(new Error('reload failed'))
+    apiMocks.updatePerson.mockRejectedValueOnce({ code: 'revision_conflict', status: 409, title: 'Revision conflict', type: 'about:blank', request_id: 'test', current_revision: 3 })
+    renderForm()
+    const nameField = await screen.findByLabelText('Display name')
+    await waitFor(() => expect((nameField as HTMLInputElement).value).toBe('Stored Name'))
+
+    await user.clear(nameField)
+    await user.type(nameField, 'Recoverable Edit')
+    await user.click(screen.getByRole('button', { name: 'Save draft' }))
+    expect(await screen.findByText('This record changed elsewhere. Unsaved changes remain in this form.')).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Reload current record' }))
+    const failure = await screen.findByText('The current record could not be reloaded. Entered values were preserved; retry the reload.')
+    expect(failure).toBeTruthy()
+    expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Recoverable Edit')
+    expect((screen.getByRole('button', { name: 'Save draft' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('reports unexpected edit failures and a missing record distinctly', async () => {
