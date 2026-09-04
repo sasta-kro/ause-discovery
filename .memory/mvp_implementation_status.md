@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, and CI with operator readiness complete; product completion work is next.
+Status as of 2026-09-04: foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, CI with operator readiness, and product coherence are implemented; product coherence is submitted for independent review, and final product-completion verification follows acceptance.
 
 ## Verified increments
 
@@ -94,9 +94,23 @@ Status as of 2026-09-04: foundation, data contracts, identity and core records, 
 - Focused verification passed: `git diff --check`; actionlint v1.7.12; repository and fixture action-pin checks; Compose configuration rendering with local defaults and with production-like dummy values including digest-shaped API and web references; frontend lint, component tests, and both production builds; Go module verification, tracked-file formatting, vet, unit tests, and PostgreSQL-backed integration tests; generation drift check; API and web image builds including the root base-path variant; govulncheck (zero reachable findings), pnpm audit, and Trivy scans of both built images.
 - Known advisory findings, visible rather than suppressed: pnpm audit reports two high js-yaml advisories reachable only through the pinned OpenAPI generator toolchain, and Trivy reports upstream base-image findings including a critical golang.org/x/crypto advisory fixed in 0.55.0 that govulncheck confirms is not reachable from application code. Dependency upgrades are deliberately outside this increment.
 
+### Product coherence
+
+- One shared application frame renders the site header, primary and footer navigation, a single focusable `<main id="main-content">` landmark, and a `Skip to main content` link for public, login, administrator, and Not Found routes; route changes move focus to the main region once per path change without stealing focus during refetches.
+- Every named route sets a specific document title, administrator secondary navigation stays inside the main region, the unexpected-error boundary renders a minimal recovery page, and About, Privacy, Accessibility, Terms, and a new Contact route present factual content with visible pending-approval notices where institutional content is required.
+- A generated-client error interceptor installed exactly once clears cached administrator session state on any API `401`, so `AdminGuard` returns to `/admin/login` with the full intended path in `next`; failed logins keep the generic credential message and public `401` responses cause no redirect loop.
+- Search uses a draft query field applied on submit, distinguishes first load from background refresh, reports catalog loading or failure states, renames paging to `Next page`/`Previous page` with local cursor history that resets on filter changes, disables paging during requests, and renders API abstract highlights as text-only excerpts.
+- Public Project and Person pages translate participation roles, render Reference Code and Student ID only when present, distinguish Not Found from request failure through the problem code, and open PDF View links in a new browsing context with `noopener noreferrer`; the same behavior applies to administrator Artifact View links.
+- Administrator Project and People lists gained query and status filters with explicit Apply and Clear, shared cursor-history paging, and loading, empty, and request-failure states without false empties; Person creation and editing validate locally, disable while pending or without CSRF, show saved status, and preserve entered values across a revision conflict with an explicit reload action; Project save, publish, delete, restore, Artifact operations, and sign out gained pending and failure feedback without discarding sessions or input.
+- The delete confirmation traps keyboard focus, focuses the confirmation input initially, closes on Escape through cancel, restores the triggering control, blocks background pointer activation, and disables actions while pending.
+- Vite and React starter assets were removed after tracked-reference checks, and the favicon is a repository-owned neutral mark; the focus ring moved to a semantic token, disabled controls gained non-color state, and long identifiers and titles wrap without page-level horizontal overflow.
+- Nginx serves all static and proxied responses with `nosniff`, `same-origin` referrer, permissions policy, and a restrictive CSP through an included snippet repeated in caching locations so `add_header` inheritance cannot drop it; the entry document stays `no-cache`, assets stay immutable, redirects are port-agnostic, and no HSTS is emitted.
+- The web container runs the pinned Nginx image entirely as the unprivileged `nginx` account on internal port `8080` with narrowly granted runtime directory ownership; Compose maps the published web port to the new internal port.
+- Focused verification passed: `git diff --check`; `tsc -b`; ESLint; all 20 component test files with 50 tests including the new shell, session-expiry, search paging, cursor hook, Project and People lists, Person form, public presentation, and delete-confirmation boundaries; both production base-path builds; both web images built without publication; Compose config rendering with the new internal port; and a disposable container smoke confirming the `nginx` process user, `nginx -t`, the 8080 listener, entry and nested SPA delivery, immutable asset caching, security headers on home, nested, and asset responses with no HSTS, for both default and root base-path images.
+
 ## Active implementation work
 
-- Product coherence and product-completion verification.
+- Product coherence is submitted for review; final product-completion verification follows acceptance.
 
 ## Known implementation constraints
 

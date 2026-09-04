@@ -49,3 +49,7 @@ The persistent development Compose PostgreSQL was migrated with an early revisio
 ## Default-branch workflow triggers
 
 GitHub Actions `on.push.branches` filters cannot reference the repository default branch dynamically, so a hardcoded branch name there silently stops validation after a branch rename. Accept branch pushes of any name in the trigger and gate each job with `github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch`, which also excludes tag pushes.
+
+## Stock Nginx configuration whitespace
+
+Directives in the stock `nginx.conf`, such as the PID path, use padded whitespace, so exact-string `sed` replacements silently miss them. Match flexible whitespace when rewriting stock configuration, and prove the rewrite by starting the container rather than trusting the build.

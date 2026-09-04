@@ -1,7 +1,10 @@
 server {
-    listen 80;
+    listen 8080;
     server_name _;
     client_max_body_size 250m;
+    absolute_redirect off;
+
+    include /etc/nginx/security-headers.conf;
 
     location = ${AUSE_PUBLIC_BASE_PATH_NO_TRAILING} {
         return 308 ${AUSE_PUBLIC_BASE_PATH};
@@ -30,11 +33,13 @@ server {
         try_files $uri =404;
         expires 1y;
         add_header Cache-Control "public, immutable";
+        include /etc/nginx/security-headers.conf;
     }
 
     location ${AUSE_PUBLIC_BASE_PATH} {
         root /usr/share/nginx/html;
         try_files $uri $uri/ ${AUSE_PUBLIC_BASE_PATH}index.html;
         add_header Cache-Control "no-cache";
+        include /etc/nginx/security-headers.conf;
     }
 }

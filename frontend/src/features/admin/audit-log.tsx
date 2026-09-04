@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { listAuditEvents } from '../../api/generated/sdk.gen'
 import type { AuditEvent } from '../../api/generated/types.gen'
 import styles from '../../App.module.css'
+import { useCursorPage } from './paging'
 
 const actorUUIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const pageLimit = 20
@@ -16,12 +17,11 @@ export function AdminAuditLog() {
   const [filters, setFilters] = useState<AuditFilters>({ action: '', actorId: '' })
   const [applied, setApplied] = useState<AuditFilters>({ action: '', actorId: '' })
   const [invalidActor, setInvalidActor] = useState(false)
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([])
+  const paging = useCursorPage()
 
   const auditQuery = useQuery({
-    queryKey: ['admin-audit', applied.action, applied.actorId, cursor],
-    queryFn: async () => (await listAuditEvents({ query: { action: applied.action || undefined, actor_id: applied.actorId || undefined, cursor: cursor ?? undefined, limit: pageLimit }, throwOnError: true })).data,
+    queryKey: ['admin-audit', applied.action, applied.actorId, paging.cursor],
+    queryFn: async () => (await listAuditEvents({ query: { action: applied.action || undefined, actor_id: applied.actorId || undefined, cursor: paging.cursor ?? undefined, limit: pageLimit }, throwOnError: true })).data,
     placeholderData: keepPreviousData,
   })
   const pending = auditQuery.isFetching
@@ -35,26 +35,13 @@ export function AdminAuditLog() {
     setInvalidActor(false)
     setFilters({ ...filters, actorId })
     setApplied({ action: filters.action, actorId })
-    setCursor(null)
-    setCursorHistory([])
+    paging.reset()
   }
   const clearFilters = () => {
     setFilters({ action: '', actorId: '' })
     setApplied({ action: '', actorId: '' })
     setInvalidActor(false)
-    setCursor(null)
-    setCursorHistory([])
-  }
-  const nextPage = () => {
-    const nextCursor = auditQuery.data?.page.next_cursor
-    if (!nextCursor) return
-    setCursorHistory((previous) => [...previous, cursor])
-    setCursor(nextCursor)
-  }
-  const previousPage = () => {
-    if (!cursorHistory.length) return
-    setCursor(cursorHistory[cursorHistory.length - 1])
-    setCursorHistory((previous) => previous.slice(0, -1))
+    paging.reset()
   }
 
   return <div><h1>{t('audit.title')}</h1><p className={styles.lede}>{t('audit.description')}</p>
@@ -67,7 +54,7 @@ export function AdminAuditLog() {
     {auditQuery.isError ? <p className={styles.error} role="alert">{t('audit.failed')}</p> : null}
     {auditQuery.isPending ? <p role="status">{t('feedback.loading')}</p> : null}
     {auditQuery.data ? (auditQuery.data.items.length === 0 ? <p>{t('audit.empty')}</p> : <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t('audit.timestamp')}</th><th>{t('audit.action')}</th><th>{t('audit.actor')}</th><th>{t('audit.resourceType')}</th><th>{t('audit.resourceId')}</th><th>{t('audit.metadata')}</th></tr></thead><tbody>{auditQuery.data.items.map((event) => <AuditRow event={event} key={event.id} />)}</tbody></table></div>) : null}
-    <div className={styles.formActions}><button className={styles.secondaryButton} disabled={pending || !cursorHistory.length} type="button" onClick={previousPage}>{t('audit.previous')}</button><button className={styles.secondaryButton} disabled={pending || !auditQuery.data?.page.next_cursor} type="button" onClick={nextPage}>{t('audit.next')}</button></div>
+    <div className={styles.formActions}><button className={styles.secondaryButton} disabled={pending || !paging.cursorHistory.length} type="button" onClick={paging.previousPage}>{t('audit.previous')}</button><button className={styles.secondaryButton} disabled={pending || !auditQuery.data?.page.next_cursor} type="button" onClick={() => paging.nextPage(auditQuery.data?.page.next_cursor)}>{t('audit.next')}</button></div>
   </div>
 }
 

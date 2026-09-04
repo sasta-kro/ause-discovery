@@ -100,7 +100,7 @@ services:
     environment:
       AUSE_PUBLIC_BASE_PATH: ${AUSE_PUBLIC_BASE_PATH:-/ause-discovery/}
     ports:
-      - "${AUSE_WEB_PORT:-8088}:80"
+      - "${AUSE_WEB_PORT:-8088}:8080"
     depends_on:
       api:
         condition: service_started

@@ -34,6 +34,15 @@ RUN public_base_path="${VITE_PUBLIC_BASE_PATH%/}" && \
 
 COPY deploy/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 
+COPY deploy/nginx/security-headers.conf /etc/nginx/security-headers.conf
+
 COPY deploy/nginx/20-base-path.envsh /docker-entrypoint.d/20-base-path.envsh
 
-RUN chmod 755 /docker-entrypoint.d/20-base-path.envsh
+# The Nginx master process runs as the image's unprivileged nginx account on an
+# unprivileged port. The stock PID location moves to /tmp, and only the runtime
+# directories the official entrypoint and Nginx worker need become writable.
+RUN chmod 755 /docker-entrypoint.d/20-base-path.envsh \
+    && sed -i 's|pid[[:space:]]*/run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx /etc/nginx/conf.d /etc/nginx/security-headers.conf /etc/nginx/templates /docker-entrypoint.d/20-base-path.envsh
+
+USER nginx

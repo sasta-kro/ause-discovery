@@ -23,6 +23,8 @@
 .button { background: var(--color-ink); color: var(--color-paper); }
 .secondaryButton { background: transparent; border-color: var(--color-line-strong); color: var(--color-ink); }
 .dangerButton { background: var(--color-danger); color: white; }
+.button:not(:disabled):hover, .secondaryButton:not(:disabled):hover { text-decoration: underline; text-underline-offset: .2rem; }
+.button:disabled, .secondaryButton:disabled, .dangerButton:disabled { cursor: default; opacity: .55; text-decoration: none; }
 .pageHeader { border-bottom: 1px solid var(--color-line); margin-bottom: var(--space-5); padding-bottom: var(--space-4); }
 .pageHeader h1 { font-family: var(--font-display); font-size: clamp(2rem, 4vw, 3.2rem); font-weight: 500; letter-spacing: -.03em; margin: 0; }
 .searchLayout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-6); }
@@ -33,6 +35,8 @@
 .resultsHeader { display: flex; align-items: end; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .resultList, .projectList, .definitionList { display: grid; gap: var(--space-3); }
 .result { border-top: 1px solid var(--color-line); padding-top: var(--space-3); }
+.result h2, .result h3, .pageHeader h1 { overflow-wrap: break-word; }
+.excerpt { color: var(--color-muted); margin: .4rem 0 0; max-width: 46rem; overflow-wrap: break-word; }
 .result h2 { font-family: var(--font-display); font-size: 1.45rem; font-weight: 500; margin: 0 0 .4rem; }
 .result h2 a { color: var(--color-ink); }
 .metadata, .tags { display: flex; flex-wrap: wrap; gap: .45rem .8rem; color: var(--color-muted); font-size: .9rem; }
@@ -43,7 +47,9 @@
 .detailSection h2 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 500; }
 .definitionList div { display: grid; gap: .2rem; }
 .definitionList dt { color: var(--color-muted); font-size: .85rem; }
-.definitionList dd { margin: 0; }
+.definitionList dd { margin: 0; overflow-wrap: anywhere; }
+.prose { max-width: 46rem; }
+.table td, .table th { overflow-wrap: anywhere; }
 .adminLayout { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: var(--space-6); }
 .adminNav { border-right: 1px solid var(--color-line); display: grid; align-content: start; gap: .65rem; padding-right: var(--space-3); }
 .adminNav a { color: var(--color-muted); text-decoration: none; }

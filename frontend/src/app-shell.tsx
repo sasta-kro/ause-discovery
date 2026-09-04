@@ -1,18 +1,24 @@
-import { Component, type ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { Component, type ReactNode, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { I18nextProvider, useTranslation } from 'react-i18next'
 import { QueryClient, QueryClientProvider, keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm, type UseFormRegister, type UseFormReturn } from 'react-hook-form'
 import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
-import { createPerson, createProject, deleteArtifact, deleteProject, getAdminPerson, getAdminProject, getCatalogs, getCsrfToken, getPublicPerson, getPublicProject, getSession, listAdminPeople, listAdminProjects, login, logout, publishProject, replaceArtifact, replaceProject, restoreArtifact, restoreProject, searchProjects, updateArtifact, updatePerson, uploadArtifact } from './api/generated/sdk.gen'
+import { createProject, deleteArtifact, deleteProject, getAdminProject, getCatalogs, getCsrfToken, getPublicPerson, getPublicProject, getSession, listAdminPeople, login, logout, publishProject, replaceArtifact, replaceProject, restoreArtifact, restoreProject, searchProjects, updateArtifact, uploadArtifact } from './api/generated/sdk.gen'
 import type { AdminPerson, AdminProject, Artifact, ArtifactType, CatalogsResponse, Problem, RevisionConflictProblem, SessionResponse, TaxonomyValue } from './api/generated/types.gen'
 import i18n from './app/i18n'
+import { isNotFoundFailure, isProblem } from './app/problem'
+import { publicBasePath } from './app/public-base-path'
 import { configureApiClient, routerBasename } from './app/runtime'
+import { installSessionExpiryNotification } from './app/session-expiry'
 import { highlightText } from './features/search/highlight'
 import { parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
 import { projectDeleteConfirmation, projectDraftSchema, toProjectDraft, toProjectFormValues, type ProjectFormValues } from './features/admin/forms'
 import { AdminSearchMaintenance } from './features/admin/search-maintenance'
 import { AdminImportReview, AdminImportUpload } from './features/admin/import-management'
 import { AdminAuditLog } from './features/admin/audit-log'
+import { AdminProjectList } from './features/admin/project-list'
+import { AdminPersonForm } from './features/admin/person-form'
+import { AdminPeopleList } from './features/admin/people-list'
 import styles from './App.module.css'
 
 configureApiClient()
@@ -21,10 +27,6 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, sta
 
 async function responseData<T>(request: Promise<{ data: T }>): Promise<T> {
   return (await request).data
-}
-
-function isProblem(value: unknown): value is Problem {
-  return typeof value === 'object' && value !== null && 'code' in value && 'status' in value
 }
 
 async function sessionRequest(): Promise<SessionResponse | null> {
@@ -39,7 +41,7 @@ async function sessionRequest(): Promise<SessionResponse | null> {
 type SessionContextValue = { session: SessionResponse | null | undefined; csrfToken: string | null; refresh: () => Promise<void>; signOut: () => Promise<void> }
 const SessionContext = createContext<SessionContextValue | null>(null)
 
-function SessionProvider({ children }: { children: ReactNode }) {
+export function SessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const sessionQuery = useQuery({ queryKey: ['session'], queryFn: sessionRequest, retry: false })
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
@@ -85,28 +87,53 @@ class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { fail
   state = { failed: false }
   static getDerivedStateFromError(): { failed: boolean } { return { failed: true } }
   render() {
-    if (this.state.failed) return <div role="alert">{i18n.t('feedback.unexpected')}</div>
+    if (this.state.failed) return <div className={styles.page} role="alert"><main id="main-content" className={styles.main}>
+      <h1>{i18n.t('feedback.unexpected')}</h1>
+      <p className={styles.lede}>{i18n.t('feedback.unexpectedHelp')}</p>
+      <div className={styles.formActions}><a className={styles.button} href={publicBasePath}>{i18n.t('action.backHome')}</a><button className={styles.secondaryButton} type="button" onClick={() => window.location.reload()}>{i18n.t('action.reloadPage')}</button></div>
+    </main></div>
     return this.props.children
   }
 }
 
-function PublicLayout() {
+function AppFrame() {
   const { t } = useTranslation()
+  const location = useLocation()
+  const mainRef = useRef<HTMLElement>(null)
+  const focusedOnce = useRef(false)
+  useEffect(() => {
+    if (!focusedOnce.current) {
+      focusedOnce.current = true
+      return
+    }
+    mainRef.current?.focus()
+  }, [location.pathname])
   return <div className={styles.page}>
-    <a className={styles.skipLink} href="#main-content">{t('action.backToResults')}</a>
+    <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
       <Link className={styles.brand} to="/">{t('brand')}</Link>
-      <nav className={styles.navigation} aria-label={t('brand')}>
+      <nav className={styles.navigation} aria-label={t('nav.primary')}>
         <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink to="/admin">{t('nav.admin')}</NavLink>
       </nav>
     </div></header>
-    <main id="main-content" className={styles.main}><Outlet /></main>
+    <main id="main-content" ref={mainRef} tabIndex={-1} className={styles.main}><Outlet /></main>
     <footer className={styles.footer}><div className={styles.footerInner}>
-      <span>{t('footer.credit')}</span><nav className={styles.footerNav} aria-label={t('footer.credit')}>
-        <Link to="/about">{t('footer.about')}</Link><Link to="/privacy">{t('footer.privacy')}</Link><Link to="/accessibility">{t('footer.accessibility')}</Link><Link to="/terms">{t('footer.terms')}</Link><span>{t('footer.contact')}</span>
+      <span>{t('footer.credit')}</span><nav className={styles.footerNav} aria-label={t('nav.footer')}>
+        <Link to="/about">{t('footer.about')}</Link><Link to="/privacy">{t('footer.privacy')}</Link><Link to="/accessibility">{t('footer.accessibility')}</Link><Link to="/terms">{t('footer.terms')}</Link><Link to="/contact">{t('footer.contact')}</Link>
       </nav>
     </div></footer>
   </div>
+}
+
+function RequestFailure() {
+  const { t } = useTranslation()
+  return <div><PageTitle title={t('feedback.requestFailed')} /><h1>{t('feedback.requestFailedTitle')}</h1><p className={styles.error} role="alert">{t('feedback.requestFailed')}</p><p className={styles.formActions}><Link className={styles.secondaryButton} to="/">{t('action.backHome')}</Link></p></div>
+}
+
+function NotFound() {
+  const { t } = useTranslation()
+  return <div><PageTitle title={t('feedback.notFound')} /><h1>{t('feedback.notFound')}</h1><p className={styles.lede}>{t('feedback.notFoundHelp')}</p>
+    <p className={styles.formActions}><Link className={styles.button} to="/">{t('action.backHome')}</Link><Link className={styles.secondaryButton} to="/search">{t('action.search')}</Link></p></div>
 }
 
 function HomePage() {
@@ -132,31 +159,66 @@ function SearchPage() {
   const { t } = useTranslation()
   const [parameters, setParameters] = useSearchParams()
   const state = parseSearchState(parameters)
-  const searchQuery = useQuery({ queryKey: ['search', state], queryFn: () => responseData(searchProjects({ query: state, throwOnError: true })), placeholderData: keepPreviousData })
+  const [draft, setDraft] = useState(state.q ?? '')
+  const [cursorHistory, setCursorHistory] = useState<Array<string | undefined>>([])
+  const searchQuery = useQuery({ queryKey: ['search', state], queryFn: () => responseData(searchProjects({ query: { ...state, limit: 20 }, throwOnError: true })), placeholderData: keepPreviousData })
   const catalogsQuery = useQuery({ queryKey: ['catalogs'], queryFn: () => responseData(getCatalogs({ throwOnError: true })) })
-  const setState = (next: SearchState) => setParameters(serializeSearchState(resetSearchCursor(next)))
+  const setState = (next: SearchState) => {
+    setDraft(next.q ?? '')
+    setCursorHistory([])
+    setParameters(serializeSearchState(resetSearchCursor(next)))
+  }
+  const goToCursor = (cursor: string | undefined) => setParameters(serializeSearchState({ ...state, cursor }))
+  const nextPage = () => {
+    const nextCursor = searchQuery.data?.page.next_cursor
+    if (!nextCursor) return
+    setCursorHistory((previous) => [...previous, state.cursor])
+    goToCursor(nextCursor)
+  }
+  const previousPage = () => {
+    if (!cursorHistory.length) return
+    goToCursor(cursorHistory[cursorHistory.length - 1])
+    setCursorHistory((previous) => previous.slice(0, -1))
+  }
   const queryTerms = (state.q ?? '').split(/\s+/)
+  const pending = searchQuery.isFetching
   return <section><PageTitle title={t('search.title')} /><div className={styles.pageHeader}><h1>{t('search.title')}</h1></div>
-    <form className={styles.searchBox} onSubmit={(event) => { event.preventDefault(); setState(state) }}>
-      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={state.q ?? ''} onChange={(event) => setState({ ...state, q: event.target.value })} />
+    <form className={styles.searchBox} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft }) }}>
+      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={draft} onChange={(event) => setDraft(event.target.value)} />
       <select aria-label={t('search.sort')} value={state.sort} onChange={(event) => setState({ ...state, sort: event.target.value as SearchState['sort'] })}><option value="relevance">{t('search.relevance')}</option><option value="newest">{t('search.newest')}</option><option value="oldest">{t('search.oldest')}</option><option value="title">{t('search.alphabetical')}</option></select>
-      <button className={styles.button} type="submit">{t('action.search')}</button>
+      <button className={styles.button} type="submit" disabled={pending}>{t('action.search')}</button>
     </form>
     <div className={styles.searchLayout}><aside className={styles.filterPanel} aria-label={t('search.filters')}><h2>{t('search.filters')}</h2>
-      <fieldset className={styles.filterGroup}><legend>{t('search.academic')}</legend><label className={styles.filterOption}>{t('fields.year')}<input type="number" value={state.academic_year ?? ''} onChange={(event) => setState({ ...state, academic_year: event.target.value ? Number(event.target.value) : undefined })} /></label>
+      {catalogsQuery.isPending ? <p role="status">{t('search.filtersLoading')}</p> : null}
+      {catalogsQuery.isError ? <p className={styles.error} role="alert">{t('search.filtersUnavailable')}</p> : null}
+      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.academic')}</legend><label className={styles.filterOption}>{t('fields.year')}<input type="number" value={state.academic_year ?? ''} onChange={(event) => setState({ ...state, academic_year: event.target.value ? Number(event.target.value) : undefined })} /></label>
         <label className={styles.filterOption}>{t('fields.semester')}<select value={state.semester ?? ''} onChange={(event) => setState({ ...state, semester: event.target.value ? event.target.value as SearchState['semester'] : undefined })}><option value="" /><option value="first">{t('fields.first')}</option><option value="second">{t('fields.second')}</option><option value="summer">{t('fields.summer')}</option></select></label>
       </fieldset>
-      <fieldset className={styles.filterGroup}><legend>{t('search.people')}</legend><label className={styles.filterOption}>{t('fields.studentId')}<input inputMode="numeric" value={state.student_id ?? ''} onChange={(event) => setState({ ...state, student_id: event.target.value || undefined })} /></label></fieldset>
-      <fieldset className={styles.filterGroup}><legend>{t('search.classification')}</legend>{filters.map((filter) => <FacetSelect key={filter.key} filter={filter} state={state} catalogs={catalogsQuery.data} setState={setState} />)}</fieldset>
-      <fieldset className={styles.filterGroup}><legend>{t('search.availability')}</legend>{(['has_artifacts', 'has_report', 'has_slides', 'has_source_code', 'has_dataset'] as const).map((key) => <label className={styles.filterOption} key={key}><input type="checkbox" checked={state[key] ?? false} onChange={(event) => setState({ ...state, [key]: event.target.checked || undefined })} />{t(`fields.${key === 'has_artifacts' ? 'artifacts' : key.replace('has_', '').replace(/_([a-z])/g, (_, character: string) => character.toUpperCase())}`)}</label>)}</fieldset>
-      <button className={styles.secondaryButton} type="button" onClick={() => setParameters(new URLSearchParams())}>{t('action.clear')}</button>
+      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.people')}</legend><label className={styles.filterOption}>{t('fields.studentId')}<input inputMode="numeric" value={state.student_id ?? ''} onChange={(event) => setState({ ...state, student_id: event.target.value || undefined })} /></label></fieldset>
+      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.classification')}</legend>{filters.map((filter) => <FacetSelect key={filter.key} filter={filter} state={state} catalogs={catalogsQuery.data} setState={setState} />)}</fieldset>
+      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.availability')}</legend>{(['has_artifacts', 'has_report', 'has_slides', 'has_source_code', 'has_dataset'] as const).map((key) => <label className={styles.filterOption} key={key}><input type="checkbox" checked={state[key] ?? false} onChange={(event) => setState({ ...state, [key]: event.target.checked || undefined })} />{t(`fields.${key === 'has_artifacts' ? 'artifacts' : key.replace('has_', '').replace(/_([a-z])/g, (_, character: string) => character.toUpperCase())}`)}</label>)}</fieldset>
+      <button className={styles.secondaryButton} type="button" onClick={() => { setDraft(''); setCursorHistory([]); setParameters(new URLSearchParams()) }}>{t('action.clear')}</button>
     </aside>
-    <div><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isFetching && <p role="status">{t('search.loading')}</p>}</div></div>
+    <div><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isPending ? <p role="status">{t('search.loading')}</p> : pending ? <p role="status">{t('search.updating')}</p> : null}</div></div>
       {searchQuery.isError ? <p className={styles.error} role="alert">{t('search.unavailable')}</p> : null}
-      {searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result) => <article className={styles.result} key={result.id}><h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2><div className={styles.metadata}><span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span><span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span></div><div className={styles.tags}>{[...result.categories, ...result.platforms].map((taxonomy) => <span className={styles.tag} key={taxonomy.id}>{taxonomy.labels.en ?? taxonomy.key}</span>)}</div></article>)}</div>}
-      {searchQuery.data?.page.next_cursor ? <button className={styles.secondaryButton} onClick={() => setParameters(serializeSearchState({ ...state, cursor: searchQuery.data?.page.next_cursor ?? undefined }))}>{t('search.next')}</button> : null}
+      {!searchQuery.isPending && searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result) => <article className={styles.result} key={result.id}>
+        <h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2>
+        <div className={styles.metadata}><span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span><span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span></div>
+        {excerptOf(result.highlights, queryTerms)}
+        <div className={styles.tags}>{[...result.categories, ...result.platforms].map((taxonomy) => <span className={styles.tag} key={taxonomy.id}>{taxonomy.labels.en ?? taxonomy.key}</span>)}</div>
+      </article>)}</div>}
+      <div className={styles.formActions}>
+        <button className={styles.secondaryButton} disabled={pending || !cursorHistory.length} type="button" onClick={previousPage}>{t('search.previous')}</button>
+        <button className={styles.secondaryButton} disabled={pending || !searchQuery.data?.page.next_cursor} type="button" onClick={nextPage}>{t('search.next')}</button>
+      </div>
     </div></div>
   </section>
+}
+
+function excerptOf(highlights: Array<{ field: string; value: string }>, queryTerms: string[]) {
+  const excerpt = highlights.find((highlight) => highlight.field === 'abstract')
+  if (!excerpt) return null
+  return <p className={styles.excerpt}>{highlightText(excerpt.value, queryTerms)}</p>
 }
 
 function FacetSelect({ filter, state, catalogs, setState }: { filter: FilterDefinition; state: SearchState; catalogs?: CatalogsResponse; setState: (state: SearchState) => void }) {
@@ -173,29 +235,35 @@ function ProjectPage() {
   const { t } = useTranslation(); const { projectId = '' } = useParams()
   const projectQuery = useQuery({ queryKey: ['project', projectId], queryFn: () => responseData(getPublicProject({ path: { project_id: projectId }, throwOnError: true })) })
   if (projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
-  if (projectQuery.isError || !projectQuery.data) return <NotFound />
+  if (projectQuery.isError || !projectQuery.data) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
   const project = projectQuery.data
-  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><p className={styles.eyebrow}>{project.reference_code}</p><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><Tags values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url}>{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
+  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}>{project.reference_code ? <p className={styles.eyebrow}>{project.reference_code}</p> : null}<h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><Tags values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
 }
 
 function PersonPage() {
   const { t } = useTranslation(); const { personId = '' } = useParams()
   const personQuery = useQuery({ queryKey: ['person', personId], queryFn: () => responseData(getPublicPerson({ path: { person_id: personId }, throwOnError: true })) })
   if (personQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
-  if (personQuery.isError || !personQuery.data) return <NotFound />
+  if (personQuery.isError || !personQuery.data) return isNotFoundFailure(personQuery.error) ? <NotFound /> : <RequestFailure />
   const person = personQuery.data
-  return <article><PageTitle title={person.display_name} /><div className={styles.pageHeader}><p className={styles.eyebrow}>{person.student_id}</p><h1>{person.display_name}</h1></div><section><h2>{t('person.projects')}</h2>{person.projects.length ? <div className={styles.projectList}>{person.projects.map((project) => <article className={styles.result} key={project.id}><h3><Link to={`/projects/${project.id}`}>{project.title}</Link></h3><p className={styles.metadata}>{project.academic_year} · {t(`fields.${project.semester}`)} · {project.role}</p></article>)}</div> : <p>{t('person.noProjects')}</p>}</section></article>
+  return <article><PageTitle title={person.display_name} /><div className={styles.pageHeader}>{person.student_id ? <p className={styles.eyebrow}>{person.student_id}</p> : null}<h1>{person.display_name}</h1></div><section><h2>{t('person.projects')}</h2>{person.projects.length ? <div className={styles.projectList}>{person.projects.map((project) => <article className={styles.result} key={project.id}><h3><Link to={`/projects/${project.id}`}>{project.title}</Link></h3><p className={styles.metadata}>{project.academic_year} · {t(`fields.${project.semester}`)} · {t(`roles.${project.role}`)}</p></article>)}</div> : <p>{t('person.noProjects')}</p>}</section></article>
 }
 
 function People({ participations }: { participations: Array<{ person: { id: string; display_name: string }; role: string }> }) {
-  return <div className={styles.projectList}>{participations.map((participation) => <p key={`${participation.person.id}-${participation.role}`}><Link to={`/people/${participation.person.id}`}>{participation.person.display_name}</Link> <span className={styles.metadata}>{participation.role}</span></p>)}</div>
+  const { t } = useTranslation()
+  return <div className={styles.projectList}>{participations.map((participation) => <p key={`${participation.person.id}-${participation.role}`}><Link to={`/people/${participation.person.id}`}>{participation.person.display_name}</Link> <span className={styles.metadata}>{t(`roles.${participation.role}`)}</span></p>)}</div>
 }
 function Tags({ values }: { values: TaxonomyValue[] }) { return <div className={styles.tags}>{values.map((value) => <span className={styles.tag} key={value.id}>{value.labels.en ?? value.key}</span>)}</div> }
 function Definition({ label, value }: { label: string; value?: string | null }) { return value ? <div><dt>{label}</dt><dd>{value}</dd></div> : null }
 function formatBytes(bytes: number, translate: (key: string, options: { count: string }) => string): string { return translate('units.megabytes', { count: (bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1) }) }
 
-function StaticPage({ titleKey }: { titleKey: 'aboutTitle' | 'privacyTitle' | 'accessibilityTitle' | 'termsTitle' }) { const { t } = useTranslation(); return <section><PageTitle title={t(`legal.${titleKey}`)} /><div className={styles.pageHeader}><h1>{t(`legal.${titleKey}`)}</h1></div><p className={styles.lede}>{t('legal.placeholder')}</p></section> }
-function NotFound() { const { t } = useTranslation(); return <section><PageTitle title={t('feedback.notFound')} /><h1>{t('feedback.notFound')}</h1></section> }
+function InformationalPage({ titleKey, bodyKey, pendingKey }: { titleKey: 'aboutTitle' | 'privacyTitle' | 'accessibilityTitle' | 'termsTitle' | 'contactTitle'; bodyKey: 'aboutBody' | 'privacyBody' | 'accessibilityBody' | 'termsBody' | 'contactBody'; pendingKey?: 'privacyPending' | 'termsPending' | 'contactPending' }) {
+  const { t } = useTranslation()
+  return <section className={styles.prose}><PageTitle title={t(`legal.${titleKey}`)} /><div className={styles.pageHeader}><h1>{t(`legal.${titleKey}`)}</h1></div>
+    <p className={styles.lede}>{t(`legal.${bodyKey}`)}</p>
+    {pendingKey ? <p className={styles.notice}>{t(`legal.${pendingKey}`)}</p> : null}
+  </section>
+}
 
 function AdminGuard() {
   const { t } = useTranslation(); const location = useLocation(); const { session } = useSession()
@@ -206,25 +274,44 @@ function AdminGuard() {
 
 function AdminLayout() {
   const { t } = useTranslation(); const navigate = useNavigate(); const { signOut } = useSession()
-  return <section><PageTitle title={t('admin.title')} /><div className={styles.adminLayout}><nav className={styles.adminNav} aria-label={t('admin.title')}><NavLink end to="/admin">{t('admin.overview')}</NavLink><NavLink to="/admin/projects">{t('nav.projects')}</NavLink><NavLink to="/admin/people">{t('nav.people')}</NavLink><NavLink to="/admin/imports">{t('nav.imports')}</NavLink><NavLink to="/admin/search">{t('nav.searchMaintenance')}</NavLink><NavLink to="/admin/audit">{t('nav.audit')}</NavLink><button className={styles.secondaryButton} onClick={() => void signOut().then(() => navigate('/'))}>{t('nav.signOut')}</button></nav><div><Outlet /></div></div></section>
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutFailed, setSignOutFailed] = useState(false)
+  const handleSignOut = async () => {
+    setSigningOut(true); setSignOutFailed(false)
+    try {
+      await signOut()
+    } catch {
+      setSigningOut(false); setSignOutFailed(true)
+      return
+    }
+    navigate('/')
+  }
+  return <div><div className={styles.adminLayout}><nav className={styles.adminNav} aria-label={t('admin.title')}><NavLink end to="/admin">{t('admin.overview')}</NavLink><NavLink to="/admin/projects">{t('nav.projects')}</NavLink><NavLink to="/admin/people">{t('nav.people')}</NavLink><NavLink to="/admin/imports">{t('nav.imports')}</NavLink><NavLink to="/admin/search">{t('nav.searchMaintenance')}</NavLink><NavLink to="/admin/audit">{t('nav.audit')}</NavLink><button className={styles.secondaryButton} disabled={signingOut} onClick={() => void handleSignOut()}>{signingOut ? t('feedback.working') : t('nav.signOut')}</button></nav><div><Outlet /></div></div>{signOutFailed ? <p className={styles.error} role="alert">{t('admin.signOutFailed')}</p> : null}</div>
 }
 
 function LoginPage() {
   const { t } = useTranslation(); const navigate = useNavigate(); const [parameters] = useSearchParams(); const { session, refresh } = useSession(); const [error, setError] = useState(false)
   const form = useForm<{ username: string; password: string }>({ defaultValues: { username: '', password: '' } })
+  const [submitting, setSubmitting] = useState(false)
   if (session) return <Navigate to="/admin" replace />
-  return <section className={styles.panel}><PageTitle title={t('admin.loginTitle')} /><h1>{t('admin.loginTitle')}</h1><p>{t('admin.loginDescription')}</p>{error ? <p className={styles.error} role="alert">{t('admin.loginFailed')}</p> : null}<form className={styles.form} onSubmit={form.handleSubmit(async (values) => { try { await responseData(login({ body: values, throwOnError: true })); await refresh(); navigate(parameters.get('next') || '/admin', { replace: true }) } catch { setError(true) } })}><FormField label={t('fields.username')} error={form.formState.errors.username?.message}><input {...form.register('username', { required: t('feedback.required') })} autoComplete="username" /></FormField><FormField label={t('fields.password')} error={form.formState.errors.password?.message}><input {...form.register('password', { required: t('feedback.required') })} autoComplete="current-password" type="password" /></FormField><button className={styles.button} type="submit">{t('action.signIn')}</button></form></section>
+  return <section className={styles.panel}><PageTitle title={t('admin.loginTitle')} /><h1>{t('admin.loginTitle')}</h1><p>{t('admin.loginDescription')}</p>{error ? <p className={styles.error} role="alert">{t('admin.loginFailed')}</p> : null}<form className={styles.form} onSubmit={form.handleSubmit(async (values) => {
+    setSubmitting(true); setError(false)
+    try {
+      await responseData(login({ body: values, throwOnError: true }))
+      await refresh()
+      navigate(parameters.get('next') || '/admin', { replace: true })
+    } catch {
+      setError(true)
+    } finally {
+      setSubmitting(false)
+    }
+  })}><FormField label={t('fields.username')} error={form.formState.errors.username?.message}><input {...form.register('username', { required: t('feedback.required') })} autoComplete="username" /></FormField><FormField label={t('fields.password')} error={form.formState.errors.password?.message}><input {...form.register('password', { required: t('feedback.required') })} autoComplete="current-password" type="password" /></FormField><button className={styles.button} disabled={submitting} type="submit">{t('action.signIn')}</button></form></section>
 }
 
-function AdminHome() { const { t } = useTranslation(); return <div><h1>{t('admin.title')}</h1><p className={styles.lede}>{t('admin.overview')}</p></div> }
-
-function ProjectListPage() {
-  const { t } = useTranslation(); const projectsQuery = useQuery({ queryKey: ['admin-projects'], queryFn: () => responseData(listAdminProjects({ query: { limit: 20 }, throwOnError: true })) })
-  return <div><div className={styles.resultsHeader}><h1>{t('admin.projectsTitle')}</h1><Link className={styles.button} to="new">{t('admin.newProject')}</Link></div>{projectsQuery.isPending ? <p role="status">{t('feedback.loading')}</p> : null}{projectsQuery.data ? <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t('fields.title')}</th><th>{t('fields.status')}</th><th>{t('fields.year')}</th><th><span className="sr-only">{t('action.edit')}</span></th></tr></thead><tbody>{projectsQuery.data.items.map((project) => <tr key={project.id}><td>{project.title}</td><td>{t(`admin.${project.status}`)}</td><td>{project.academic_year}</td><td><Link to={`${project.id}/edit`}>{t('action.edit')}</Link></td></tr>)}</tbody></table></div> : null}</div>
-}
+function AdminHome() { const { t } = useTranslation(); return <div><PageTitle title={t('admin.overviewTitle')} /><h1>{t('admin.title')}</h1><p className={styles.lede}>{t('admin.overview')}</p></div> }
 
 function ProjectFormPage({ isNew }: { isNew: boolean }) {
-  const { t } = useTranslation(); const navigate = useNavigate(); const { projectId = '' } = useParams(); const { csrfToken } = useSession(); const client = useQueryClient(); const projectQuery = useQuery({ queryKey: ['admin-project', projectId], queryFn: () => responseData(getAdminProject({ path: { project_id: projectId }, throwOnError: true })), enabled: !isNew }); const catalogsQuery = useQuery({ queryKey: ['catalogs'], queryFn: () => responseData(getCatalogs({ throwOnError: true })) }); const peopleQuery = useQuery({ queryKey: ['admin-people', 'project-form'], queryFn: () => responseData(listAdminPeople({ query: { limit: 100 }, throwOnError: true })) }); const [conflict, setConflict] = useState<RevisionConflictProblem | null>(null); const [serverIssues, setServerIssues] = useState<Array<{ field: string; message?: string }>>([])
+  const { t } = useTranslation(); const navigate = useNavigate(); const { projectId = '' } = useParams(); const { csrfToken } = useSession(); const client = useQueryClient(); const projectQuery = useQuery({ queryKey: ['admin-project', projectId], queryFn: () => responseData(getAdminProject({ path: { project_id: projectId }, throwOnError: true })), enabled: !isNew }); const catalogsQuery = useQuery({ queryKey: ['catalogs'], queryFn: () => responseData(getCatalogs({ throwOnError: true })) }); const peopleQuery = useQuery({ queryKey: ['admin-people', 'project-form'], queryFn: () => responseData(listAdminPeople({ query: { limit: 100 }, throwOnError: true })) }); const [conflict, setConflict] = useState<RevisionConflictProblem | null>(null); const [serverIssues, setServerIssues] = useState<Array<{ field: string; message?: string }>>([]); const [generalFailure, setGeneralFailure] = useState(false)
   const form = useForm<ProjectFormValues>({ values: toProjectFormValues(projectQuery.data) })
   const saveMutation = useMutation({ mutationFn: async (values: ProjectFormValues) => {
     const parsed = projectDraftSchema.safeParse(values); if (!parsed.success) throw parsed.error
@@ -232,10 +319,27 @@ function ProjectFormPage({ isNew }: { isNew: boolean }) {
     const draft = toProjectDraft(values)
     if (isNew) return responseData(createProject({ body: draft, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true }))
     return responseData(replaceProject({ path: { project_id: projectId }, body: { expected_revision: projectQuery.data?.revision ?? 0, ...draft }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true }))
-  }, onSuccess: (project) => { setConflict(null); setServerIssues([]); void client.invalidateQueries({ queryKey: ['admin-projects'] }); navigate(`/admin/projects/${project.id}/edit`, { replace: true }) }, onError: (error) => { if (isProblem(error) && error.code === 'revision_conflict') setConflict(error as unknown as RevisionConflictProblem); else if (isProblem(error) && 'issues' in error) setServerIssues((error as Problem & { issues: Array<{ field: string; message?: string }> }).issues) } })
-  const publishMutation = useMutation({ mutationFn: async () => { if (!csrfToken || !projectQuery.data) throw new Error('CSRF token unavailable'); return responseData(publishProject({ path: { project_id: projectId }, body: { expected_revision: projectQuery.data.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true })) }, onSuccess: (project) => { void client.setQueryData(['admin-project', project.id], project) }, onError: (error) => { if (isProblem(error) && 'issues' in error) setServerIssues((error as Problem & { issues: Array<{ field: string; message?: string }> }).issues) } })
+  }, onSuccess: (project) => { setConflict(null); setServerIssues([]); setGeneralFailure(false); void client.invalidateQueries({ queryKey: ['admin-projects'] }); navigate(`/admin/projects/${project.id}/edit`, { replace: true }) }, onError: (error) => {
+    if (isProblem(error) && error.code === 'revision_conflict') { setConflict(error as unknown as RevisionConflictProblem); return }
+    if (isProblem(error) && 'issues' in error) { setServerIssues((error as Problem & { issues: Array<{ field: string; message?: string }> }).issues); return }
+    setGeneralFailure(true)
+  } })
+  const publishMutation = useMutation({ mutationFn: async () => { if (!csrfToken || !projectQuery.data) throw new Error('CSRF token unavailable'); return responseData(publishProject({ path: { project_id: projectId }, body: { expected_revision: projectQuery.data.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true })) }, onSuccess: (project) => { setGeneralFailure(false); void client.setQueryData(['admin-project', project.id], project) }, onError: (error) => {
+    if (isProblem(error) && 'issues' in error) { setServerIssues((error as Problem & { issues: Array<{ field: string; message?: string }> }).issues); return }
+    if (isProblem(error) && error.code === 'revision_conflict') { setConflict(error as unknown as RevisionConflictProblem); return }
+    setGeneralFailure(true)
+  } })
   if (!isNew && projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
-  return <div><h1>{t('admin.projectForm')}</h1><p>{t('admin.draftHelp')}</p>{conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} onClick={() => { void client.invalidateQueries({ queryKey: ['admin-project', projectId] }); setConflict(null) }}>{t('action.reload')}</button></div> : null}{serverIssues.length ? <div className={styles.error} role="alert"><strong>{t('admin.serverIssues')}</strong><ul>{serverIssues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message ?? issue.field}</li>)}</ul></div> : null}<form className={styles.form} onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}><ProjectFields form={form} catalogs={catalogsQuery.data} people={peopleQuery.data?.items ?? []} /><div className={styles.formActions}><button className={styles.button} disabled={saveMutation.isPending} type="submit">{t('action.saveDraft')}</button>{!isNew ? <button className={styles.secondaryButton} disabled={publishMutation.isPending} type="button" onClick={() => publishMutation.mutate()}>{t('action.publish')}</button> : null}</div>{!isNew && projectQuery.data ? <DeleteRestoreControls project={projectQuery.data} /> : null}</form>{!isNew && projectQuery.data ? <ArtifactManagement projectId={projectQuery.data.id} projectRevision={projectQuery.data.revision} artifacts={projectQuery.data.artifacts} csrfToken={csrfToken} disabled={projectQuery.data.status === 'deleted'} /> : null}</div>
+  if (!isNew && projectQuery.isError) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
+  return <div><PageTitle title={isNew ? t('admin.newProject') : t('admin.projectForm')} /><h1>{t('admin.projectForm')}</h1><p>{t('admin.draftHelp')}</p>
+    {catalogsQuery.isError ? <p className={styles.error} role="alert">{t('admin.catalogFailed')}</p> : null}
+    {peopleQuery.isError ? <p className={styles.error} role="alert">{t('admin.peopleFailed')}</p> : null}
+    {conflict ? <div className={styles.conflict} role="alert"><p>{t('admin.conflict')}</p><button className={styles.secondaryButton} onClick={() => { void client.invalidateQueries({ queryKey: ['admin-project', projectId] }); setConflict(null) }}>{t('action.reload')}</button></div> : null}
+    {serverIssues.length ? <div className={styles.error} role="alert"><strong>{t('admin.serverIssues')}</strong><ul>{serverIssues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issue.message ?? issue.field}</li>)}</ul></div> : null}
+    {generalFailure ? <p className={styles.error} role="alert">{t('admin.projectSaveFailed')}</p> : null}
+    {saveMutation.isSuccess && !saveMutation.isPending ? <p role="status">{t('feedback.saved')}</p> : null}
+    {publishMutation.isSuccess && !publishMutation.isPending ? <p role="status">{t('admin.publishedStatus')}</p> : null}
+    <form className={styles.form} onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}><ProjectFields form={form} catalogs={catalogsQuery.data} people={peopleQuery.data?.items ?? []} /><div className={styles.formActions}><button className={styles.button} disabled={saveMutation.isPending || !csrfToken} type="submit">{t('action.saveDraft')}</button>{!isNew ? <button className={styles.secondaryButton} disabled={publishMutation.isPending || !csrfToken} type="button" onClick={() => publishMutation.mutate()}>{t('action.publish')}</button> : null}</div>{!isNew && projectQuery.data ? <DeleteRestoreControls project={projectQuery.data} /> : null}</form>{!isNew && projectQuery.data ? <ArtifactManagement projectId={projectQuery.data.id} projectRevision={projectQuery.data.revision} artifacts={projectQuery.data.artifacts} csrfToken={csrfToken} disabled={projectQuery.data.status === 'deleted'} /> : null}</div>
 }
 
 function ProjectFields({ form, catalogs, people }: { form: UseFormReturn<ProjectFormValues>; catalogs?: CatalogsResponse; people: AdminPerson[] }) {
@@ -265,7 +369,7 @@ export function ArtifactManagement({ projectId, projectRevision, artifacts, csrf
     },
     onSuccess: async () => { form.reset(); await refreshProject() },
   })
-  return <section className={styles.detailSection}><h2>{t('admin.artifactManagement')}</h2><p>{t('admin.artifactHelp')}</p>{disabled ? <p className={styles.notice}>{t('admin.artifactProjectDeleted')}</p> : <form className={styles.artifactUpload} onSubmit={form.handleSubmit((values) => uploadMutation.mutate(values))}><FormField label={t('fields.artifactType')}><select {...form.register('artifactType')}>{artifactTypes.map((artifactType) => <option key={artifactType} value={artifactType}>{t(`artifact.type.${artifactType}`)}</option>)}</select></FormField><FormField label={t('fields.displayName')} error={form.formState.errors.displayName?.message}><input {...form.register('displayName', { required: t('feedback.required') })} /></FormField><FormField label={t('fields.file')} error={form.formState.errors.files?.message}><input type="file" {...form.register('files', { required: t('feedback.required') })} /></FormField><button className={styles.button} disabled={uploadMutation.isPending || !csrfToken} type="submit">{t('action.uploadArtifact')}</button></form>}{uploadMutation.isError ? <p className={styles.error} role="alert">{t('feedback.artifactFailed')}</p> : null}<div className={styles.artifactAdminList}>{artifacts.length ? artifacts.map((artifact) => <ArtifactEditor key={artifact.id} artifact={artifact} csrfToken={csrfToken} disabled={disabled} refreshProject={refreshProject} />) : <p>{t('project.noArtifacts')}</p>}</div></section>
+  return <section className={styles.detailSection}><h2>{t('admin.artifactManagement')}</h2><p>{t('admin.artifactHelp')}</p>{disabled ? <p className={styles.notice}>{t('admin.artifactProjectDeleted')}</p> : <form className={styles.artifactUpload} onSubmit={form.handleSubmit((values) => uploadMutation.mutate(values))}><FormField label={t('fields.artifactType')}><select {...form.register('artifactType')}>{artifactTypes.map((artifactType) => <option key={artifactType} value={artifactType}>{t(`artifact.type.${artifactType}`)}</option>)}</select></FormField><FormField label={t('fields.displayName')} error={form.formState.errors.displayName?.message}><input {...form.register('displayName', { required: t('feedback.required') })} /></FormField><FormField label={t('fields.file')} error={form.formState.errors.files?.message}><input type="file" {...form.register('files', { required: t('feedback.required') })} /></FormField><button className={styles.button} disabled={uploadMutation.isPending || !csrfToken} type="submit">{t('action.uploadArtifact')}</button></form>}{uploadMutation.isError ? <p className={styles.error} role="alert">{t('feedback.artifactFailed')}</p> : null}{uploadMutation.isSuccess && !uploadMutation.isPending ? <p role="status">{t('feedback.saved')}</p> : null}<div className={styles.artifactAdminList}>{artifacts.length ? artifacts.map((artifact) => <ArtifactEditor key={artifact.id} artifact={artifact} csrfToken={csrfToken} disabled={disabled} refreshProject={refreshProject} />) : <p>{t('project.noArtifacts')}</p>}</div></section>
 }
 
 function ArtifactEditor({ artifact, csrfToken, disabled, refreshProject }: { artifact: Artifact; csrfToken: string | null; disabled: boolean; refreshProject: () => Promise<void> }) {
@@ -286,7 +390,8 @@ function ArtifactEditor({ artifact, csrfToken, disabled, refreshProject }: { art
     return operation === 'delete' ? responseData(deleteArtifact(request)) : responseData(restoreArtifact(request))
   }, onSuccess: refreshProject })
   const failed = updateMutation.isError || replaceMutation.isError || lifecycleMutation.isError
-  return <section className={styles.artifactEditor} role="group" aria-label={artifact.display_name}><div className={styles.resultsHeader}><div><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span><span>{t(`admin.${artifact.status}`)}</span><span>{artifact.original_filename}</span></div></div><div className={styles.formActions}>{!disabled && artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url}>{t('action.view')}</a> : null}{!disabled && artifact.download_url ? <a className={styles.secondaryButton} href={artifact.download_url}>{t('action.download')}</a> : null}</div></div>{artifact.status === 'active' ? <><form className={styles.artifactControls} onSubmit={metadataForm.handleSubmit((values) => updateMutation.mutate(values))}><FormField label={t('fields.artifactType')}><select {...metadataForm.register('artifactType')}>{artifactTypes.map((artifactType) => <option key={artifactType} value={artifactType}>{t(`artifact.type.${artifactType}`)}</option>)}</select></FormField><FormField label={t('fields.displayName')}><input {...metadataForm.register('displayName', { required: true })} /></FormField><button className={styles.secondaryButton} disabled={disabled || updateMutation.isPending || !csrfToken} type="submit">{t('action.updateArtifact')}</button></form><form className={styles.artifactControls} onSubmit={replacementForm.handleSubmit((values) => replaceMutation.mutate(values))}><FormField label={t('fields.replacementFile')}><input type="file" {...replacementForm.register('files', { required: true })} /></FormField><button className={styles.secondaryButton} disabled={disabled || replaceMutation.isPending || !csrfToken} type="submit">{t('action.replaceArtifact')}</button></form><button className={styles.dangerButton} disabled={disabled || lifecycleMutation.isPending || !csrfToken} type="button" onClick={() => lifecycleMutation.mutate('delete')}>{t('action.delete')}</button></> : <button className={styles.secondaryButton} disabled={disabled || lifecycleMutation.isPending || !csrfToken} type="button" onClick={() => lifecycleMutation.mutate('restore')}>{t('action.restore')}</button>}{failed ? <p className={styles.error} role="alert">{t('feedback.artifactFailed')}</p> : null}</section>
+  const pending = updateMutation.isPending || replaceMutation.isPending || lifecycleMutation.isPending
+  return <section className={styles.artifactEditor} role="group" aria-label={artifact.display_name}><div className={styles.resultsHeader}><div><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span><span>{t(`admin.${artifact.status}`)}</span><span>{artifact.original_filename}</span></div></div><div className={styles.formActions}>{!disabled && artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{!disabled && artifact.download_url ? <a className={styles.secondaryButton} href={artifact.download_url}>{t('action.download')}</a> : null}</div></div>{artifact.status === 'active' ? <><form className={styles.artifactControls} onSubmit={metadataForm.handleSubmit((values) => updateMutation.mutate(values))}><FormField label={t('fields.artifactType')}><select {...metadataForm.register('artifactType')}>{artifactTypes.map((artifactType) => <option key={artifactType} value={artifactType}>{t(`artifact.type.${artifactType}`)}</option>)}</select></FormField><FormField label={t('fields.displayName')}><input {...metadataForm.register('displayName', { required: true })} /></FormField><button className={styles.secondaryButton} disabled={disabled || updateMutation.isPending || !csrfToken} type="submit">{t('action.updateArtifact')}</button></form><form className={styles.artifactControls} onSubmit={replacementForm.handleSubmit((values) => replaceMutation.mutate(values))}><FormField label={t('fields.replacementFile')}><input type="file" {...replacementForm.register('files', { required: true })} /></FormField><button className={styles.secondaryButton} disabled={disabled || replaceMutation.isPending || !csrfToken} type="submit">{t('action.replaceArtifact')}</button></form><button className={styles.dangerButton} disabled={disabled || lifecycleMutation.isPending || !csrfToken} type="button" onClick={() => lifecycleMutation.mutate('delete')}>{t('action.delete')}</button></> : <button className={styles.secondaryButton} disabled={disabled || lifecycleMutation.isPending || !csrfToken} type="button" onClick={() => lifecycleMutation.mutate('restore')}>{t('action.restore')}</button>}{pending ? <p role="status">{t('feedback.working')}</p> : null}{failed ? <p className={styles.error} role="alert">{t('feedback.artifactFailed')}</p> : null}</section>
 }
 
 export function ProjectAssignmentFields({ form, people, taxonomy }: { form: UseFormReturn<ProjectFormValues>; people: AdminPerson[]; taxonomy: TaxonomyValue[] }) {
@@ -304,30 +409,58 @@ function AssignmentSelect({ label, name, options, form }: { label: string; name:
 function CatalogSelect({ label, register, options }: { label: string; register: ReturnType<UseFormRegister<ProjectFormValues>>; options: CatalogsResponse['programs'] }) { return <FormField label={label}><select {...register}><option value="" />{options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></FormField> }
 function FormField({ label, error, children }: { label: string; error?: string; children: ReactNode }) { return <div className={styles.field}><label><span>{label}</span>{children}</label>{error ? <span className={styles.fieldError} role="alert">{error}</span> : null}</div> }
 
-export function DeleteConfirmation({ confirmationValue, onCancel, onConfirm }: { confirmationValue: string; onCancel: () => void; onConfirm: () => void }) {
+export function DeleteConfirmation({ confirmationValue, onCancel, onConfirm, pending = false }: { confirmationValue: string; onCancel: () => void; onConfirm: () => void; pending?: boolean }) {
   const { t } = useTranslation(); const [confirmation, setConfirmation] = useState('')
-  return <div className={styles.dialogBackdrop} role="presentation"><section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="delete-title"><h2 id="delete-title">{t('admin.deleteTitle')}</h2><p>{t('admin.deleteDescription')}</p><p>{t('admin.deletePrompt', { value: confirmationValue })}</p><label className={styles.field}>{t('fields.confirmDelete')}<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label><div className={styles.formActions}><button className={styles.dangerButton} disabled={confirmation !== confirmationValue} onClick={onConfirm}>{t('action.delete')}</button><button className={styles.secondaryButton} onClick={onCancel}>{t('action.cancel')}</button></div></section></div>
+  const inputReference = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    inputReference.current?.focus()
+    return () => previousFocus?.focus()
+  }, [])
+  const trapFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      onCancel()
+      return
+    }
+    if (event.key !== 'Tab' || !dialogRef.current) return
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>('button, input')
+    if (!focusable.length) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+  return <div className={styles.dialogBackdrop} onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel() }} role="presentation"><section aria-describedby="delete-description" aria-labelledby="delete-title" className={styles.dialog} id="delete-dialog" onKeyDown={trapFocus} ref={dialogRef} role="dialog" aria-modal="true"><h2 id="delete-title">{t('admin.deleteTitle')}</h2><p id="delete-description">{t('admin.deleteDescription')}</p><p>{t('admin.deletePrompt', { value: confirmationValue })}</p><label className={styles.field}>{t('fields.confirmDelete')}<input onChange={(event) => setConfirmation(event.target.value)} ref={inputReference} value={confirmation} /></label><div className={styles.formActions}><button className={styles.dangerButton} disabled={pending || confirmation !== confirmationValue} onClick={onConfirm}>{t('action.delete')}</button><button className={styles.secondaryButton} disabled={pending} onClick={onCancel}>{t('action.cancel')}</button></div></section></div>
 }
 
 function DeleteRestoreControls({ project }: { project: AdminProject }) {
   const { t } = useTranslation(); const { csrfToken } = useSession(); const client = useQueryClient(); const [confirming, setConfirming] = useState(false)
   const confirmationValue = projectDeleteConfirmation(project)
-  const mutation = useMutation({ mutationFn: async (action: 'delete' | 'restore') => { if (!csrfToken) throw new Error('CSRF token unavailable'); const request = { path: { project_id: project.id }, body: { expected_revision: project.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true as const }; return action === 'delete' ? responseData(deleteProject({ ...request, body: { ...request.body, confirmation: confirmationValue } })) : responseData(restoreProject(request)) }, onSuccess: (nextProject) => { void client.setQueryData(['admin-project', project.id], nextProject); setConfirming(false) } })
-  if (project.status === 'deleted') return <button className={styles.secondaryButton} type="button" onClick={() => mutation.mutate('restore')}>{t('action.restore')}</button>
-  return <>{confirming ? <DeleteConfirmation confirmationValue={confirmationValue} onCancel={() => setConfirming(false)} onConfirm={() => mutation.mutate('delete')} /> : null}<button className={styles.dangerButton} type="button" disabled={!confirmationValue} onClick={() => setConfirming(true)}>{t('action.delete')}</button></>
+  const mutation = useMutation({ mutationFn: async (action: 'delete' | 'restore') => { if (!csrfToken) throw new Error('CSRF token unavailable'); const request = { path: { project_id: project.id }, body: { expected_revision: project.revision }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true as const }; return action === 'delete' ? responseData(deleteProject({ ...request, body: { ...request.body, confirmation: confirmationValue } })) : responseData(restoreProject(request)) }, onSuccess: (nextProject) => { void client.setQueryData(['admin-project', project.id], nextProject); setConfirming(false) }, onError: () => { void client.invalidateQueries({ queryKey: ['admin-project', project.id] }) } })
+  if (project.status === 'deleted') return <div><button className={styles.secondaryButton} disabled={mutation.isPending || !csrfToken} type="button" onClick={() => mutation.mutate('restore')}>{t('action.restore')}</button>{mutation.isPending ? <p role="status">{t('feedback.working')}</p> : null}{mutation.isError ? <p className={styles.error} role="alert">{t('admin.lifecycleFailed')}</p> : null}</div>
+  return <div>{confirming ? <DeleteConfirmation confirmationValue={confirmationValue} onCancel={() => setConfirming(false)} onConfirm={() => mutation.mutate('delete')} pending={mutation.isPending} /> : null}<button className={styles.dangerButton} disabled={!confirmationValue || mutation.isPending} type="button" onClick={() => setConfirming(true)}>{t('action.delete')}</button>{mutation.isPending ? <p role="status">{t('feedback.working')}</p> : null}{mutation.isError ? <p className={styles.error} role="alert">{t('admin.lifecycleFailed')}</p> : null}</div>
 }
 
-function PeopleListPage() {
-  const { t } = useTranslation(); const navigate = useNavigate(); const peopleQuery = useQuery({ queryKey: ['admin-people'], queryFn: () => responseData(listAdminPeople({ query: { limit: 20 }, throwOnError: true })) }); const { csrfToken } = useSession(); const form = useForm<{ displayName: string; studentId: string; staffId: string }>({ defaultValues: { displayName: '', studentId: '', staffId: '' } }); const createMutation = useMutation({ mutationFn: async (value: { displayName: string; studentId: string; staffId: string }) => { if (!csrfToken) throw new Error('CSRF token unavailable'); if (value.studentId && !/^\d{7}$/.test(value.studentId)) throw new Error(t('feedback.invalidStudentId')); return responseData(createPerson({ body: { display_name: value.displayName, student_id: value.studentId || null, staff_id: value.staffId || null }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true })) }, onSuccess: (person) => navigate(`/admin/people/${person.id}`) })
-  return <div><h1>{t('admin.peopleTitle')}</h1><section className={styles.panel}><h2>{t('admin.newPerson')}</h2><form className={styles.form} onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}><FormField label={t('fields.displayName')} error={form.formState.errors.displayName?.message}><input {...form.register('displayName', { required: t('feedback.required') })} /></FormField><FormField label={t('fields.studentId')}><input {...form.register('studentId')} /></FormField><FormField label={t('fields.staffId')}><input {...form.register('staffId')} /></FormField><button className={styles.button} type="submit">{t('action.create')}</button></form></section>{peopleQuery.data ? <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>{t('fields.displayName')}</th><th>{t('fields.studentId')}</th><th /></tr></thead><tbody>{peopleQuery.data.items.map((person) => <tr key={person.id}><td>{person.display_name}</td><td>{person.student_id}</td><td><Link to={person.id}>{t('action.edit')}</Link></td></tr>)}</tbody></table></div> : null}</div>
+function AdminSearchPage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('admin.searchTitle')} /><AdminSearchMaintenance csrfToken={csrfToken} /></div> }
+function AdminImportUploadPage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('imports.title')} /><AdminImportUpload csrfToken={csrfToken} /></div> }
+function AdminImportReviewPage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('imports.review')} /><AdminImportReview csrfToken={csrfToken} /></div> }
+function AdminAuditPage() { const { t } = useTranslation(); return <div><PageTitle title={t('audit.title')} /><AdminAuditLog /></div> }
+function AdminProjectsRoutePage() { const { t } = useTranslation(); return <div><PageTitle title={t('admin.projectsTitle')} /><AdminProjectList /></div> }
+function AdminPeopleRoutePage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('admin.peopleTitle')} /><AdminPeopleList csrfToken={csrfToken} /></div> }
+function AdminPersonRoutePage() { const { t } = useTranslation(); const { csrfToken } = useSession(); return <div><PageTitle title={t('admin.personForm')} /><AdminPersonForm csrfToken={csrfToken} /></div> }
+function AdminProjectNewPage() { const { t } = useTranslation(); return <div><PageTitle title={t('admin.newProject')} /><ProjectFormPage isNew /></div> }
+function AdminProjectEditPage() { return <ProjectFormPage isNew={false} /> }
+
+export function AppRoutes() { return <Routes><Route element={<AppFrame />}><Route index element={<HomePage />} /><Route path="search" element={<SearchPage />} /><Route path="projects/:projectId" element={<ProjectPage />} /><Route path="people/:personId" element={<PersonPage />} /><Route path="about" element={<InformationalPage bodyKey="aboutBody" titleKey="aboutTitle" />} /><Route path="privacy" element={<InformationalPage bodyKey="privacyBody" pendingKey="privacyPending" titleKey="privacyTitle" />} /><Route path="accessibility" element={<InformationalPage bodyKey="accessibilityBody" titleKey="accessibilityTitle" />} /><Route path="terms" element={<InformationalPage bodyKey="termsBody" pendingKey="termsPending" titleKey="termsTitle" />} /><Route path="contact" element={<InformationalPage bodyKey="contactBody" pendingKey="contactPending" titleKey="contactTitle" />} /><Route path="admin/login" element={<LoginPage />} /><Route path="admin" element={<AdminGuard />}><Route index element={<AdminHome />} /><Route path="projects" element={<AdminProjectsRoutePage />} /><Route path="projects/new" element={<AdminProjectNewPage />} /><Route path="projects/:projectId/edit" element={<AdminProjectEditPage />} /><Route path="people" element={<AdminPeopleRoutePage />} /><Route path="people/:personId" element={<AdminPersonRoutePage />} /><Route path="imports" element={<AdminImportUploadPage />} /><Route path="imports/:batchId" element={<AdminImportReviewPage />} /><Route path="search" element={<AdminSearchPage />} /><Route path="audit" element={<AdminAuditPage />} /></Route><Route path="*" element={<NotFound />} /></Route></Routes> }
+
+export function App() {
+  useEffect(() => installSessionExpiryNotification(() => queryClient.setQueryData(['session'], null)), [])
+  return <ApplicationErrorBoundary><I18nextProvider i18n={i18n}><BrowserRouter basename={routerBasename}><QueryClientProvider client={queryClient}><SessionProvider><AppRoutes /></SessionProvider></QueryClientProvider></BrowserRouter></I18nextProvider></ApplicationErrorBoundary>
 }
-
-function PersonFormPage() { const { t } = useTranslation(); const { personId = '' } = useParams(); const { csrfToken } = useSession(); const personQuery = useQuery({ queryKey: ['admin-person', personId], queryFn: () => responseData(getAdminPerson({ path: { person_id: personId }, throwOnError: true })) }); const form = useForm<{ displayName: string; studentId: string; staffId: string }>({ values: { displayName: personQuery.data?.display_name ?? '', studentId: personQuery.data?.student_id ?? '', staffId: personQuery.data?.staff_id ?? '' } }); const mutation = useMutation({ mutationFn: async (values: { displayName: string; studentId: string; staffId: string }) => { if (!csrfToken || !personQuery.data) throw new Error('CSRF token unavailable'); return responseData(updatePerson({ path: { person_id: personId }, body: { expected_revision: personQuery.data.revision, display_name: values.displayName, student_id: values.studentId || null, staff_id: values.staffId || null }, headers: { 'X-CSRF-Token': csrfToken }, throwOnError: true })) } }); if (personQuery.isPending) return <p role="status">{t('feedback.loading')}</p>; return <div><h1>{t('admin.personForm')}</h1><form className={styles.form} onSubmit={form.handleSubmit((values) => mutation.mutate(values))}><FormField label={t('fields.displayName')}><input {...form.register('displayName')} /></FormField><FormField label={t('fields.studentId')}><input {...form.register('studentId')} /></FormField><FormField label={t('fields.staffId')}><input {...form.register('staffId')} /></FormField><button className={styles.button} type="submit">{t('action.saveDraft')}</button></form></div> }
-
-function AdminSearchPage() { const { csrfToken } = useSession(); return <AdminSearchMaintenance csrfToken={csrfToken} /> }
-function AdminImportUploadPage() { const { csrfToken } = useSession(); return <AdminImportUpload csrfToken={csrfToken} /> }
-function AdminImportReviewPage() { const { csrfToken } = useSession(); return <AdminImportReview csrfToken={csrfToken} /> }
-
-function Router() { return <Routes><Route element={<PublicLayout />}><Route index element={<HomePage />} /><Route path="search" element={<SearchPage />} /><Route path="projects/:projectId" element={<ProjectPage />} /><Route path="people/:personId" element={<PersonPage />} /><Route path="about" element={<StaticPage titleKey="aboutTitle" />} /><Route path="privacy" element={<StaticPage titleKey="privacyTitle" />} /><Route path="accessibility" element={<StaticPage titleKey="accessibilityTitle" />} /><Route path="terms" element={<StaticPage titleKey="termsTitle" />} /><Route path="*" element={<NotFound />} /></Route><Route path="admin/login" element={<LoginPage />} /><Route path="admin" element={<AdminGuard />}><Route index element={<AdminHome />} /><Route path="projects" element={<ProjectListPage />} /><Route path="projects/new" element={<ProjectFormPage isNew />} /><Route path="projects/:projectId/edit" element={<ProjectFormPage isNew={false} />} /><Route path="people" element={<PeopleListPage />} /><Route path="people/:personId" element={<PersonFormPage />} /><Route path="imports" element={<AdminImportUploadPage />} /><Route path="imports/:batchId" element={<AdminImportReviewPage />} /><Route path="search" element={<AdminSearchPage />} /><Route path="audit" element={<AdminAuditLog />} /></Route></Routes> }
-
-export function App() { return <ApplicationErrorBoundary><I18nextProvider i18n={i18n}><BrowserRouter basename={routerBasename}><QueryClientProvider client={queryClient}><SessionProvider><Router /></SessionProvider></QueryClientProvider></BrowserRouter></I18nextProvider></ApplicationErrorBoundary> }
