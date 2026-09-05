@@ -42,12 +42,13 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # The migrate job consumes the API image and never builds its own: two
+  # services sharing one image name cannot both carry a build block, because
+  # `docker compose build` exports each target and the second export fails
+  # with "image ... already exists".
   migrate:
     image: ${AUSE_API_IMAGE:-ause-discovery-api:dev}
     logging: *default-logging
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
     command: ["migrate"]
     environment:
       AUSE_ENV: ${AUSE_ENV:-development}

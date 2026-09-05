@@ -120,6 +120,10 @@ Status as of 2026-09-05: the technical MVP is complete at commit `1cc5dc6`. All 
 - The final API runtime uses a minimal pinned Alpine image with current OpenSSL packages, the refreshed pinned Nginx image is clean, and Trivy reports zero high or critical findings for both final images and both Go binaries. Govulncheck reports no reachable vulnerabilities and pnpm audit reports no known vulnerabilities.
 - Full PostgreSQL-backed Go tests, frontend lint, type checking, 59 component tests, root and subpath builds, deterministic generation, Compose rendering, action-pin checks, dependency verification, image builds, live acceptance, restart recovery, and browser acceptance passed. No external deployment, publication, registry push, or production mutation occurred.
 
+## Post-MVP maintenance
+
+- The `migrate` service no longer declares its own build block because it shares `AUSE_API_IMAGE` with `api`; parallel export of the same tag made `docker compose build`, `make seed`, and `make compose-up` fail with `image ... already exists`. Local builds and the documented runbook rehearsal path (`docker compose build`) now build only `api` and `web`, verified against a disposable local project.
+
 ## Active implementation work
 
 - No technical MVP implementation work remains. Launch readiness begins when the external inputs listed below are available.

@@ -71,7 +71,7 @@ migrate:
 	docker compose run --rm migrate
 
 seed:
-	docker compose build api migrate
+	docker compose build api
 	docker compose up --wait postgres
 	docker compose run --rm migrate
 	docker compose run --rm --no-deps --entrypoint /usr/local/bin/ausectl api catalog sync

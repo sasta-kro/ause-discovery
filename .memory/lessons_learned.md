@@ -77,3 +77,7 @@ An acceptance command can pass an environment variable that the test runner neve
 ## Scan final runtime images
 
 A digest pin guarantees repeatability but can retain packages with available security fixes. Scan the fully built runtime image rather than only the source base or builder stage, refresh reviewed base digests when upstream images are rebuilt, and apply explicit runtime package upgrades when a pinned base still carries a fixed high-severity advisory.
+
+## Shared Compose image names and build blocks
+
+Two Compose services that share one image name, such as `api` and `migrate` both tagging `AUSE_API_IMAGE`, cannot both declare a `build` block. `docker compose build` exports every target and the second export fails with `image ... already exists`, canceling sibling builds. The consumer service must reference the image only; commands that build it explicitly should name the building service alone.
