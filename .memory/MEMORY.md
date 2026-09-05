@@ -24,6 +24,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 - `mvp_implementation_status.md` will contain verified implementation state after application work begins.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
 - `archives/session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
+- `archives/history-rewrite-2026-09-05.md` preserves the old-to-new commit map for correlating earlier reports and conversations.
 
 ## Maintenance rules
 
@@ -36,8 +37,8 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-05, the AUSE Discovery technical MVP is complete at commit `be7e0c1`. Foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, CI and operator readiness, product coherence, and final product acceptance are verified. Final acceptance covered fresh migration and catalog synchronization, authenticated administration, public discovery, Artifact serving, CSV and XLSX imports, search outage and rebuild recovery, restart persistence, root and subpath deployments, browser accessibility, dependency checks, and runtime image scans. No unresolved technical MVP defect remains. Production ownership, URLs, infrastructure, approved institutional content, and other launch-time inputs remain external launch-readiness work.
+As of 2026-09-05, the AUSE Discovery technical MVP is complete at commit `1cc5dc6`. Foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, CI and operator readiness, product coherence, and final product acceptance are verified. Final acceptance covered fresh migration and catalog synchronization, authenticated administration, public discovery, Artifact serving, CSV and XLSX imports, search outage and rebuild recovery, restart persistence, root and subpath deployments, browser accessibility, dependency checks, and runtime image scans. No unresolved technical MVP defect remains. Production ownership, URLs, infrastructure, approved institutional content, and other launch-time inputs remain external launch-readiness work.
 
 ## Implementation workflow
 
-Starting after commit `722a6ff`, each remaining vertical uses a split author-review workflow. A planning and review task writes one bounded implementation brief. A lower-cost coding task implements and commits that brief. The planning and review task then inspects the complete diff, commit history, focused verification evidence, and affected integration boundaries before accepting the increment or requesting corrections. Only an accepted increment becomes the baseline for the next brief.
+Starting after commit `722a6ff`, each remaining vertical uses a split author-review workflow between two different model sessions. A planning and review session (the reviewer model) writes one bounded implementation brief and later inspects the complete diff, commit history, focused verification evidence, and affected integration boundaries before accepting the increment or returning a bounded correction list. A separate implementation session (the coder model) implements the brief, runs focused verification, and commits; it never accepts its own work, publishes, deploys, or starts final acceptance. Only an accepted increment becomes the baseline for the next brief. This workflow carried the repository through the technical MVP; future sessions must read these files before planning further work.

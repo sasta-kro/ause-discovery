@@ -31,7 +31,7 @@ As of 2026-09-02:
 
 - The product specification owns requirements and product behavior.
 - The implementation guide is an architectural overlay and executable build map, not a restatement or compliance regime.
-- Repository work proceeds serially in one primary session that owns architecture, implementation, integration, and acceptance assessment.
+- From commit `722a6ff` through technical MVP completion, repository work used the split author-review workflow described in `MEMORY.md`: a reviewer model session wrote briefs and accepted increments, and a separate coder model session implemented them. The coder session never accepts its own work.
 - Local implementation details follow existing contracts and the simplest compatible structure.
 - Recoverable unknowns and launch-time inputs never block unrelated local development.
 - GitHub ownership, registry ownership, final URLs, VM details, branding, and legal content affect only their direct integration or launch work.

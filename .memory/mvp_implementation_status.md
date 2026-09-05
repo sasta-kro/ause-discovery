@@ -2,7 +2,7 @@
 
 ## Technical completion
 
-Status as of 2026-09-05: the technical MVP is complete at commit `be7e0c1`. All planned implementation increments and final product-completion verification passed. Remaining production ownership, infrastructure, approved content, and legal values are launch-readiness inputs rather than technical MVP blockers.
+Status as of 2026-09-05: the technical MVP is complete at commit `1cc5dc6`. All planned implementation increments and final product-completion verification passed. Remaining production ownership, infrastructure, approved content, and legal values are launch-readiness inputs rather than technical MVP blockers.
 
 ## Verified increments
 

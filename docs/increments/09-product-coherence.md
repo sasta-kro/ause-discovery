@@ -8,7 +8,7 @@ This is one bounded frontend and web-serving increment. Complete the shared appl
 
 Do not perform final technical MVP acceptance in this increment. The reviewing task owns the broader clean-stack, restart, recovery, cross-system, security, and accessibility acceptance pass after this increment is accepted.
 
-The accepted implementation baseline is commit `45154a1` (`Corrected CI branch and image metadata contracts`). Commit `1eb1b9e` only advances the accepted-checkpoint pointer. Treat the latest repository commit and this brief checkpoint as an unfinished handoff layered on the accepted application baseline. Preserve all accepted behavior.
+The accepted implementation baseline is commit `27ecdd0` (`Corrected CI branch and image metadata contracts`). Commit `dcc1867` only advances the accepted-checkpoint pointer. Treat the latest repository commit and this brief checkpoint as an unfinished handoff layered on the accepted application baseline. Preserve all accepted behavior.
 
 ## Required reading before coding
 
@@ -518,7 +518,7 @@ The increment is ready for review only when all conditions below hold:
 - Compose renders with the new internal web port.
 - starter assets are removed only after tracked-reference checks.
 - `.memory/mvp_implementation_status.md` records implemented behavior and exact focused verification without declaring final technical MVP acceptance.
-- `.memory/MEMORY.md` continues to name `45154a1` as the accepted review baseline until this implementation passes independent review. It may state that product coherence is submitted for review.
+- `.memory/MEMORY.md` continues to name `27ecdd0` as the accepted review baseline until this implementation passes independent review. It may state that product coherence is submitted for review.
 - `.memory/lessons_learned.md` changes only for a verified reusable failure pattern.
 - no unrelated source, generated output, dependency, lockfile, CI, or backend changes are present.
 - `.DS_Store` remains untracked and unstaged.
@@ -546,4 +546,4 @@ The completion report must include:
 - final `git status --short` output;
 - disposable Docker resources removed and persistent resources preserved.
 
-The reviewing task will inspect the complete diff from `45154a1` through the submitted commit, confirm that the brief checkpoint and accepted implementation history remain intact, rerun focused checks where useful, and either accept the increment or return a bounded correction list. Final integrated technical MVP verification starts only after acceptance and checkpoint advancement.
+The reviewing task will inspect the complete diff from `27ecdd0` through the submitted commit, confirm that the brief checkpoint and accepted implementation history remain intact, rerun focused checks where useful, and either accept the increment or return a bounded correction list. Final integrated technical MVP verification starts only after acceptance and checkpoint advancement.

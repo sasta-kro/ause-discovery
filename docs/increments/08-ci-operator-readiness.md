@@ -8,7 +8,7 @@ This is one bounded infrastructure and documentation increment. Add reliable Git
 
 Do not implement product UI polish, Playwright acceptance paths, broad accessibility work, unrelated application behavior, automated VM deployment, or backup automation. Do not push a Git tag, trigger a release, publish an image, deploy a stack, or contact an external production system.
 
-The accepted baseline is commit `2fa316b` (`Corrected audit actor normalization, retry, and memory routing`). Preserve all accepted application behavior.
+The accepted baseline is commit `69b5de7` (`Corrected audit actor normalization, retry, and memory routing`). Preserve all accepted application behavior.
 
 ## Required reading before coding
 
@@ -482,4 +482,4 @@ The completion report must include:
 - final `git status --short` output;
 - confirmation that disposable resources were removed and persistent resources were preserved.
 
-The reviewing task will inspect the complete diff from `2fa316b` through the submitted commit, verify workflow permissions and triggers, compare documented commands with actual CLI behavior, rerun focused local checks where useful, and either accept the increment or return a bounded correction list. Do not rewrite accepted commits.
+The reviewing task will inspect the complete diff from `69b5de7` through the submitted commit, verify workflow permissions and triggers, compare documented commands with actual CLI behavior, rerun focused local checks where useful, and either accept the increment or return a bounded correction list. Do not rewrite accepted commits.
