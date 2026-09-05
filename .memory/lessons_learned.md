@@ -65,3 +65,15 @@ Opaque cursor length bounds must be derived from the worst contract-legal sort k
 ## One-off fetches need distinct cache keys
 
 A `fetchQuery` against a key observed by a live page query writes its failure into that shared entry, flipping the page into its error branch even when the failure is handled locally. Use a separate key for one-off fetches and copy successful results into the observed entry with `setQueryData`.
+
+## Generated server fallbacks can hide missing endpoints
+
+Embedding an OpenAPI generator's unimplemented server type allows the controller to compile while undeclared methods return a runtime `501`. Compare every generated interface method with concrete controller methods and exercise newly required endpoints through the live HTTP boundary. Compilation alone does not prove transport completeness.
+
+## Acceptance overrides need target evidence
+
+An acceptance command can pass an environment variable that the test runner never reads and silently fall back to another live stack. Keep one canonical variable name in configuration and documentation, and prove the selected target through a target-specific record, port, or request log before accepting browser results.
+
+## Scan final runtime images
+
+A digest pin guarantees repeatability but can retain packages with available security fixes. Scan the fully built runtime image rather than only the source base or builder stage, refresh reviewed base digests when upstream images are rebuilt, and apply explicit runtime package upgrades when a pinned base still carries a fixed high-severity advisory.

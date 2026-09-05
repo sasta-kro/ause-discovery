@@ -36,7 +36,7 @@ Read `../CONTEXT.md` before changing domain terminology. Read `../docs/ause-disc
 
 ## Current checkpoint
 
-As of 2026-09-05, foundation, data-contract, identity and core record, Artifact, search, import, audit administration, and CI with operator-readiness increments are verified. The product-coherence increment defined by `docs/increments/09-product-coherence.md` is implemented with four review correction rounds, including the backend administrator list cursor contract with the serialization-safe 4096-character cursor bound, and is submitted for a further independent review round. Commit `45154a1` remains the accepted review baseline until that review accepts the increment; final product-completion verification follows acceptance and checkpoint advancement. Remaining work proceeds through the split author-review workflow described below.
+As of 2026-09-05, the AUSE Discovery technical MVP is complete at commit `be7e0c1`. Foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, CI and operator readiness, product coherence, and final product acceptance are verified. Final acceptance covered fresh migration and catalog synchronization, authenticated administration, public discovery, Artifact serving, CSV and XLSX imports, search outage and rebuild recovery, restart persistence, root and subpath deployments, browser accessibility, dependency checks, and runtime image scans. No unresolved technical MVP defect remains. Production ownership, URLs, infrastructure, approved institutional content, and other launch-time inputs remain external launch-readiness work.
 
 ## Implementation workflow
 
