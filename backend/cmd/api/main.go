@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -70,14 +71,19 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 	}
 	defer databasePool.Close()
 
-	if err := databasePool.Ping(applicationContext); err != nil {
+	startupContext, cancelStartup := context.WithTimeout(applicationContext, 10*time.Second)
+	err = database.CheckSchema(startupContext, databasePool)
+	cancelStartup()
+	if err != nil {
 		return err
 	}
 	go newSearchReconciler(databasePool, configuration, logger).Run(applicationContext)
 	go newImportCleaner(databasePool, configuration, logger).Run(applicationContext)
 
 	mux := http.NewServeMux()
-	httpserver.HealthHandler{DatabasePool: databasePool}.Register(mux, configuration.PublicBasePath)
+	httpserver.HealthHandler{CheckReadiness: func(ctx context.Context) error {
+		return httpserver.CheckReadiness(ctx, databasePool, configuration)
+	}}.Register(mux, configuration.PublicBasePath)
 	apiPath := configuration.PublicBasePath + "api/v1/"
 	mux.Handle(apiPath, httpserver.NewAPIHandler(databasePool, configuration))
 
@@ -131,15 +137,20 @@ func runHealthcheck() int {
 		return 1
 	}
 
-	context, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	databasePool, err := pgxpool.New(context, configuration.DatabaseURL)
+	host, port, err := net.SplitHostPort(configuration.ListenAddress)
 	if err != nil {
 		return 1
 	}
-	defer databasePool.Close()
-
-	if err := databasePool.Ping(context); err != nil {
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	response, err := client.Get("http://" + net.JoinHostPort(host, port) + configuration.PublicBasePath + "health/ready")
+	if err != nil {
+		return 1
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
 		return 1
 	}
 

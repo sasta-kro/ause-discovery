@@ -20,11 +20,16 @@ make check-integration  # Go tests with PostgreSQL integration (compose PostgreS
 make generate-check     # regenerates sqlc and OpenAPI output and fails on drift
 make check-images       # builds the API and web images, including the root base path variant
 make check-compose      # validates the rendered Compose configuration
-make vuln-report        # govulncheck plus an advisory pnpm audit
+make vuln-report        # govulncheck plus the pnpm audit
 make check-action-pins-test  # fixture test for the action-pin script
+make test-integration   # starts dependencies and runs PostgreSQL-backed tests
+make test-e2e           # runs browser acceptance against the configured live stack
+make test-all           # runs the complete local verification set
 ```
 
 `make generate-check` requires a prior `make install` so the generator workspace has `node_modules`; the TypeScript generator runs through the pinned Node container.
+
+Browser acceptance defaults to `http://localhost:8088/ause-discovery/`. Set `AUSE_E2E_BASE_URL` for another live stack. Set `AUSE_ACCEPTANCE_PROJECT_TITLE` and `AUSE_ACCEPTANCE_PROJECT_ID` to include the configured public Project and Artifact path; otherwise that fixture-dependent test is skipped.
 
 ## Local Compose bootstrap
 

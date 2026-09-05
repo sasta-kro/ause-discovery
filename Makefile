@@ -53,12 +53,13 @@ test:
 	docker build -f backend/Dockerfile -t ause-discovery-api:test .
 
 test-integration:
-	docker compose up --build --wait postgres meilisearch
+	docker compose up -d --wait postgres meilisearch
+	$(MAKE) go-test-integration
 
 test-e2e:
 	pnpm --filter @ause-discovery/frontend exec playwright test
 
-test-all: lint test
+test-all: check-source check-integration generate-check check-compose check-images vuln-report test-e2e
 
 compose-up:
 	docker compose up --build -d
@@ -125,8 +126,7 @@ check-images:
 	docker build -f frontend/Dockerfile --build-arg VITE_PUBLIC_BASE_PATH=/ -t ause-discovery-web-root:check .
 
 # govulncheck gates on reachable vulnerabilities in shipped Go code. The pnpm
-# lockfile audit is advisory because it also covers development tooling that is
-# never shipped; findings must be triaged before release.
+# lockfile audit covers both shipped dependencies and development tooling.
 vuln-report:
 	$(GO_RUN) -w /workspace/backend $(GO_TOOLCHAIN_IMAGE) go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
-	pnpm audit --audit-level high || printf 'advisory: pnpm audit reported findings; triage before release\n'
+	pnpm audit --audit-level high

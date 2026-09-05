@@ -119,7 +119,7 @@ All commands use the same `--env-file` selection as bootstrap. `ausectl` is invo
 ## 6. Health and observability
 
 - Liveness: `/<base-path>health/live` returns `200` when the API process is serving.
-- Readiness: `/<base-path>health/ready` returns `200` only when PostgreSQL answers a ping. A readiness failure with a live process means PostgreSQL is unavailable or unreachable; investigate the database before restarting the API.
+- Readiness: `/<base-path>health/ready` returns `200` only when PostgreSQL exposes the supported applied migration and the Artifact and import directories accept a temporary write probe. A readiness failure with a live process requires investigation of database connectivity, schema compatibility, and storage availability. The container health check calls this HTTP endpoint, so it also detects an unavailable API listener.
 - When Meilisearch is unavailable, the API stays available: Project and Person detail pages work, while search returns a controlled service-unavailable response and pending synchronization retries automatically.
 - Production logs are structured JSON including timestamp, level, request ID, and a stable code where applicable. Request IDs are also returned in the `X-Request-ID` response header.
 - `docker compose logs` output can contain operational detail; do not paste logs from production into public channels. Never print the environment file.

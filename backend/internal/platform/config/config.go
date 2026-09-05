@@ -148,7 +148,12 @@ func (config Config) EnsureStorageDirectories() error {
 		if err := os.MkdirAll(directory, 0750); err != nil {
 			return fmt.Errorf("create required storage directory %q: %w", directory, err)
 		}
+	}
+	return config.CheckStorageDirectories()
+}
 
+func (config Config) CheckStorageDirectories() error {
+	for _, directory := range []string{config.ArtifactRoot, config.ImportTemporaryRoot} {
 		probe, err := os.CreateTemp(directory, ".write-check-")
 		if err != nil {
 			return fmt.Errorf("verify required storage directory %q: %w", directory, err)

@@ -20,6 +20,7 @@ import (
 	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/audit"
 	"ause-discovery.local/backend/internal/auth"
+	"ause-discovery.local/backend/internal/catalog"
 	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
@@ -40,12 +41,14 @@ type Controller struct {
 	api.Unimplemented
 	Audit     audit.Service
 	Auth      auth.Service
+	Catalogs  catalog.Service
 	Artifacts artifacts.Service
 	Imports   importservice.Service
 	People    people.Service
 	Projects  projects.Service
 	Search    searchservice.Service
 	Config    config.Config
+	Readiness func(context.Context) error
 }
 type requestContextKey string
 
@@ -55,12 +58,14 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler
 	controller := Controller{
 		Audit:     audit.Service{Pool: pool},
 		Auth:      auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL},
+		Catalogs:  catalog.Service{Pool: pool},
 		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
 		People:    people.Service{Pool: pool},
 		Projects:  projects.Service{Pool: pool},
 		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
 		Config:    configuration,
+		Readiness: func(ctx context.Context) error { return CheckReadiness(ctx, pool, configuration) },
 	}
 	router := chi.NewRouter()
 	router.Use(requestID, securityHeaders)
@@ -72,6 +77,28 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler
 			problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", "Invalid request parameters.")
 		},
 	})
+}
+
+func (controller *Controller) GetCatalogs(writer http.ResponseWriter, request *http.Request) {
+	values, err := controller.Catalogs.List(request.Context())
+	if err != nil {
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+		return
+	}
+	response := api.CatalogsResponse{Programs: make([]api.CatalogVersion, len(values.Programs)), Majors: make([]api.CatalogVersion, len(values.Majors)), Courses: make([]api.CatalogVersion, len(values.Courses)), Taxonomy: make([]api.TaxonomyValue, len(values.Taxonomy))}
+	for index, value := range values.Programs {
+		response.Programs[index] = api.CatalogVersion{Id: value.ID, Key: value.Key, Label: value.Label, ValidFromYear: value.ValidFromYear, ValidToYear: value.ValidToYear}
+	}
+	for index, value := range values.Majors {
+		response.Majors[index] = api.CatalogVersion{Id: value.ID, Key: value.Key, Label: value.Label, ValidFromYear: value.ValidFromYear, ValidToYear: value.ValidToYear}
+	}
+	for index, value := range values.Courses {
+		response.Courses[index] = api.CatalogVersion{Id: value.ID, Key: value.Key, Label: value.Label, ValidFromYear: value.ValidFromYear, ValidToYear: value.ValidToYear}
+	}
+	for index, value := range values.Taxonomy {
+		response.Taxonomy[index] = api.TaxonomyValue{Id: value.ID, Dimension: api.TaxonomyDimension(value.Dimension), Key: value.Key, Labels: value.Labels, Description: value.Description, SortOrder: value.SortOrder}
+	}
+	writeJSON(writer, http.StatusOK, response)
 }
 
 func (controller *Controller) Login(writer http.ResponseWriter, request *http.Request) {

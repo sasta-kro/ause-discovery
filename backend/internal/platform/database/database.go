@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -19,6 +20,20 @@ type TransactionRunner struct {
 type MigrationState struct {
 	Version int64
 	Applied bool
+}
+
+// Schema compatibility changes with the migration set shipped by this binary.
+const SupportedSchemaVersion int64 = 1
+
+func CheckSchema(ctx context.Context, pool *pgxpool.Pool) error {
+	state, err := MigrationStatus(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("read migration state: %w", err)
+	}
+	if !state.Applied || state.Version != SupportedSchemaVersion {
+		return fmt.Errorf("unsupported database schema version %d (expected %d applied)", state.Version, SupportedSchemaVersion)
+	}
+	return nil
 }
 
 func NewTransactionRunner(pool *pgxpool.Pool) TransactionRunner {

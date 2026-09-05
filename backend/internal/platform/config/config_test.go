@@ -1,6 +1,30 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestStorageReadinessDoesNotRecreateMissingDirectories(t *testing.T) {
+	root := t.TempDir()
+	configuration := Config{ArtifactRoot: filepath.Join(root, "artifacts"), ImportTemporaryRoot: filepath.Join(root, "imports")}
+	if err := configuration.EnsureStorageDirectories(); err != nil {
+		t.Fatal(err)
+	}
+	if err := configuration.CheckStorageDirectories(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(configuration.ArtifactRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := configuration.CheckStorageDirectories(); err == nil {
+		t.Fatal("missing storage reported ready")
+	}
+	if _, err := os.Stat(configuration.ArtifactRoot); !os.IsNotExist(err) {
+		t.Fatal("readiness recreated missing storage")
+	}
+}
 
 func TestNormalizePublicBasePath(t *testing.T) {
 	testCases := []struct {

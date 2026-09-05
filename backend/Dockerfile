@@ -11,9 +11,10 @@ COPY backend/migrations ./migrations
 RUN go build -trimpath -ldflags="-s -w" -o /out/ause-api ./cmd/api
 RUN go build -trimpath -ldflags="-s -w" -o /out/ausectl ./cmd/ausectl
 
-FROM golang:1.27.0-alpine3.23@sha256:3747dcba41c8b0db3211fda4db61638b980e17ac5bb3c94460a975a9cfe19395
+FROM alpine:3.23@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
 
-RUN addgroup -S ause && \
+RUN apk upgrade --no-cache libcrypto3 libssl3 && \
+    addgroup -S ause && \
     adduser -S -G ause ause && \
     mkdir -p /var/lib/ause-discovery && \
     chown ause:ause /var/lib/ause-discovery

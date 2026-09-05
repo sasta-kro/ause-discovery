@@ -22,6 +22,9 @@ func TestDatabaseContract(t *testing.T) {
 	pool := createEmptyDatabase(t, context, databaseURL)
 	defer pool.Close()
 
+	if err := CheckSchema(context, pool); err == nil {
+		t.Fatal("empty database reported a supported schema")
+	}
 	if err := ApplyMigrations(context, pool); err != nil {
 		t.Fatalf("ApplyMigrations returned an error: %v", err)
 	}
@@ -39,6 +42,15 @@ func TestDatabaseContract(t *testing.T) {
 	assertMigrationCreatedTables(t, context, pool)
 	assertConstraints(t, context, pool)
 	assertTransactionRollback(t, context, pool)
+	if err := CheckSchema(context, pool); err != nil {
+		t.Fatalf("migrated database rejected: %v", err)
+	}
+	if _, err := pool.Exec(context, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (2, true)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckSchema(context, pool); err == nil {
+		t.Fatal("future schema accepted")
+	}
 }
 
 func createEmptyDatabase(t *testing.T, context context.Context, databaseURL string) *pgxpool.Pool {
