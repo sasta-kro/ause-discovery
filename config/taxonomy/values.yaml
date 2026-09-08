@@ -32,3 +32,12 @@ values:
   - {id: 018f0000-0000-7000-8000-000000000155, dimension: technology, key: unity, labels: {en: Unity}, sort_order: 5}
   - {id: 018f0000-0000-7000-8000-000000000156, dimension: technology, key: python, labels: {en: Python}, sort_order: 6}
   - {id: 018f0000-0000-7000-8000-000000000157, dimension: technology, key: firebase, labels: {en: Firebase}, sort_order: 7}
+  - {id: 018f0000-0000-7000-8000-000000000146, dimension: topic, key: recommender_system, labels: {en: Recommender System}, sort_order: 6}
+  - {id: 018f0000-0000-7000-8000-000000000158, dimension: technology, key: nextjs, labels: {en: Next.js}, sort_order: 8}
+  - {id: 018f0000-0000-7000-8000-000000000159, dimension: technology, key: nodejs, labels: {en: Node.js}, sort_order: 9}
+  - {id: 018f0000-0000-7000-8000-00000000015a, dimension: technology, key: mongodb, labels: {en: MongoDB}, sort_order: 10}
+  - {id: 018f0000-0000-7000-8000-00000000015b, dimension: technology, key: laravel, labels: {en: Laravel}, sort_order: 11}
+  - {id: 018f0000-0000-7000-8000-00000000015c, dimension: technology, key: wordpress, labels: {en: WordPress}, sort_order: 12}
+  - {id: 018f0000-0000-7000-8000-00000000015d, dimension: technology, key: kotlin, labels: {en: Kotlin}, sort_order: 13}
+  - {id: 018f0000-0000-7000-8000-00000000015e, dimension: technology, key: mysql, labels: {en: MySQL}, sort_order: 14}
+  - {id: 018f0000-0000-7000-8000-00000000015f, dimension: technology, key: unreal_engine, labels: {en: Unreal Engine}, sort_order: 15}

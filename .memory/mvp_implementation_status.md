@@ -138,3 +138,32 @@ Status as of 2026-09-05: the technical MVP is complete at commit `1cc5dc6`. All 
 ## Launch-only inputs
 
 GitHub ownership, registry ownership, production URL, VM details, branding, approved legal content, privacy approval, TLS ownership, and final institutional catalog content remain launch-readiness inputs rather than technical MVP blockers.
+
+## Post-MVP improvement backlog
+
+Recorded 2026-09-05 after the SP metadata extraction work in `tools/sp-import/`. The product specification defers exact vocabularies (section 59) and the roadmap (section 41) remain the governing documents; this list tracks concrete accepted follow-ups so any session can pick them up.
+
+Applied to version-controlled catalogs, pending the next `ausectl catalog sync` (`make seed`) to reach PostgreSQL:
+
+- `config/catalogs/academic.yaml` now covers pre-2020 years (`valid_from_year: 1990`) and adds the `information_technology` program; the `senior_project` course version links both program versions. The SP corpus (2016-2025, IT and CS departments) imports against both programs.
+- `config/taxonomy/values.yaml` gained nine keys: topic `recommender_system`; technologies `nextjs`, `nodejs`, `mongodb`, `laravel`, `wordpress`, `kotlin`, `mysql`, `unreal_engine`. Extension policy: only abstract-verifiable implementation stacks, no overlap with broader facets (Raspberry Pi and wearables stay under `embedded_hardware`, sentiment analysis under `nlp`, and so on). The extractor's unmapped-vocabulary report lists deliberately rejected candidates.
+
+Open items:
+
+1. Run `make seed` on the next stack bring-up; catalog sync is additive and non-destructive.
+2. Institutional vocabulary review remains a launch input. Real AU course codes (IT 4291, IT 4299, ITX 3010, CS 3200, CSX 3011) currently collapse into the single `senior_project` course; splitting per-phase courses is an institutional catalog decision.
+3. Proposal-phase front matter cannot import (abstract is a hard adapter rule); import those projects once final-report PDFs are processed.
+4. Full-corpus extraction: `resources/all-sp-projects` holds 221 projects (355 files including slides, ZIPs, and a readme). Trim with sp-frontmatter-extractor first, then run `tools/sp-import`; expect additional layout generations.
+5. Known sample residuals: 1934 cover merged an introductory sentence into the title; 2238 missed one student in word-split mode; 26010 prefers the approval title over the body title; classification deliberately ignores methodology-page evidence beyond the abstract.
+6. Production proxy adjustments from the deployment review: bind the published web port to loopback only, and preserve `X-Forwarded-Proto` through the container Nginx so HTTPS same-origin validation holds.
+
+## Post-MVP correction backlog (2026-09-05, live import testing)
+
+- Import review needs bulk selection controls: a select-all-valid-rows action and an acknowledge-all-warnings action. Row-by-row clicking does not scale to 40-plus row batches.
+- Import preview rows wrap text permanently; browser zoom does not restore layout. The wrapping rule on table cells needs a fix so long values truncate or wrap normally inside a scrollable region.
+- The SP metadata extractor moved to its own repository, `tools/ausesp-data-extractor` (remote `git@github.com:sasta-kro/ausesp-data-extractor.git`, nested and gitignored by the main repository). The main repository consumes only the result CSV. Its README carries the handoff notes and the observed extraction defects (advisor `).` on 2006, underscore committee names on 2121, missed abstracts, name-swallowing titles).
+- Until the extractor reaches reviewed quality, the demo import source is the manually verified CSV (`reviewed-import.csv`, built from agent-read documents), not the pipeline output.
+
+## Legacy source-file numbers (2026-09-05)
+
+The numeric prefixes on senior-project source files (1825, 2006, and similar) are opaque legacy identifiers inherited from a previous university system. Their semantics are unknown. Decision: keep the numbers internal only, as the file-name source of `import_key` (`sp-<number>`) and available for the optional `projects.reference_code` column; never display them publicly. The reviewed import CSV emits an empty `reference_code`. If a public eyebrow label is ever wanted there, it must wait for institutional confirmation of what the numbers mean. The public Project page currently renders `reference_code` when present; the eyebrow disappears on its own for rows without one.

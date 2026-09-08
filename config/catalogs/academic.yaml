@@ -4,7 +4,14 @@ programs:
     versions:
       - id: 018f0000-0000-7000-8000-000000000011
         label: Computer Science
-        valid_from_year: 2020
+        valid_from_year: 1990
+        major_required: false
+  - id: 018f0000-0000-7000-8000-000000000002
+    key: information_technology
+    versions:
+      - id: 018f0000-0000-7000-8000-000000000012
+        label: Information Technology
+        valid_from_year: 1990
         major_required: false
 courses:
   - id: 018f0000-0000-7000-8000-000000000021
@@ -13,6 +20,6 @@ courses:
       - id: 018f0000-0000-7000-8000-000000000031
         label: Senior Project
         code: CS499
-        valid_from_year: 2020
-        program_version_ids: [018f0000-0000-7000-8000-000000000011]
+        valid_from_year: 1990
+        program_version_ids: [018f0000-0000-7000-8000-000000000011, 018f0000-0000-7000-8000-000000000012]
 majors: []
