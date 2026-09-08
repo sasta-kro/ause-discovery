@@ -241,6 +241,54 @@ export function AdminImportReview({ csrfToken }: { csrfToken: string | null }) {
       ]);
     },
   });
+  const selectValidMutation = useMutation({
+    mutationFn: async () => {
+      if (!csrfToken || !batchQuery.data)
+        throw new Error("Import update prerequisites are unavailable");
+      // Rows are paginated, so walk every page and select each row whose
+      // server state is valid. Warning and error rows keep needing per-row
+      // acknowledgement or source correction.
+      const updates: ImportRowUpdate[] = [];
+      let pageCursor: string | undefined;
+      do {
+        const page = (
+          await listImportRows({
+            path: { batch_id: batchId },
+            query: { limit: 100, cursor: pageCursor },
+            throwOnError: true,
+          })
+        ).data;
+        for (const row of page.items) {
+          if (row.state !== "valid") continue;
+          updates.push({
+            row_number: row.row_number,
+            selected: true,
+            acknowledge_warnings: row.warnings_acknowledged,
+            duplicate_resolution: row.duplicate_resolution,
+          });
+        }
+        pageCursor = page.page.next_cursor ?? undefined;
+      } while (pageCursor);
+      if (!updates.length) return batchQuery.data;
+      return (
+        await updateImportRows({
+          path: { batch_id: batchId },
+          body: {
+            expected_revision: batchQuery.data.revision,
+            rows: updates,
+          },
+          headers: { "X-CSRF-Token": csrfToken },
+          throwOnError: true,
+        })
+      ).data;
+    },
+    onSuccess: async (batch) => {
+      queryClient.setQueryData(["admin-import", batchId], batch);
+      await queryClient.invalidateQueries({
+        queryKey: ["admin-import-rows", batchId],
+      });
+    },
+  });
   const rows = rowsQuery.data?.items ?? [];
   const unresolved = rows.some((row) => {
     const decision = decisions[row.row_number];
@@ -256,6 +304,7 @@ export function AdminImportReview({ csrfToken }: { csrfToken: string | null }) {
     batchQuery.isError ||
     rowsQuery.isError ||
     saveMutation.isError ||
+    selectValidMutation.isError ||
     commitMutation.isError ||
     resultQuery.isError;
   const result = commitMutation.data ?? resultQuery.data;
@@ -377,6 +426,19 @@ export function AdminImportReview({ csrfToken }: { csrfToken: string | null }) {
       </div>
       {batchQuery.data?.state === "ready" ? (
         <div className={styles.formActions}>
+          <button
+            className={styles.secondaryButton}
+            disabled={
+              !csrfToken ||
+              !batchQuery.data.valid_rows ||
+              saveMutation.isPending ||
+              selectValidMutation.isPending
+            }
+            type="button"
+            onClick={() => selectValidMutation.mutate()}
+          >
+            {t("imports.selectAllValid")}
+          </button>
           <button
             className={styles.button}
             disabled={

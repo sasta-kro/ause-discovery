@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../app/i18n";
 import { AdminImportReview } from "./import-management";
 
@@ -94,6 +94,7 @@ function renderReview() {
 }
 
 describe("Import management", () => {
+  afterEach(cleanup);
   beforeEach(() => {
     vi.clearAllMocks();
     apiMocks.getImport
@@ -183,5 +184,108 @@ describe("Import management", () => {
     );
     expect(await screen.findByText("Import committed")).toBeTruthy();
     expect(screen.getByRole("link", { name: projectID })).toBeTruthy();
+  });
+
+  it("selects every valid row across pages in one persisted update", async () => {
+    const user = userEvent.setup();
+    const warningRow = {
+      ...baseRow,
+      row_number: 2,
+      import_key: "row-002",
+      state: "warning",
+    };
+    const errorRow = {
+      ...baseRow,
+      row_number: 3,
+      import_key: "row-003",
+      state: "error",
+      selected: false,
+      issues: [
+        { code: "missing_abstract", severity: "error", message: "No abstract." },
+      ],
+    };
+    const validRowOne = {
+      ...baseRow,
+      state: "valid",
+      issues: [],
+      duplicate_candidates: [],
+    };
+    const validRowTwo = {
+      ...baseRow,
+      row_number: 4,
+      import_key: "row-004",
+      state: "valid",
+      issues: [],
+      duplicate_candidates: [],
+    };
+    apiMocks.getImport.mockReset();
+    apiMocks.getImport.mockResolvedValue({
+      data: { ...baseBatch, valid_rows: 2, warning_rows: 1, error_rows: 1 },
+    });
+    const firstPage = {
+      data: {
+        items: [validRowOne, warningRow],
+        page: { limit: 2, next_cursor: "rows-page-2" },
+      },
+    };
+    const secondPage = {
+      data: { items: [errorRow, validRowTwo], page: { limit: 2 } },
+    };
+    apiMocks.listImportRows.mockReset();
+    apiMocks.listImportRows
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage)
+      .mockResolvedValue({
+        data: {
+          items: [
+            { ...validRowOne, selected: true },
+            warningRow,
+            errorRow,
+            { ...validRowTwo, selected: true },
+          ],
+          page: { limit: 2 },
+        },
+      });
+
+    renderReview();
+    await screen.findAllByText("Imported Project");
+
+    await user.click(screen.getByRole("button", { name: "Select valid rows" }));
+
+    await waitFor(() =>
+      expect(apiMocks.updateImportRows).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            expected_revision: 2,
+            rows: [
+              {
+                row_number: 1,
+                selected: true,
+                acknowledge_warnings: false,
+                duplicate_resolution: undefined,
+              },
+              {
+                row_number: 4,
+                selected: true,
+                acknowledge_warnings: false,
+                duplicate_resolution: undefined,
+              },
+            ],
+          },
+          headers: { "X-CSRF-Token": "csrf-token" },
+        }),
+      ),
+    );
+    expect(apiMocks.updateImportRows).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("checkbox", {
+            name: "Select row 1",
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(true),
+    );
   });
 });

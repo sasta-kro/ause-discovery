@@ -112,7 +112,11 @@ function AppFrame() {
   return <div className={styles.page}>
     <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
-      <Link className={styles.brand} to="/" aria-label={t('brand')}><span className={styles.brandMark} aria-hidden="true">AD</span><span className={styles.brandCopy}><span className={styles.brandName}>{t('brand')}</span><span className={styles.brandSupport}>{t('subtitle')}</span></span></Link>
+      <Link className={styles.brand} to="/" aria-label={t('brand')}>
+        <span className={styles.brandLogoCrop} aria-hidden="true">
+          <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-v1.svg`} alt="" />
+        </span>
+      </Link>
       <nav className={styles.navigation} aria-label={t('nav.primary')}>
         <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink className={styles.adminNavigationLink} to="/admin">{t('nav.admin')}</NavLink>
       </nav>
