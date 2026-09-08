@@ -80,7 +80,8 @@ describe('public search paging', () => {
 
     await user.click(screen.getByRole('button', { name: 'Next page' }))
     await screen.findByRole('heading', { name: 'Second Page Result' })
-    await user.selectOptions(screen.getByLabelText('Semester'), 'first')
+    await user.click(screen.getByText('Semester'))
+    await user.click(screen.getByRole('button', { name: /First semester.*Add/ }))
     expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ cursor: undefined, semester: 'first' }) })))
     expect((screen.getByRole('button', { name: 'Previous page' }) as HTMLButtonElement).disabled).toBe(true)
@@ -97,6 +98,29 @@ describe('public search paging', () => {
 
     await user.click(screen.getByRole('button', { name: 'Search projects' }))
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ q: 'neural' }) })))
+  })
+
+  it('searches, selects, and removes an independent metadata filter', async () => {
+    const user = userEvent.setup()
+    apiMocks.getCatalogs.mockResolvedValue({ data: {
+      programs: [], majors: [], courses: [],
+      taxonomy: [{ id: 'technology-react', key: 'react', dimension: 'technology', labels: { en: 'React' } }],
+    } })
+    apiMocks.searchProjects.mockImplementation(async () => ({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: { ...emptyFacets, technologies: [{ key: 'react', label: 'React', count: 1 }] },
+      total: 1,
+    } }))
+    renderSearch()
+    await screen.findByRole('heading', { name: 'First Page Result' })
+
+    await user.type(screen.getByLabelText('Find technology'), 'Rea')
+    await user.click(screen.getByRole('button', { name: /React.*1.*Add/i }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ technology_key: ['react'] }) })))
+
+    await user.click(screen.getByRole('button', { name: 'Remove Technology: React' }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ technology_key: undefined }) })))
   })
 
   it('synchronizes the draft field when history navigation changes the URL query', async () => {

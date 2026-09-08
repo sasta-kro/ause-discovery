@@ -4,13 +4,14 @@ import { QueryClient, QueryClientProvider, keepPreviousData, useMutation, useQue
 import { useForm, type UseFormRegister, type UseFormReturn } from 'react-hook-form'
 import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { createProject, deleteArtifact, deleteProject, getAdminProject, getCatalogs, getCsrfToken, getPublicPerson, getPublicProject, getSession, listAdminPeople, login, logout, publishProject, replaceArtifact, replaceProject, restoreArtifact, restoreProject, searchProjects, updateArtifact, uploadArtifact } from './api/generated/sdk.gen'
-import type { AdminPerson, AdminProject, Artifact, ArtifactType, CatalogsResponse, Problem, RevisionConflictProblem, SessionResponse, TaxonomyValue } from './api/generated/types.gen'
+import type { AdminPerson, AdminProject, Artifact, ArtifactType, CatalogsResponse, Problem, RevisionConflictProblem, SearchFacet, SearchFacets, SessionResponse, TaxonomyValue } from './api/generated/types.gen'
 import i18n from './app/i18n'
 import { isNotFoundFailure, isProblem } from './app/problem'
 import { publicBasePath } from './app/public-base-path'
 import { configureApiClient, routerBasename } from './app/runtime'
 import { installSessionExpiryNotification } from './app/session-expiry'
 import { highlightText } from './features/search/highlight'
+import { FacetDisclosure, SelectedFilterChip, StudentIdDisclosure, projectIdentityVariant, projectInitials, type FilterChoice } from './features/search/filter-controls'
 import { parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
 import { projectDeleteConfirmation, projectDraftSchema, toProjectDraft, toProjectFormValues, type ProjectFormValues } from './features/admin/forms'
 import { AdminSearchMaintenance } from './features/admin/search-maintenance'
@@ -111,12 +112,12 @@ function AppFrame() {
   return <div className={styles.page}>
     <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
-      <Link className={styles.brand} to="/">{t('brand')}</Link>
+      <Link className={styles.brand} to="/" aria-label={t('brand')}><span className={styles.brandMark} aria-hidden="true">AD</span><span className={styles.brandCopy}><span className={styles.brandName}>{t('brand')}</span><span className={styles.brandSupport}>{t('subtitle')}</span></span></Link>
       <nav className={styles.navigation} aria-label={t('nav.primary')}>
-        <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink to="/admin">{t('nav.admin')}</NavLink>
+        <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink className={styles.adminNavigationLink} to="/admin">{t('nav.admin')}</NavLink>
       </nav>
     </div></header>
-    <main id="main-content" ref={mainRef} tabIndex={-1} className={styles.main}><Outlet /></main>
+    <main id="main-content" ref={mainRef} tabIndex={-1} className={`${styles.main} ${location.pathname === '/search' ? styles.searchMain : ''}`}><Outlet /></main>
     <footer className={styles.footer}><div className={styles.footerInner}>
       <span>{t('footer.credit')}</span><nav className={styles.footerNav} aria-label={t('nav.footer')}>
         <Link to="/about">{t('footer.about')}</Link><Link to="/privacy">{t('footer.privacy')}</Link><Link to="/accessibility">{t('footer.accessibility')}</Link><Link to="/terms">{t('footer.terms')}</Link><Link to="/contact">{t('footer.contact')}</Link>
@@ -149,11 +150,47 @@ function HomePage() {
   </section>
 }
 
-type FilterDefinition = { key: keyof SearchState; label: string; facet: keyof CatalogsResponse }
-const filters: FilterDefinition[] = [
-  { key: 'program_key', label: 'fields.program', facet: 'programs' }, { key: 'major_key', label: 'fields.major', facet: 'majors' }, { key: 'course_key', label: 'fields.course', facet: 'courses' },
-  { key: 'category_key', label: 'fields.category', facet: 'taxonomy' }, { key: 'platform_key', label: 'fields.platform', facet: 'taxonomy' }, { key: 'domain_key', label: 'fields.domain', facet: 'taxonomy' }, { key: 'topic_key', label: 'fields.topic', facet: 'taxonomy' }, { key: 'technology_key', label: 'fields.technology', facet: 'taxonomy' },
+type ArrayFilterKey = 'program_key' | 'major_key' | 'course_key' | 'person_id' | 'advisor_id' | 'category_key' | 'platform_key' | 'domain_key' | 'topic_key' | 'technology_key'
+type CatalogFilterDefinition = { key: Exclude<ArrayFilterKey, 'person_id' | 'advisor_id'>; label: string; facet: keyof SearchFacets; catalog: keyof CatalogsResponse; dimension?: string }
+const filters: CatalogFilterDefinition[] = [
+  { key: 'program_key', label: 'fields.program', facet: 'programs', catalog: 'programs' },
+  { key: 'major_key', label: 'fields.major', facet: 'majors', catalog: 'majors' },
+  { key: 'course_key', label: 'fields.course', facet: 'courses', catalog: 'courses' },
+  { key: 'category_key', label: 'fields.category', facet: 'categories', catalog: 'taxonomy', dimension: 'category' },
+  { key: 'platform_key', label: 'fields.platform', facet: 'platforms', catalog: 'taxonomy', dimension: 'platform' },
+  { key: 'domain_key', label: 'fields.domain', facet: 'domains', catalog: 'taxonomy', dimension: 'domain' },
+  { key: 'topic_key', label: 'fields.topic', facet: 'topics', catalog: 'taxonomy', dimension: 'topic' },
+  { key: 'technology_key', label: 'fields.technology', facet: 'technologies', catalog: 'taxonomy', dimension: 'technology' },
 ]
+
+const availabilityFilters = [
+  { key: 'has_artifacts', label: 'fields.artifacts' },
+  { key: 'has_report', label: 'fields.report' },
+  { key: 'has_slides', label: 'fields.slides' },
+  { key: 'has_source_code', label: 'fields.sourceCode' },
+  { key: 'has_dataset', label: 'fields.dataset' },
+] as const
+
+function withCurrentChoice(options: FilterChoice[], value: string | undefined): FilterChoice[] {
+  if (!value || options.some((option) => option.value === value)) return options
+  return [{ value, label: value }, ...options]
+}
+
+function facetChoices(facets: SearchFacet[] | undefined): FilterChoice[] {
+  return (facets ?? []).map((facet) => ({ value: facet.key, label: facet.label ?? facet.key, count: facet.count }))
+}
+
+function catalogChoices(filter: CatalogFilterDefinition, catalogs: CatalogsResponse | undefined, facets: SearchFacets | undefined): FilterChoice[] {
+  const counts = new Map((facets?.[filter.facet] ?? []).map((facet) => [facet.key, facet.count]))
+  const source = filter.catalog === 'taxonomy'
+    ? catalogs?.taxonomy.filter((value) => value.dimension === filter.dimension) ?? []
+    : catalogs?.[filter.catalog] ?? []
+  return source.map((option) => ({
+    value: option.key,
+    label: 'labels' in option ? option.labels.en ?? option.key : option.label,
+    count: counts.get(option.key),
+  }))
+}
 
 function SearchPage() {
   const { t } = useTranslation()
@@ -181,32 +218,78 @@ function SearchPage() {
     goToCursor(cursorHistory[cursorHistory.length - 1])
     setCursorHistory((previous) => previous.slice(0, -1))
   }
+  const toggleArrayFilter = (key: ArrayFilterKey, value: string) => {
+    const selected = (state[key] as string[] | undefined) ?? []
+    const next = selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]
+    setState({ ...state, [key]: next.length ? next : undefined })
+  }
+  const clearFilters = () => setState({ q: state.q, limit: state.limit, sort: state.sort })
+  const catalogFilterChoices = new Map(filters.map((filter) => [filter.key, catalogChoices(filter, catalogsQuery.data, searchQuery.data?.facets)]))
+  const peopleChoices = facetChoices(searchQuery.data?.facets.people)
+  const yearChoices = withCurrentChoice(facetChoices(searchQuery.data?.facets.academic_years), state.academic_year ? String(state.academic_year) : undefined)
+  const semesterChoices: FilterChoice[] = [
+    { value: 'first', label: t('fields.first') },
+    { value: 'second', label: t('fields.second') },
+    { value: 'summer', label: t('fields.summer') },
+  ]
+  const activeFilters: Array<{ id: string; label: string; remove: () => void }> = []
+  if (state.academic_year) activeFilters.push({ id: 'academic-year', label: `${t('fields.year')}: ${state.academic_year}`, remove: () => setState({ ...state, academic_year: undefined }) })
+  if (state.semester) activeFilters.push({ id: 'semester', label: semesterChoices.find((option) => option.value === state.semester)?.label ?? state.semester, remove: () => setState({ ...state, semester: undefined }) })
+  if (state.student_id) activeFilters.push({ id: 'student-id', label: `${t('fields.studentId')}: ${state.student_id}`, remove: () => setState({ ...state, student_id: undefined }) })
+  for (const filter of filters) {
+    const selected = (state[filter.key] as string[] | undefined) ?? []
+    for (const value of selected) activeFilters.push({
+      id: `${filter.key}-${value}`,
+      label: `${t(filter.label)}: ${catalogFilterChoices.get(filter.key)?.find((option) => option.value === value)?.label ?? value}`,
+      remove: () => toggleArrayFilter(filter.key, value),
+    })
+  }
+  for (const value of state.person_id ?? []) activeFilters.push({
+    id: `person-${value}`,
+    label: `${t('search.people')}: ${peopleChoices.find((option) => option.value === value)?.label ?? value}`,
+    remove: () => toggleArrayFilter('person_id', value),
+  })
+  for (const value of state.advisor_id ?? []) activeFilters.push({
+    id: `advisor-${value}`,
+    label: `${t('fields.advisor')}: ${peopleChoices.find((option) => option.value === value)?.label ?? value}`,
+    remove: () => toggleArrayFilter('advisor_id', value),
+  })
+  for (const filter of availabilityFilters) if (state[filter.key]) activeFilters.push({
+    id: filter.key,
+    label: t(filter.label),
+    remove: () => setState({ ...state, [filter.key]: undefined }),
+  })
   const queryTerms = (state.q ?? '').split(/\s+/)
   const pending = searchQuery.isFetching
-  return <section><PageTitle title={t('search.title')} /><div className={styles.pageHeader}><h1>{t('search.title')}</h1></div>
-    <form className={styles.searchBox} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft }) }}>
-      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={draft} onChange={(event) => setDraft(event.target.value)} />
+  return <section className={styles.searchPage}><PageTitle title={t('search.title')} /><div className={styles.searchPageHeader}><h1>{t('search.title')}</h1></div>
+    <form className={`${styles.searchBox} ${styles.searchToolbar}`} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft }) }}>
+      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t('search.placeholder')} />
       <select aria-label={t('search.sort')} value={state.sort} onChange={(event) => setState({ ...state, sort: event.target.value as SearchState['sort'] })}><option value="relevance">{t('search.relevance')}</option><option value="newest">{t('search.newest')}</option><option value="oldest">{t('search.oldest')}</option><option value="title">{t('search.alphabetical')}</option></select>
-      <button className={styles.button} type="submit" disabled={pending}>{t('action.search')}</button>
+      <button className={styles.searchPrimaryButton} type="submit" disabled={pending}>{t('action.search')}</button>
     </form>
-    <div className={styles.searchLayout}><aside className={styles.filterPanel} aria-label={t('search.filters')}><h2>{t('search.filters')}</h2>
+    <div className={styles.searchLayout}><aside className={styles.filterPanel} aria-label={t('search.filters')}><div className={styles.filterPanelHeader}><h2>{t('search.refine')}</h2><button className={styles.clearFiltersButton} disabled={!activeFilters.length} type="button" onClick={clearFilters}>{t('search.clearAll')}</button></div>
+      <div className={styles.selectedFilters} aria-label={t('search.selectedFilters')}><h3>{t('search.selectedFilters')}</h3>{activeFilters.length ? <div className={styles.selectedFilterList}>{activeFilters.map((filter) => <SelectedFilterChip key={filter.id} label={filter.label} onRemove={filter.remove} />)}</div> : <p>{t('search.noSelectedFilters')}</p>}</div>
       {catalogsQuery.isPending ? <p role="status">{t('search.filtersLoading')}</p> : null}
       {catalogsQuery.isError ? <p className={styles.error} role="alert">{t('search.filtersUnavailable')}</p> : null}
-      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.academic')}</legend><label className={styles.filterOption}>{t('fields.year')}<input type="number" value={state.academic_year ?? ''} onChange={(event) => setState({ ...state, academic_year: event.target.value ? Number(event.target.value) : undefined })} /></label>
-        <label className={styles.filterOption}>{t('fields.semester')}<select value={state.semester ?? ''} onChange={(event) => setState({ ...state, semester: event.target.value ? event.target.value as SearchState['semester'] : undefined })}><option value="" /><option value="first">{t('fields.first')}</option><option value="second">{t('fields.second')}</option><option value="summer">{t('fields.summer')}</option></select></label>
-      </fieldset>
-      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.people')}</legend><label className={styles.filterOption}>{t('fields.studentId')}<input inputMode="numeric" value={state.student_id ?? ''} onChange={(event) => setState({ ...state, student_id: event.target.value || undefined })} /></label></fieldset>
-      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.classification')}</legend>{filters.map((filter) => <FacetSelect key={filter.key} filter={filter} state={state} catalogs={catalogsQuery.data} setState={setState} />)}</fieldset>
-      <fieldset className={styles.filterGroup} disabled={catalogsQuery.isPending || catalogsQuery.isError}><legend>{t('search.availability')}</legend>{(['has_artifacts', 'has_report', 'has_slides', 'has_source_code', 'has_dataset'] as const).map((key) => <label className={styles.filterOption} key={key}><input type="checkbox" checked={state[key] ?? false} onChange={(event) => setState({ ...state, [key]: event.target.checked || undefined })} />{t(`fields.${key === 'has_artifacts' ? 'artifacts' : key.replace('has_', '').replace(/_([a-z])/g, (_, character: string) => character.toUpperCase())}`)}</label>)}</fieldset>
-      <button className={styles.secondaryButton} type="button" onClick={() => { setDraft(''); setCursorHistory([]); setParameters(new URLSearchParams()) }}>{t('action.clear')}</button>
+      <FacetDisclosure label={t('fields.year')} options={yearChoices} searchLabel={t('search.findYear')} selected={state.academic_year ? [String(state.academic_year)] : []} onToggle={(value) => setState({ ...state, academic_year: state.academic_year === Number(value) ? undefined : Number(value) })} />
+      <FacetDisclosure label={t('fields.semester')} options={semesterChoices} selected={state.semester ? [state.semester] : []} onToggle={(value) => setState({ ...state, semester: state.semester === value ? undefined : value as SearchState['semester'] })} />
+      {filters.slice(0, 3).map((filter) => <FacetDisclosure key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
+      <FacetDisclosure label={t('search.people')} options={peopleChoices} searchLabel={t('search.findPeople')} selected={state.person_id ?? []} onToggle={(value) => toggleArrayFilter('person_id', value)} />
+      <FacetDisclosure label={t('fields.advisor')} options={peopleChoices} searchLabel={t('search.findAdvisor')} selected={state.advisor_id ?? []} onToggle={(value) => toggleArrayFilter('advisor_id', value)} />
+      <StudentIdDisclosure value={state.student_id} onApply={(value) => setState({ ...state, student_id: value })} />
+      {filters.slice(3).map((filter) => <FacetDisclosure defaultOpen={filter.key === 'technology_key'} key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
+      <FacetDisclosure label={t('search.availability')} options={availabilityFilters.map((filter) => ({ value: filter.key, label: t(filter.label) }))} selected={availabilityFilters.filter((filter) => state[filter.key]).map((filter) => filter.key)} onToggle={(value) => setState({ ...state, [value]: state[value as typeof availabilityFilters[number]['key']] ? undefined : true })} />
+      <div className={styles.filterActions}><button className={styles.searchPrimaryButton} type="button" onClick={() => void searchQuery.refetch()}>{t('action.filter')}</button><button className={styles.secondaryButton} disabled={!activeFilters.length} type="button" onClick={clearFilters}>{t('action.clear')}</button></div>
     </aside>
-    <div><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isPending ? <p role="status">{t('search.loading')}</p> : pending ? <p role="status">{t('search.updating')}</p> : null}</div></div>
+    <div className={styles.searchResults}><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isPending ? <p role="status">{t('search.loading')}</p> : pending ? <p role="status">{t('search.updating')}</p> : null}</div></div>
       {searchQuery.isError ? <p className={styles.error} role="alert">{t('search.unavailable')}</p> : null}
-      {!searchQuery.isPending && searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result) => <article className={styles.result} key={result.id}>
-        <h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2>
-        <div className={styles.metadata}><span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span><span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span></div>
-        {excerptOf(result.highlights, queryTerms)}
-        <div className={styles.tags}>{[...result.categories, ...result.platforms].map((taxonomy) => <span className={styles.tag} key={taxonomy.id}>{taxonomy.labels.en ?? taxonomy.key}</span>)}</div>
+      {!searchQuery.isPending && searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result, index) => <article className={styles.searchResult} key={result.id}>
+        <div aria-hidden="true" className={`${styles.projectIdentity} ${projectIdentityVariant(index) === 'purple' ? styles.projectIdentityPurple : styles.projectIdentityRed}`}>{projectInitials(result.title)}</div>
+        <div className={styles.resultBody}><h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2>
+          <div className={styles.metadata}>{result.reference_code ? <span className={styles.referenceCode}>{result.reference_code}</span> : null}<span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span>{result.people.length ? <span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span> : null}</div>
+          {excerptOf(result.highlights, queryTerms)}
+          <div className={styles.tags}>{[...result.categories, ...result.platforms].map((taxonomy) => <span className={styles.tag} key={taxonomy.id}>{taxonomy.labels.en ?? taxonomy.key}</span>)}</div>
+        </div>
       </article>)}</div>}
       <div className={styles.formActions}>
         <button className={styles.secondaryButton} disabled={pending || !cursorHistory.length} type="button" onClick={previousPage}>{t('search.previous')}</button>
@@ -220,16 +303,6 @@ function excerptOf(highlights: Array<{ field: string; value: string }>, queryTer
   const excerpt = highlights.find((highlight) => highlight.field === 'abstract')
   if (!excerpt) return null
   return <p className={styles.excerpt}>{highlightText(excerpt.value, queryTerms)}</p>
-}
-
-function FacetSelect({ filter, state, catalogs, setState }: { filter: FilterDefinition; state: SearchState; catalogs?: CatalogsResponse; setState: (state: SearchState) => void }) {
-  const { t } = useTranslation()
-  const selected = (state[filter.key] as string[] | undefined) ?? []
-  const catalogKey = filter.facet
-  const options = catalogKey === 'taxonomy'
-    ? catalogs?.taxonomy.filter((value) => filter.key.replace('_key', '') === value.dimension) ?? []
-    : (catalogs?.[catalogKey] ?? [])
-  return <label className={styles.filterOption}>{t(filter.label)}<select multiple value={selected} onChange={(event) => setState({ ...state, [filter.key]: Array.from(event.currentTarget.selectedOptions, (option) => option.value) })}>{options.map((option) => <option key={option.id} value={option.key}>{'labels' in option ? option.labels.en ?? option.key : option.label}</option>)}</select></label>
 }
 
 function ProjectPage() {
