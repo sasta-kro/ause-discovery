@@ -67,6 +67,7 @@ describe('public project presentation', () => {
   it('localizes participation roles and opens PDF View in a new browsing context', async () => {
     renderAt(`/projects/${projectID}`)
     expect(await screen.findByRole('heading', { name: 'Long Project Title About Discovery' })).toBeTruthy()
+    expect(screen.queryByText('REF-2026-001')).toBeNull()
     expect(screen.getByText('Student')).toBeTruthy()
     expect(screen.getByText('Advisor')).toBeTruthy()
     expect(screen.getByText('Co-advisor')).toBeTruthy()
