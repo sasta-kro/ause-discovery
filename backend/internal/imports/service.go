@@ -437,6 +437,18 @@ func resolvePerson(ctx context.Context, transaction pgx.Tx, actorID uuid.UUID, v
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, err
 	}
+	if value.StudentID == "" && value.StaffID == "" {
+		matches, err := findPeopleByNormalizedName(ctx, transaction, normalizeText(value.DisplayName))
+		if err != nil {
+			return uuid.Nil, err
+		}
+		switch len(matches) {
+		case 1:
+			return matches[0], nil
+		case 2:
+			return uuid.Nil, errors.New("Person name matches multiple records; add a Student ID or Staff ID")
+		}
+	}
 	studentID := optionalString(value.StudentID)
 	staffID := optionalString(value.StaffID)
 	person, err := (people.Service{}).CreateInTransaction(ctx, transaction, actorID, people.Input{DisplayName: value.DisplayName, StudentID: studentID, StaffID: staffID})
@@ -444,6 +456,23 @@ func resolvePerson(ctx context.Context, transaction pgx.Tx, actorID uuid.UUID, v
 		return uuid.Nil, err
 	}
 	return person.ID, nil
+}
+
+func findPeopleByNormalizedName(ctx context.Context, transaction pgx.Tx, normalizedName string) ([]uuid.UUID, error) {
+	rows, err := transaction.Query(ctx, `SELECT id FROM people WHERE normalized_name=$1 ORDER BY id LIMIT 2`, normalizedName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	matches := []uuid.UUID{}
+	for rows.Next() {
+		var personID uuid.UUID
+		if err := rows.Scan(&personID); err != nil {
+			return nil, err
+		}
+		matches = append(matches, personID)
+	}
+	return matches, rows.Err()
 }
 
 func scanBatch(row pgx.Row) (Batch, error) {

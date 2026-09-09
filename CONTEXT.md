@@ -31,7 +31,7 @@ _Avoid_: Undelete, unarchive
 ## People
 
 **Person**:
-An academic person associated with one or more Projects. A Person is separate from an authenticated administrative identity.
+An academic person associated with one or more Projects. Institutional identifiers establish identity when present; otherwise, one unambiguous exact normalized-name match represents the same Person.
 _Avoid_: User, account
 
 **Student ID**:

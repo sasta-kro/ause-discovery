@@ -148,8 +148,8 @@ func validateParticipations(ctx context.Context, database queryRower, participat
 			if err := database.QueryRow(ctx, "SELECT count(*) FROM people WHERE normalized_name=$1", normalizeText(participation.DisplayName)).Scan(&candidates); err != nil {
 				return nil, err
 			}
-			if candidates > 0 {
-				issues = append(issues, newIssue("participations", "person_match_required", "warning", "A matching Person name exists. Warning acknowledgement creates a distinct Person instead of merging by name."))
+			if candidates > 1 {
+				issues = append(issues, newIssue("participations", "ambiguous_person_match", "error", "Person name matches multiple records. Add a Student ID or Staff ID."))
 			}
 		}
 	}

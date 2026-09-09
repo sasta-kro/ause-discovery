@@ -17,6 +17,9 @@ import (
 const secondValidCSVRow = `row-002,Second Imported Project,REF-002,Second imported abstract,2026,first,computing,,capstone,[],"[{""display_name"":""Second Student"",""student_id"":""1234567""}]","[{""display_name"":""Second Advisor"",""staff_id"":""advisor-2""}]",[],[],"[""ml""]","[""web""]",[],[],[]
 `
 
+const secondSharedAdvisorCSVRow = `row-002,Second Imported Project,REF-002,Second imported abstract,2026,first,computing,,capstone,[],"[{""display_name"":""Second Student"",""student_id"":""1234567""}]","[{""display_name"":""Shared Faculty""}]",[],[],"[""ml""]","[""web""]",[],[],[]
+`
+
 func TestPreviewSelectionCommitAndRepeatedResult(t *testing.T) {
 	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -69,6 +72,79 @@ func TestPreviewSelectionCommitAndRepeatedResult(t *testing.T) {
 	if projectStatus != "published" || syncState != "pending" {
 		t.Fatalf("imported Project status was %q and search state was %q", projectStatus, syncState)
 	}
+}
+
+func TestCommitReusesOneNameOnlyPersonAcrossRows(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createImportTestDatabase(t, ctx, databaseURL)
+	actorID := seedImportCatalog(t, ctx, pool)
+	service := Service{Pool: pool, TemporaryRoot: t.TempDir()}
+	firstRow := strings.Replace(validCSV, `"[{""display_name"":""Advisor Name"",""staff_id"":""advisor-1""}]"`, `"[{""display_name"":""Shared Faculty""}]"`, 1)
+	source := firstRow + secondSharedAdvisorCSVRow
+
+	batch, err := service.CreatePreview(ctx, actorID, "projects.csv", int64(len(source)), strings.NewReader(source))
+	if err != nil || batch.ValidRows != 2 || batch.WarningRows != 0 || batch.ErrorRows != 0 {
+		t.Fatalf("CreatePreview returned batch %#v and error %v", batch, err)
+	}
+	batch, err = service.UpdateRows(ctx, actorID, batch.ID, batch.Revision, []RowUpdate{{RowNumber: 1, Selected: true}, {RowNumber: 2, Selected: true}})
+	if err != nil {
+		t.Fatalf("UpdateRows returned an error: %v", err)
+	}
+	result, err := service.Commit(ctx, actorID, batch.ID, batch.Revision)
+	if err != nil || len(result.CreatedProjectIDs) != 2 {
+		t.Fatalf("Commit returned result %#v and error %v", result, err)
+	}
+
+	var personCount, advisorCount, distinctAdvisorCount int
+	if err := pool.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM people WHERE normalized_name='shared faculty'),
+			(SELECT count(*) FROM project_participations WHERE role='advisor'),
+			(SELECT count(DISTINCT person_id) FROM project_participations WHERE role='advisor')
+	`).Scan(&personCount, &advisorCount, &distinctAdvisorCount); err != nil {
+		t.Fatalf("read imported People: %v", err)
+	}
+	if personCount != 1 || advisorCount != 2 || distinctAdvisorCount != 1 {
+		t.Fatalf("shared advisor produced people=%d participations=%d distinct_people=%d", personCount, advisorCount, distinctAdvisorCount)
+	}
+}
+
+func TestPreviewRejectsAmbiguousNameOnlyPerson(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createImportTestDatabase(t, ctx, databaseURL)
+	actorID := seedImportCatalog(t, ctx, pool)
+	service := Service{Pool: pool, TemporaryRoot: t.TempDir()}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO people (id, display_name, normalized_name) VALUES
+		('018f0000-0000-7000-8000-000000000811', 'Shared Faculty', 'shared faculty'),
+		('018f0000-0000-7000-8000-000000000812', 'Shared Faculty', 'shared faculty')
+	`); err != nil {
+		t.Fatalf("seed ambiguous People: %v", err)
+	}
+	source := strings.Replace(validCSV, `"[{""display_name"":""Advisor Name"",""staff_id"":""advisor-1""}]"`, `"[{""display_name"":""Shared Faculty""}]"`, 1)
+
+	batch, err := service.CreatePreview(ctx, actorID, "projects.csv", int64(len(source)), strings.NewReader(source))
+	if err != nil || batch.ValidRows != 0 || batch.WarningRows != 0 || batch.ErrorRows != 1 {
+		t.Fatalf("CreatePreview returned batch %#v and error %v", batch, err)
+	}
+	rows, err := service.ListRows(ctx, batch.ID, 20, 0)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("ListRows returned rows %#v and error %v", rows, err)
+	}
+	for _, issue := range rows[0].Issues {
+		if issue.Code == "ambiguous_person_match" && issue.Severity == "error" {
+			return
+		}
+	}
+	t.Fatalf("ambiguous Person issue was missing from %#v", rows[0].Issues)
 }
 
 func TestPreviewPersistsValidationErrorsAndRejectsSelection(t *testing.T) {
