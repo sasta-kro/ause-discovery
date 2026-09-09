@@ -16,7 +16,7 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock('./api/generated/sdk.gen', () => apiMocks)
 
-const emptyFacets = { programs: [], majors: [], courses: [], academic_years: [], people: [], categories: [], platforms: [], domains: [], topics: [], technologies: [] }
+const emptyFacets = { programs: [], majors: [], courses: [], academic_years: [], semesters: [], people: [], advisors: [], categories: [], platforms: [], domains: [], topics: [], technologies: [] }
 
 function resultItem(id: string, title: string) {
   return {
@@ -121,6 +121,39 @@ describe('public search paging', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove Technology: React' }))
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ technology_key: undefined }) })))
+  })
+
+  it('shows named participant facets and Semester counts while hiding paused dimensions', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: {
+      programs: [],
+      majors: [{ id: 'major-1', key: 'software_engineering', label: 'Software Engineering' }],
+      courses: [],
+      taxonomy: [{ id: 'topic-1', key: 'computer_vision', dimension: 'topic', labels: { en: 'Computer Vision' } }],
+    } })
+    apiMocks.searchProjects.mockResolvedValue({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: {
+        ...emptyFacets,
+        semesters: [{ key: 'first', count: 12 }],
+        people: [{ key: personID, label: 'Alex Advisor', count: 4 }],
+        advisors: [{ key: personID, label: 'Alex Advisor', count: 2 }],
+      },
+      total: 1,
+    } })
+    renderSearch()
+    await screen.findByRole('heading', { name: 'First Page Result' })
+
+    expect(screen.queryByText('Major')).toBeNull()
+    expect(screen.queryByText('Topic')).toBeNull()
+    await user.click(screen.getByText('Semester'))
+    expect(screen.getByRole('button', { name: /First semester.*12.*Add/ })).toBeTruthy()
+    await user.click(screen.getByText('People'))
+    expect(screen.getByRole('button', { name: /Alex Advisor.*4.*Add/ })).toBeTruthy()
+    await user.click(screen.getByText('Advisor'))
+    expect(screen.getByRole('button', { name: /Alex Advisor.*2.*Add/ })).toBeTruthy()
   })
 
   it('synchronizes the draft field when history navigation changes the URL query', async () => {

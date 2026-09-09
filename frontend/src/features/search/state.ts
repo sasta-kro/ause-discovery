@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { SearchProjectsData } from '../../api/generated/types.gen'
 
-const arrayKeys = ['program_key', 'major_key', 'course_key', 'person_id', 'advisor_id', 'category_key', 'platform_key', 'domain_key', 'topic_key', 'technology_key', 'artifact_type'] as const
+const arrayKeys = ['program_key', 'course_key', 'person_id', 'advisor_id', 'category_key', 'platform_key', 'domain_key', 'technology_key', 'artifact_type'] as const
 const booleanKeys = ['has_artifacts', 'has_report', 'has_slides', 'has_source_code', 'has_dataset'] as const
 
 export type SearchState = NonNullable<SearchProjectsData['query']>
@@ -41,6 +41,7 @@ export function parseSearchState(parameters: URLSearchParams): SearchState {
 export function serializeSearchState(state: SearchState): URLSearchParams {
   const parameters = new URLSearchParams()
   for (const [key, value] of Object.entries(state)) {
+    if (key === 'major_key' || key === 'topic_key') continue
     if (value === undefined || value === '' || (key === 'sort' && value === 'relevance') || (key === 'limit' && value === 20)) continue
     if (Array.isArray(value)) value.forEach((item) => parameters.append(key, item))
     else parameters.set(key, String(value))

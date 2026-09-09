@@ -56,10 +56,14 @@ _Avoid_: Tag, current curriculum value
 A stable keyed classification within category, platform, domain, topic, or technology.
 _Avoid_: Free-form tag
 
+**Topic**:
+An inactive Taxonomy Value dimension retained in storage, import, API, and search-filter infrastructure for possible future use. Topic is excluded from current interfaces and keyword matching because the collection lacks enough breadth for a useful controlled vocabulary. Expanding it would add overlapping classification and disproportionate maintenance.
+_Avoid_: Public Topic filter, active Topic assignment
+
 ## Artifacts
 
 **Artifact**:
-A stored file associated with a Project, such as a report, slides, source archive, proposal, poster, dataset, or demo video.
+A stored file associated with a Project, such as a report, slides, source archive, proposal, poster, dataset, or demo video. The internal domain term is Artifact. User-facing interfaces call it a Project file.
 _Avoid_: Attachment URL, Project file column
 
 ## Import and Search

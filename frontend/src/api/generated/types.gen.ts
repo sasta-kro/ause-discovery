@@ -142,7 +142,7 @@ export type SearchResult = ProjectSummary & {
 };
 
 export type SearchFacet = {
-    key: StableKey;
+    key: string;
     count: number;
     label?: string | null;
 };
@@ -152,7 +152,9 @@ export type SearchFacets = {
     majors: Array<SearchFacet>;
     courses: Array<SearchFacet>;
     academic_years: Array<SearchFacet>;
+    semesters: Array<SearchFacet>;
     people: Array<SearchFacet>;
+    advisors: Array<SearchFacet>;
     categories: Array<SearchFacet>;
     platforms: Array<SearchFacet>;
     domains: Array<SearchFacet>;

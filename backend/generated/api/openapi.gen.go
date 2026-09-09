@@ -851,14 +851,15 @@ type RevisionConflictProblem struct {
 
 // SearchFacet defines model for SearchFacet.
 type SearchFacet struct {
-	Count int       `json:"count"`
-	Key   StableKey `json:"key"`
-	Label *string   `json:"label,omitempty"`
+	Count int     `json:"count"`
+	Key   string  `json:"key"`
+	Label *string `json:"label,omitempty"`
 }
 
 // SearchFacets defines model for SearchFacets.
 type SearchFacets struct {
 	AcademicYears []SearchFacet `json:"academic_years"`
+	Advisors      []SearchFacet `json:"advisors"`
 	Categories    []SearchFacet `json:"categories"`
 	Courses       []SearchFacet `json:"courses"`
 	Domains       []SearchFacet `json:"domains"`
@@ -866,6 +867,7 @@ type SearchFacets struct {
 	People        []SearchFacet `json:"people"`
 	Platforms     []SearchFacet `json:"platforms"`
 	Programs      []SearchFacet `json:"programs"`
+	Semesters     []SearchFacet `json:"semesters"`
 	Technologies  []SearchFacet `json:"technologies"`
 	Topics        []SearchFacet `json:"topics"`
 }

@@ -18,8 +18,24 @@ courses:
     key: senior_project
     versions:
       - id: 018f0000-0000-7000-8000-000000000031
-        label: Senior Project
-        code: CS499
+        label: Senior Project Unspecified
+        code: SP
+        valid_from_year: 1990
+        program_version_ids: [018f0000-0000-7000-8000-000000000011, 018f0000-0000-7000-8000-000000000012]
+  - id: 018f0000-0000-7000-8000-000000000022
+    key: senior_project_1
+    versions:
+      - id: 018f0000-0000-7000-8000-000000000032
+        label: Senior Project I
+        code: SP1
+        valid_from_year: 1990
+        program_version_ids: [018f0000-0000-7000-8000-000000000011, 018f0000-0000-7000-8000-000000000012]
+  - id: 018f0000-0000-7000-8000-000000000023
+    key: senior_project_2
+    versions:
+      - id: 018f0000-0000-7000-8000-000000000033
+        label: Senior Project II
+        code: SP2
         valid_from_year: 1990
         program_version_ids: [018f0000-0000-7000-8000-000000000011, 018f0000-0000-7000-8000-000000000012]
 majors: []

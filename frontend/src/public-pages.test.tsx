@@ -28,7 +28,12 @@ const publicProject = {
   major: null,
   course: catalog('018f0000-0000-7000-8000-0000000000p3', 'Capstone'),
   status: 'published',
-  taxonomy: [],
+  taxonomy: [
+    { id: 'category-1', dimension: 'category', key: 'software_application', labels: { en: 'Software / Application' }, sort_order: 1 },
+    { id: 'platform-1', dimension: 'platform', key: 'web', labels: { en: 'Web' }, sort_order: 1 },
+    { id: 'topic-1', dimension: 'topic', key: 'computer_vision', labels: { en: 'Computer Vision' }, sort_order: 1 },
+    { id: 'technology-1', dimension: 'technology', key: 'react', labels: { en: 'React' }, sort_order: 1 },
+  ],
   participations: [
     { person: { id: '018f0000-0000-7000-8000-0000000000s1', display_name: 'Sam Student', student_id: '7770001' }, role: 'student', sort_order: 0 },
     { person: { id: '018f0000-0000-7000-8000-0000000000s2', display_name: 'Alex Advisor', student_id: null }, role: 'advisor', sort_order: 0 },
@@ -73,6 +78,15 @@ describe('public project presentation', () => {
     expect(screen.getByText('Co-advisor')).toBeTruthy()
     expect(screen.queryByText('co_advisor')).toBeNull()
     expect(screen.queryByText('advisor')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Category' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Platform' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Technology' })).toBeTruthy()
+    expect(screen.getByText('Software / Application')).toBeTruthy()
+    expect(screen.getByText('Web')).toBeTruthy()
+    expect(screen.getByText('React')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Topic' })).toBeNull()
+    expect(screen.queryByText('Computer Vision')).toBeNull()
+    expect(screen.getByRole('heading', { name: 'Project files' })).toBeTruthy()
 
     const viewLink = screen.getByRole('link', { name: 'View' }) as HTMLAnchorElement
     expect(viewLink.target).toBe('_blank')

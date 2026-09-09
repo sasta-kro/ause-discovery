@@ -62,10 +62,11 @@ type ResultItem struct {
 type Facet struct {
 	Key   string
 	Count int
+	Label *string
 }
 
 type Facets struct {
-	Programs, Majors, Courses, AcademicYears, People, Categories, Platforms, Domains, Topics, Technologies []Facet
+	Programs, Majors, Courses, AcademicYears, Semesters, People, Advisors, Categories, Platforms, Domains, Topics, Technologies []Facet
 }
 
 type Result struct {
@@ -84,7 +85,7 @@ type Service struct {
 
 var sevenDigitIdentifier = regexp.MustCompile(`^[0-9]{7}$`)
 
-var searchFacetAttributes = []string{"program_key", "major_key", "course_key", "academic_year", "person_ids", "category_keys", "platform_keys", "domain_keys", "topic_keys", "technology_keys"}
+var searchFacetAttributes = []string{"program_key", "major_key", "course_key", "academic_year", "semester", "person_ids", "advisor_person_ids", "category_keys", "platform_keys", "domain_keys", "topic_keys", "technology_keys"}
 
 func (service Service) Search(ctx context.Context, query Query) (Result, error) {
 	if err := service.ValidateQuery(ctx, query); err != nil {
@@ -122,7 +123,11 @@ func (service Service) Search(ctx context.Context, query Query) (Result, error) 
 		return Result{}, fmt.Errorf("%w: %v", ErrSearchUnavailable, err)
 	}
 
-	result := Result{Total: indexResult.Total, Limit: query.Limit, Facets: mapFacets(indexResult.FacetDistribution), Items: []ResultItem{}}
+	facets := mapFacets(indexResult.FacetDistribution)
+	if err := labelPersonFacets(ctx, service.Pool, &facets); err != nil {
+		return Result{}, fmt.Errorf("%w: label Person facets: %v", ErrSearchUnavailable, err)
+	}
+	result := Result{Total: indexResult.Total, Limit: query.Limit, Facets: facets, Items: []ResultItem{}}
 	for _, document := range indexResult.Hits {
 		result.Items = append(result.Items, ResultItem{Document: document, Highlights: documentHighlights(document, indexQuery.Query)})
 	}
@@ -338,9 +343,76 @@ func queryHash(query Query) (string, error) {
 func mapFacets(distribution map[string]map[string]int) Facets {
 	return Facets{
 		Programs: facetValues(distribution["program_key"]), Majors: facetValues(distribution["major_key"]), Courses: facetValues(distribution["course_key"]),
-		AcademicYears: facetValues(distribution["academic_year"]), People: facetValues(distribution["person_ids"]), Categories: facetValues(distribution["category_keys"]),
+		AcademicYears: facetValues(distribution["academic_year"]), Semesters: facetValues(distribution["semester"]), People: facetValues(distribution["person_ids"]), Advisors: facetValues(distribution["advisor_person_ids"]), Categories: facetValues(distribution["category_keys"]),
 		Platforms: facetValues(distribution["platform_keys"]), Domains: facetValues(distribution["domain_keys"]), Topics: facetValues(distribution["topic_keys"]), Technologies: facetValues(distribution["technology_keys"]),
 	}
+}
+
+func labelPersonFacets(ctx context.Context, pool *pgxpool.Pool, facets *Facets) error {
+	personIDs := make([]uuid.UUID, 0, len(facets.People)+len(facets.Advisors))
+	seen := map[uuid.UUID]struct{}{}
+	for _, values := range [][]Facet{facets.People, facets.Advisors} {
+		for _, value := range values {
+			personID, err := uuid.Parse(value.Key)
+			if err != nil {
+				continue
+			}
+			if _, exists := seen[personID]; exists {
+				continue
+			}
+			seen[personID] = struct{}{}
+			personIDs = append(personIDs, personID)
+		}
+	}
+	if len(personIDs) == 0 {
+		return nil
+	}
+	if pool == nil {
+		return errors.New("database pool is unavailable")
+	}
+	rows, err := pool.Query(ctx, "SELECT id, display_name FROM people WHERE id = ANY($1::uuid[])", personIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	labels := map[string]string{}
+	for rows.Next() {
+		var personID uuid.UUID
+		var displayName string
+		if err := rows.Scan(&personID, &displayName); err != nil {
+			return err
+		}
+		labels[personID.String()] = displayName
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	facets.People = applyFacetLabels(facets.People, labels)
+	facets.Advisors = applyFacetLabels(facets.Advisors, labels)
+	return nil
+}
+
+func applyFacetLabels(values []Facet, labels map[string]string) []Facet {
+	for index := range values {
+		if label, found := labels[values[index].Key]; found {
+			values[index].Label = &label
+		}
+	}
+	sort.SliceStable(values, func(left, right int) bool {
+		leftLabel := values[left].Key
+		rightLabel := values[right].Key
+		if values[left].Label != nil {
+			leftLabel = *values[left].Label
+		}
+		if values[right].Label != nil {
+			rightLabel = *values[right].Label
+		}
+		if leftLabel == rightLabel {
+			return values[left].Key < values[right].Key
+		}
+		return strings.ToLower(leftLabel) < strings.ToLower(rightLabel)
+	})
+	return values
 }
 
 func facetValues(values map[string]int) []Facet {

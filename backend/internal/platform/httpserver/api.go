@@ -1163,7 +1163,9 @@ func searchResponse(result searchservice.Result) api.SearchResponse {
 			Majors:        searchFacets(result.Facets.Majors),
 			Courses:       searchFacets(result.Facets.Courses),
 			AcademicYears: searchFacets(result.Facets.AcademicYears),
+			Semesters:     searchFacets(result.Facets.Semesters),
 			People:        searchFacets(result.Facets.People),
+			Advisors:      searchFacets(result.Facets.Advisors),
 			Categories:    searchFacets(result.Facets.Categories),
 			Platforms:     searchFacets(result.Facets.Platforms),
 			Domains:       searchFacets(result.Facets.Domains),
@@ -1219,7 +1221,7 @@ func searchTaxonomyValues(values []searchservice.TaxonomyValue) []api.TaxonomyVa
 func searchFacets(values []searchservice.Facet) []api.SearchFacet {
 	result := make([]api.SearchFacet, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.SearchFacet{Key: value.Key, Count: value.Count})
+		result = append(result, api.SearchFacet{Key: value.Key, Count: value.Count, Label: value.Label})
 	}
 	return result
 }

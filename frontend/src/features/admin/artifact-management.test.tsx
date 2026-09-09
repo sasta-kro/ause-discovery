@@ -20,7 +20,7 @@ describe('Artifact management', () => {
     const queryClient = new QueryClient()
     render(<QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ArtifactManagement projectId="project-1" projectRevision={4} artifacts={[activeArtifact, deletedArtifact]} csrfToken="csrf" /></I18nextProvider></QueryClientProvider>)
 
-    expect(screen.getByRole('button', { name: 'Upload Artifact' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Upload project file' })).toBeTruthy()
     const activePanel = screen.getByRole('group', { name: 'Final report' })
     expect(within(activePanel).getByRole('button', { name: 'Update metadata' })).toBeTruthy()
     expect(within(activePanel).getByRole('button', { name: 'Replace file' })).toBeTruthy()

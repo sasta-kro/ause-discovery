@@ -156,16 +156,19 @@ function HomePage() {
 
 type ArrayFilterKey = 'program_key' | 'major_key' | 'course_key' | 'person_id' | 'advisor_id' | 'category_key' | 'platform_key' | 'domain_key' | 'topic_key' | 'technology_key'
 type CatalogFilterDefinition = { key: Exclude<ArrayFilterKey, 'person_id' | 'advisor_id'>; label: string; facet: keyof SearchFacets; catalog: keyof CatalogsResponse; dimension?: string }
-const filters: CatalogFilterDefinition[] = [
+// Major remains supported by catalog and search contracts but is intentionally paused in public discovery.
+const academicFilters: CatalogFilterDefinition[] = [
   { key: 'program_key', label: 'fields.program', facet: 'programs', catalog: 'programs' },
-  { key: 'major_key', label: 'fields.major', facet: 'majors', catalog: 'majors' },
   { key: 'course_key', label: 'fields.course', facet: 'courses', catalog: 'courses' },
+]
+// Topic remains supported by storage and import contracts but is intentionally inactive in interfaces and keyword matching.
+const classificationFilters: CatalogFilterDefinition[] = [
   { key: 'category_key', label: 'fields.category', facet: 'categories', catalog: 'taxonomy', dimension: 'category' },
   { key: 'platform_key', label: 'fields.platform', facet: 'platforms', catalog: 'taxonomy', dimension: 'platform' },
   { key: 'domain_key', label: 'fields.domain', facet: 'domains', catalog: 'taxonomy', dimension: 'domain' },
-  { key: 'topic_key', label: 'fields.topic', facet: 'topics', catalog: 'taxonomy', dimension: 'topic' },
   { key: 'technology_key', label: 'fields.technology', facet: 'technologies', catalog: 'taxonomy', dimension: 'technology' },
 ]
+const filters = [...academicFilters, ...classificationFilters]
 
 const availabilityFilters = [
   { key: 'has_artifacts', label: 'fields.artifacts' },
@@ -230,11 +233,13 @@ function SearchPage() {
   const clearFilters = () => setState({ q: state.q, limit: state.limit, sort: state.sort })
   const catalogFilterChoices = new Map(filters.map((filter) => [filter.key, catalogChoices(filter, catalogsQuery.data, searchQuery.data?.facets)]))
   const peopleChoices = facetChoices(searchQuery.data?.facets.people)
+  const advisorChoices = facetChoices(searchQuery.data?.facets.advisors)
   const yearChoices = withCurrentChoice(facetChoices(searchQuery.data?.facets.academic_years), state.academic_year ? String(state.academic_year) : undefined)
+  const semesterCounts = new Map((searchQuery.data?.facets.semesters ?? []).map((facet) => [facet.key, facet.count]))
   const semesterChoices: FilterChoice[] = [
-    { value: 'first', label: t('fields.first') },
-    { value: 'second', label: t('fields.second') },
-    { value: 'summer', label: t('fields.summer') },
+    { value: 'first', label: t('fields.first'), count: semesterCounts.get('first') },
+    { value: 'second', label: t('fields.second'), count: semesterCounts.get('second') },
+    { value: 'summer', label: t('fields.summer'), count: semesterCounts.get('summer') },
   ]
   const activeFilters: Array<{ id: string; label: string; remove: () => void }> = []
   if (state.academic_year) activeFilters.push({ id: 'academic-year', label: `${t('fields.year')}: ${state.academic_year}`, remove: () => setState({ ...state, academic_year: undefined }) })
@@ -255,7 +260,7 @@ function SearchPage() {
   })
   for (const value of state.advisor_id ?? []) activeFilters.push({
     id: `advisor-${value}`,
-    label: `${t('fields.advisor')}: ${peopleChoices.find((option) => option.value === value)?.label ?? value}`,
+    label: `${t('fields.advisor')}: ${advisorChoices.find((option) => option.value === value)?.label ?? value}`,
     remove: () => toggleArrayFilter('advisor_id', value),
   })
   for (const filter of availabilityFilters) if (state[filter.key]) activeFilters.push({
@@ -277,11 +282,11 @@ function SearchPage() {
       {catalogsQuery.isError ? <p className={styles.error} role="alert">{t('search.filtersUnavailable')}</p> : null}
       <FacetDisclosure label={t('fields.year')} options={yearChoices} searchLabel={t('search.findYear')} selected={state.academic_year ? [String(state.academic_year)] : []} onToggle={(value) => setState({ ...state, academic_year: state.academic_year === Number(value) ? undefined : Number(value) })} />
       <FacetDisclosure label={t('fields.semester')} options={semesterChoices} selected={state.semester ? [state.semester] : []} onToggle={(value) => setState({ ...state, semester: state.semester === value ? undefined : value as SearchState['semester'] })} />
-      {filters.slice(0, 3).map((filter) => <FacetDisclosure key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
+      {academicFilters.map((filter) => <FacetDisclosure key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
       <FacetDisclosure label={t('search.people')} options={peopleChoices} searchLabel={t('search.findPeople')} selected={state.person_id ?? []} onToggle={(value) => toggleArrayFilter('person_id', value)} />
-      <FacetDisclosure label={t('fields.advisor')} options={peopleChoices} searchLabel={t('search.findAdvisor')} selected={state.advisor_id ?? []} onToggle={(value) => toggleArrayFilter('advisor_id', value)} />
+      <FacetDisclosure label={t('fields.advisor')} options={advisorChoices} searchLabel={t('search.findAdvisor')} selected={state.advisor_id ?? []} onToggle={(value) => toggleArrayFilter('advisor_id', value)} />
       <StudentIdDisclosure value={state.student_id} onApply={(value) => setState({ ...state, student_id: value })} />
-      {filters.slice(3).map((filter) => <FacetDisclosure defaultOpen={filter.key === 'technology_key'} key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
+      {classificationFilters.map((filter) => <FacetDisclosure defaultOpen={filter.key === 'technology_key'} key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
       <FacetDisclosure label={t('search.availability')} options={availabilityFilters.map((filter) => ({ value: filter.key, label: t(filter.label) }))} selected={availabilityFilters.filter((filter) => state[filter.key]).map((filter) => filter.key)} onToggle={(value) => setState({ ...state, [value]: state[value as typeof availabilityFilters[number]['key']] ? undefined : true })} />
       <div className={styles.filterActions}><button className={styles.searchPrimaryButton} type="button" onClick={() => void searchQuery.refetch()}>{t('action.filter')}</button><button className={styles.secondaryButton} disabled={!activeFilters.length} type="button" onClick={clearFilters}>{t('action.clear')}</button></div>
     </aside>
@@ -315,7 +320,7 @@ function ProjectPage() {
   if (projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
   if (projectQuery.isError || !projectQuery.data) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
   const project = projectQuery.data
-  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><Tags values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
+  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
 }
 
 function PersonPage() {
@@ -332,6 +337,13 @@ function People({ participations }: { participations: Array<{ person: { id: stri
   return <div className={styles.projectList}>{participations.map((participation) => <p key={`${participation.person.id}-${participation.role}`}><Link to={`/people/${participation.person.id}`}>{participation.person.display_name}</Link> <span className={styles.metadata}>{t(`roles.${participation.role}`)}</span></p>)}</div>
 }
 function Tags({ values }: { values: TaxonomyValue[] }) { return <div className={styles.tags}>{values.map((value) => <span className={styles.tag} key={value.id}>{value.labels.en ?? value.key}</span>)}</div> }
+const publicClassificationDimensions = ['category', 'platform', 'domain', 'technology'] as const
+function ClassificationGroups({ values }: { values: TaxonomyValue[] }) {
+  const { t } = useTranslation()
+  const groups = publicClassificationDimensions.map((dimension) => ({ dimension, values: values.filter((value) => value.dimension === dimension) })).filter((group) => group.values.length)
+  if (!groups.length) return <p>{t('project.noClassifications')}</p>
+  return <div className={styles.classificationGroups}>{groups.map((group) => <section className={styles.classificationGroup} key={group.dimension}><h3>{t(`fields.${group.dimension}`)}</h3><Tags values={group.values} /></section>)}</div>
+}
 function Definition({ label, value }: { label: string; value?: string | null }) { return value ? <div><dt>{label}</dt><dd>{value}</dd></div> : null }
 function formatBytes(bytes: number, translate: (key: string, options: { count: string }) => string): string { return translate('units.megabytes', { count: (bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1) }) }
 
@@ -491,7 +503,7 @@ export function ProjectAssignmentFields({ form, people, taxonomy }: { form: UseF
   const { t } = useTranslation()
   const personOptions = people.map((person) => ({ id: person.id, label: person.student_id ? `${person.display_name} (${person.student_id})` : person.display_name }))
   const taxonomyOptions = (dimension: TaxonomyValue['dimension']) => taxonomy.filter((value) => value.dimension === dimension).map((value) => ({ id: value.id, label: value.labels.en ?? value.key }))
-  return <><section className={styles.detailSection}><h2>{t('admin.peopleAssignments')}</h2><div className={styles.assignmentGrid}><AssignmentSelect label={t('project.students')} name="studentPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.advisors')} name="advisorPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.coAdvisors')} name="coAdvisorPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.committee')} name="committeePersonIds" options={personOptions} form={form} /></div></section><section className={styles.detailSection}><h2>{t('admin.taxonomyAssignments')}</h2><div className={styles.assignmentGrid}><AssignmentSelect label={t('admin.categories')} name="categoryTaxonomyIds" options={taxonomyOptions('category')} form={form} /><AssignmentSelect label={t('admin.platforms')} name="platformTaxonomyIds" options={taxonomyOptions('platform')} form={form} /><AssignmentSelect label={t('admin.domains')} name="domainTaxonomyIds" options={taxonomyOptions('domain')} form={form} /><AssignmentSelect label={t('admin.topics')} name="topicTaxonomyIds" options={taxonomyOptions('topic')} form={form} /><AssignmentSelect label={t('admin.technologies')} name="technologyTaxonomyIds" options={taxonomyOptions('technology')} form={form} /></div></section></>
+  return <><section className={styles.detailSection}><h2>{t('admin.peopleAssignments')}</h2><div className={styles.assignmentGrid}><AssignmentSelect label={t('project.students')} name="studentPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.advisors')} name="advisorPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.coAdvisors')} name="coAdvisorPersonIds" options={personOptions} form={form} /><AssignmentSelect label={t('project.committee')} name="committeePersonIds" options={personOptions} form={form} /></div></section><section className={styles.detailSection}><h2>{t('admin.taxonomyAssignments')}</h2><div className={styles.assignmentGrid}><AssignmentSelect label={t('admin.categories')} name="categoryTaxonomyIds" options={taxonomyOptions('category')} form={form} /><AssignmentSelect label={t('admin.platforms')} name="platformTaxonomyIds" options={taxonomyOptions('platform')} form={form} /><AssignmentSelect label={t('admin.domains')} name="domainTaxonomyIds" options={taxonomyOptions('domain')} form={form} /><AssignmentSelect label={t('admin.technologies')} name="technologyTaxonomyIds" options={taxonomyOptions('technology')} form={form} /></div></section></>
 }
 
 type AssignmentFieldName = 'studentPersonIds' | 'advisorPersonIds' | 'coAdvisorPersonIds' | 'committeePersonIds' | 'categoryTaxonomyIds' | 'platformTaxonomyIds' | 'domainTaxonomyIds' | 'topicTaxonomyIds' | 'technologyTaxonomyIds'

@@ -49,6 +49,10 @@
 .detailGrid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(13rem, 1fr); gap: var(--space-6); }
 .detailSection { border-top: 1px solid var(--color-line); margin-top: var(--space-5); padding-top: var(--space-3); }
 .detailSection h2 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 500; }
+.classificationGroups { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.classificationGroup { display: grid; gap: .45rem; }
+.classificationGroup h3 { color: var(--color-muted); font-size: .75rem; letter-spacing: .08em; margin: 0; text-transform: uppercase; }
+.classificationGroup .tags { margin-top: 0; }
 .definitionList div { display: grid; gap: .2rem; }
 .definitionList dt { color: var(--color-muted); font-size: .85rem; }
 .definitionList dd { margin: 0; overflow-wrap: anywhere; }

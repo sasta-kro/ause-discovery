@@ -227,27 +227,33 @@ func loadDocumentTaxonomy(ctx context.Context, pool *pgxpool.Pool, document *Doc
 		if err := json.Unmarshal(labels, &value.Labels); err != nil {
 			return err
 		}
-		document.Taxonomy = append(document.Taxonomy, value)
+		appendDocumentTaxonomy(document, value)
+	}
+	return rows.Err()
+}
+
+func appendDocumentTaxonomy(document *Document, value TaxonomyValue) {
+	document.Taxonomy = append(document.Taxonomy, value)
+	if value.Dimension != "topic" {
 		document.TaxonomyKeys = append(document.TaxonomyKeys, value.Key)
 		for _, label := range value.Labels {
 			document.TaxonomyLabels = append(document.TaxonomyLabels, label)
 		}
-		switch value.Dimension {
-		case "category":
-			document.Categories = append(document.Categories, value)
-			document.CategoryKeys = append(document.CategoryKeys, value.Key)
-		case "platform":
-			document.Platforms = append(document.Platforms, value)
-			document.PlatformKeys = append(document.PlatformKeys, value.Key)
-		case "domain":
-			document.DomainKeys = append(document.DomainKeys, value.Key)
-		case "topic":
-			document.TopicKeys = append(document.TopicKeys, value.Key)
-		case "technology":
-			document.TechnologyKeys = append(document.TechnologyKeys, value.Key)
-		}
 	}
-	return rows.Err()
+	switch value.Dimension {
+	case "category":
+		document.Categories = append(document.Categories, value)
+		document.CategoryKeys = append(document.CategoryKeys, value.Key)
+	case "platform":
+		document.Platforms = append(document.Platforms, value)
+		document.PlatformKeys = append(document.PlatformKeys, value.Key)
+	case "domain":
+		document.DomainKeys = append(document.DomainKeys, value.Key)
+	case "topic":
+		document.TopicKeys = append(document.TopicKeys, value.Key)
+	case "technology":
+		document.TechnologyKeys = append(document.TechnologyKeys, value.Key)
+	}
 }
 
 func loadDocumentArtifacts(ctx context.Context, pool *pgxpool.Pool, document *Document) error {
