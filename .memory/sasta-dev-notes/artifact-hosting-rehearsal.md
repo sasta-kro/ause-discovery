@@ -99,7 +99,7 @@ every published Project with realistic public display names. The
 `ausectl artifacts import-manifest` command maps later corpus files by Project
 UUID or metadata `import_key`. Both commands provide a read-only dry-run and
 safe rerun behavior. Complete local and VM commands are documented in
-`docs/operations/project-file-import.md`.
+`docs/dev-notes/project-file-import.md`.
 
 ## API flow used (for scripting the VM seed)
 

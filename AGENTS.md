@@ -33,7 +33,14 @@ Do not over-test and waste time.
 - After a coherent increment passes focused verification, record its state and continue to the next planned increment.
 - Avoid broad repository rereads, repeated full-suite runs, and repeated environment rebuilds when relevant state is already known and unchanged.
 
+## Documentation Boundaries
+
+- `.memory/` holds all internal documentation: implementation notes, plans, scraps, agent workflow, operator-only guidance, and anything not intended for external readers. It is updated continuously as work proceeds.
+- `docs/` holds public-facing project documentation for external readers such as other administrators and the public. It follows ordinary documentation structure, stays free of internal notes and working state, and changes only when explicitly requested.
+- Do not place internal content in `docs/`, and do not present `.memory/` material as public documentation.
+
 ## Memory System
+
 
 - **Long-term:*- `./.memory/` for curated durable context. Be conservative.
 - **Lessons Learned:*- `./.memory/lessons_learned.md` for mistakes and practices that should not repeat.
