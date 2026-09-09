@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
+	"ause-discovery.local/backend/internal/artifactimport"
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
 	"ause-discovery.local/backend/internal/catalog"
 	"ause-discovery.local/backend/internal/platform/config"
@@ -31,6 +35,9 @@ func run(arguments []string) error {
 	}
 	if len(arguments) >= 2 && arguments[0] == "search" {
 		return runSearch(arguments[1:])
+	}
+	if len(arguments) >= 2 && arguments[0] == "artifacts" {
+		return runArtifacts(arguments[1:])
 	}
 	if len(arguments) != 2 {
 		return usageError()
@@ -70,6 +77,100 @@ func run(arguments []string) error {
 	}
 	fmt.Fprintln(os.Stdout, "catalog synchronization succeeded")
 	return nil
+}
+
+type artifactCommand struct {
+	Kind            string
+	ActorUsername   string
+	SourceDirectory string
+	ManifestPath    string
+	AllPublished    bool
+	ProjectID       *uuid.UUID
+	Apply           bool
+}
+
+func parseArtifactCommand(arguments []string) (artifactCommand, error) {
+	if len(arguments) == 0 {
+		return artifactCommand{}, usageError()
+	}
+	command := artifactCommand{Kind: arguments[0]}
+	flags := flag.NewFlagSet("artifacts "+command.Kind, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.StringVar(&command.ActorUsername, "actor-username", "", "active administrator username")
+	flags.BoolVar(&command.Apply, "apply", false, "write validated files")
+	switch command.Kind {
+	case "seed-demo":
+		flags.StringVar(&command.SourceDirectory, "source-directory", "", "directory containing the four demo files")
+		flags.BoolVar(&command.AllPublished, "all-published", false, "target every published Project")
+		projectID := ""
+		flags.StringVar(&projectID, "project-id", "", "target one published Project")
+		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 {
+			return artifactCommand{}, usageError()
+		}
+		if strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.SourceDirectory) == "" || command.AllPublished == (strings.TrimSpace(projectID) != "") {
+			return artifactCommand{}, usageError()
+		}
+		if projectID != "" {
+			parsed, err := uuid.Parse(projectID)
+			if err != nil {
+				return artifactCommand{}, errors.New("project ID must be a UUID")
+			}
+			command.ProjectID = &parsed
+		}
+	case "import-manifest":
+		flags.StringVar(&command.ManifestPath, "manifest", "", "Project-file manifest path")
+		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.ManifestPath) == "" {
+			return artifactCommand{}, usageError()
+		}
+	default:
+		return artifactCommand{}, usageError()
+	}
+	return command, nil
+}
+
+func runArtifacts(arguments []string) error {
+	command, err := parseArtifactCommand(arguments)
+	if err != nil {
+		return err
+	}
+	configuration, err := config.Load(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+	operationContext := context.Background()
+	databasePool, err := pgxpool.New(operationContext, configuration.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+	defer databasePool.Close()
+	if err := databasePool.Ping(operationContext); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	service := artifactimport.Service{
+		Pool: databasePool,
+		Artifacts: artifacts.Service{
+			Pool:            databasePool,
+			Storage:         artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes},
+			MaxProjectBytes: configuration.MaxProjectArtifactBytes,
+		},
+		MaxArtifactBytes: configuration.MaxArtifactBytes,
+	}
+	var entries []artifactimport.Entry
+	if command.Kind == "seed-demo" {
+		entries, err = service.DemoEntries(operationContext, command.SourceDirectory, command.ProjectID)
+	} else {
+		entries, err = artifactimport.LoadManifest(command.ManifestPath)
+	}
+	if err != nil {
+		return err
+	}
+	result, runErr := service.Run(operationContext, entries, artifactimport.Options{ActorUsername: command.ActorUsername, Apply: command.Apply})
+	mode := "dry-run"
+	if command.Apply {
+		mode = "apply"
+	}
+	fmt.Fprintf(os.Stdout, "mode: %s\nProjects: %d\nplanned uploads: %d\nuploaded: %d\nskipped: %d\n", mode, result.ProjectCount, result.PlannedUploads, result.Uploaded, result.Skipped)
+	return runErr
 }
 
 type searchCommand struct {
@@ -229,5 +330,5 @@ func runMigrationStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
+	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
 }

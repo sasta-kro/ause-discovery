@@ -92,6 +92,15 @@ Rehearsal", open the project. The report and slides show a View button (opens
 the PDF inline in a new tab) and all four show Download. The poster and zip
 have no View action by design, since inline view is PDF only.
 
+## Bulk rehearsal and later corpus import
+
+The `ausectl artifacts seed-demo` command attaches these same four files to
+every published Project with realistic public display names. The
+`ausectl artifacts import-manifest` command maps later corpus files by Project
+UUID or metadata `import_key`. Both commands provide a read-only dry-run and
+safe rerun behavior. Complete local and VM commands are documented in
+`docs/operations/project-file-import.md`.
+
 ## API flow used (for scripting the VM seed)
 
 ```

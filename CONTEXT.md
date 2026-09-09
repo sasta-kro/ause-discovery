@@ -66,6 +66,10 @@ _Avoid_: Public Topic filter, active Topic assignment
 A stored file associated with a Project, such as a report, slides, source archive, proposal, poster, dataset, or demo video. The internal domain term is Artifact. User-facing interfaces call it a Project file.
 _Avoid_: Attachment URL, Project file column
 
+**Project File Import**:
+An operator-controlled collection of files attached to existing Projects after their metadata exists.
+_Avoid_: Metadata Import Batch, direct Artifact copy
+
 ## Import and Search
 
 **Import Batch**:

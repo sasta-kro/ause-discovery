@@ -108,6 +108,7 @@ All commands use the same `--env-file` selection as bootstrap. `ausectl` is invo
 - Check migration status: `docker compose --env-file <file> run --rm --no-deps --entrypoint /usr/local/bin/ausectl api migrations status`
 - Queue one Project reindex: `docker compose --env-file <file> run --rm --no-deps --entrypoint /usr/local/bin/ausectl api search reindex-project --project-id <project-uuid>`
 - Queue a full search rebuild: `docker compose --env-file <file> run --rm --no-deps --entrypoint /usr/local/bin/ausectl api search rebuild`
+- Seed realistic demonstration files or import real Project files in bulk: follow `docs/operations/project-file-import.md`.
 - Service status and bounded recent logs:
 
   ```sh

@@ -46,6 +46,7 @@ The web entry point publishes `http://localhost:8088/ause-discovery/`. Create th
 - Implementation specification and build guide: `docs/ause-discovery_implementation_specification_v1.md`
 - Product specification: `docs/ause-discovery_specification_v1.md`
 - Operator runbook for deployment, operations, backup, restore, upgrades, and recovery: `docs/operations/runbook.md`
+- Bulk Project-file import and demo seeding: `docs/operations/project-file-import.md`
 
 ## Ownership and publication boundaries
 
