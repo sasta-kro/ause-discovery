@@ -24,8 +24,8 @@ As of 2026-09-02:
 - the pnpm workspace, exact version pins, Go backend foundation, React frontend foundation, Compose stack, Nginx proxy, PostgreSQL schema, OpenAPI contract, generated clients, and catalog synchronization are implemented;
 - identity, People, Project, HTTP, CLI, and frontend core behavior is implemented and verified through the production-like Compose stack;
 - Artifacts, Meilisearch integration, imports, final administration flows, CI, and product-completion verification remain incomplete;
-- the implementation specification is `docs/ause-discovery_implementation_specification_v1.md`;
-- the domain glossary is `CONTEXT.md`.
+- the implementation specification is `.memory/docs/ause-discovery_implementation_specification_v1.md`;
+- the domain glossary is `.memory/CONTEXT.md`.
 
 ## Implementation intent
 
