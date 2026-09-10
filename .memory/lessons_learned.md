@@ -81,3 +81,7 @@ A digest pin guarantees repeatability but can retain packages with available sec
 ## Shared Compose image names and build blocks
 
 Two Compose services that share one image name, such as `api` and `migrate` both tagging `AUSE_API_IMAGE`, cannot both declare a `build` block. `docker compose build` exports every target and the second export fails with `image ... already exists`, canceling sibling builds. The consumer service must reference the image only; commands that build it explicitly should name the building service alone.
+
+## Storage migration must preserve keys
+
+A storage-backend copy that generates a fresh key on the target orphans every migrated record against its stored `storage_key`. A pluggable storage interface needs an explicit-key write (`PutAt`) alongside key-generating upload (`Put`), and migration copies must land under the identical key so the source volume remains a coherent second copy addressable without the database. A test that checks bytes on the target without asserting the key equality passes vacuously.
