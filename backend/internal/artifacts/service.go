@@ -27,7 +27,7 @@ var (
 
 type Service struct {
 	Pool            *pgxpool.Pool
-	Storage         Storage
+	Storage         StorageSet
 	MaxProjectBytes int64
 }
 
@@ -52,6 +52,7 @@ type Artifact struct {
 	DisplayName      string
 	OriginalFilename string
 	StorageKey       string
+	StorageBackend   string
 	MIMEType         string
 	Extension        string
 	ByteCount        int64
@@ -66,7 +67,7 @@ type Artifact struct {
 
 type PublicContent struct {
 	Artifact Artifact
-	File     *os.File
+	File     io.ReadSeekCloser
 	Size     int64
 }
 
@@ -75,12 +76,12 @@ func (service Service) Upload(ctx context.Context, actorID, projectID uuid.UUID,
 	if err != nil {
 		return Artifact{}, err
 	}
-	stored, err := service.Storage.Put(ctx, input.Content, input.ExpectedSize)
+	stored, err := service.Storage.Default().Put(ctx, input.Content, input.ExpectedSize)
 	if err != nil {
 		return Artifact{}, err
 	}
 	if err := validateDetectedContent(metadata.Extension, stored.DetectedMIME, stored.Prefix); err != nil {
-		_ = service.Storage.removeNew(stored.StorageKey)
+		_ = service.Storage.Default().RemoveNew(ctx, stored.StorageKey)
 		return Artifact{}, err
 	}
 
@@ -101,10 +102,10 @@ func (service Service) Upload(ctx context.Context, actorID, projectID uuid.UUID,
 			return err
 		}
 		row := transaction.QueryRow(ctx, `
-			INSERT INTO artifacts (id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, actor_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11)
-			RETURNING id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`,
-			artifactID, projectID, metadata.ArtifactType, metadata.DisplayName, metadata.OriginalFilename, stored.StorageKey, stored.DetectedMIME, metadata.Extension, stored.ByteCount, stored.SHA256[:], actorID)
+			INSERT INTO artifacts (id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, actor_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active', $12)
+			RETURNING id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`,
+			artifactID, projectID, metadata.ArtifactType, metadata.DisplayName, metadata.OriginalFilename, stored.StorageKey, service.Storage.DefaultName, stored.DetectedMIME, metadata.Extension, stored.ByteCount, stored.SHA256[:], actorID)
 		result, err = scanArtifact(row)
 		if err != nil {
 			return err
@@ -119,7 +120,7 @@ func (service Service) Upload(ctx context.Context, actorID, projectID uuid.UUID,
 		return nil
 	})
 	if err != nil {
-		_ = service.Storage.removeNew(stored.StorageKey)
+		_ = service.Storage.Default().RemoveNew(ctx, stored.StorageKey)
 		return Artifact{}, err
 	}
 	return result, nil
@@ -150,7 +151,7 @@ func (service Service) Update(ctx context.Context, actorID, artifactID uuid.UUID
 		if err != nil {
 			return err
 		}
-		result, err = scanArtifact(transaction.QueryRow(ctx, `UPDATE artifacts SET type=$2, display_name=$3, revision=revision+1, actor_id=$4, updated_at=now() WHERE id=$1 RETURNING id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`, artifactID, metadata.ArtifactType, metadata.DisplayName, actorID))
+		result, err = scanArtifact(transaction.QueryRow(ctx, `UPDATE artifacts SET type=$2, display_name=$3, revision=revision+1, actor_id=$4, updated_at=now() WHERE id=$1 RETURNING id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`, artifactID, metadata.ArtifactType, metadata.DisplayName, actorID))
 		if err != nil {
 			return err
 		}
@@ -199,7 +200,11 @@ func (service Service) transition(ctx context.Context, actorID, artifactID uuid.
 			if _, err := validateUploadMetadata(current.ArtifactType, current.DisplayName, current.OriginalFilename); err != nil {
 				return err
 			}
-			if !service.Storage.Exists(current.StorageKey) {
+			backend, lookupErr := service.Storage.Lookup(current.StorageBackend)
+			if lookupErr != nil {
+				return ErrContentUnavailable
+			}
+			if !backend.Exists(ctx, current.StorageKey) {
 				return ErrContentUnavailable
 			}
 			if err := service.checkQuota(ctx, transaction, projectID, current.ByteCount); err != nil {
@@ -215,7 +220,7 @@ func (service Service) transition(ctx context.Context, actorID, artifactID uuid.
 			deletedAtExpression = "NULL"
 			eventType = "artifact.restored"
 		}
-		statement := fmt.Sprintf(`UPDATE artifacts SET status=$2, revision=revision+1, actor_id=$3, updated_at=now(), deleted_at=%s WHERE id=$1 RETURNING id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`, deletedAtExpression)
+		statement := fmt.Sprintf(`UPDATE artifacts SET status=$2, revision=revision+1, actor_id=$3, updated_at=now(), deleted_at=%s WHERE id=$1 RETURNING id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`, deletedAtExpression)
 		result, err = scanArtifact(transaction.QueryRow(ctx, statement, artifactID, status, actorID))
 		if err != nil {
 			return err
@@ -238,12 +243,12 @@ func (service Service) Replace(ctx context.Context, actorID, artifactID uuid.UUI
 	if err != nil {
 		return Artifact{}, err
 	}
-	stored, err := service.Storage.Put(ctx, input.Content, input.ExpectedSize)
+	stored, err := service.Storage.Default().Put(ctx, input.Content, input.ExpectedSize)
 	if err != nil {
 		return Artifact{}, err
 	}
 	if err := validateDetectedContent(metadata.Extension, stored.DetectedMIME, stored.Prefix); err != nil {
-		_ = service.Storage.removeNew(stored.StorageKey)
+		_ = service.Storage.Default().RemoveNew(ctx, stored.StorageKey)
 		return Artifact{}, err
 	}
 
@@ -282,10 +287,10 @@ func (service Service) Replace(ctx context.Context, actorID, artifactID uuid.UUI
 			return err
 		}
 		result, err = scanArtifact(transaction.QueryRow(ctx, `
-			INSERT INTO artifacts (id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, actor_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', $11)
-			RETURNING id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`,
-			replacementID, projectID, locked.ArtifactType, locked.DisplayName, lockedMetadata.OriginalFilename, stored.StorageKey, stored.DetectedMIME, lockedMetadata.Extension, stored.ByteCount, stored.SHA256[:], actorID))
+			INSERT INTO artifacts (id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, actor_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'active', $12)
+			RETURNING id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at`,
+			replacementID, projectID, locked.ArtifactType, locked.DisplayName, lockedMetadata.OriginalFilename, stored.StorageKey, service.Storage.DefaultName, stored.DetectedMIME, lockedMetadata.Extension, stored.ByteCount, stored.SHA256[:], actorID))
 		if err != nil {
 			return err
 		}
@@ -296,14 +301,14 @@ func (service Service) Replace(ctx context.Context, actorID, artifactID uuid.UUI
 		return audit.AppendTx(ctx, transaction, artifactAuditEvent(actorID, "artifact.replaced", result, map[string]any{"project_revision": projectRevision, "replaced_artifact_id": artifactID.String(), "replacement_artifact_id": replacementID.String()}))
 	})
 	if err != nil {
-		_ = service.Storage.removeNew(stored.StorageKey)
+		_ = service.Storage.Default().RemoveNew(ctx, stored.StorageKey)
 		return Artifact{}, err
 	}
 	return result, nil
 }
 
 func (service Service) Get(ctx context.Context, artifactID uuid.UUID) (Artifact, error) {
-	return scanArtifact(service.Pool.QueryRow(ctx, `SELECT id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at FROM artifacts WHERE id=$1`, artifactID))
+	return scanArtifact(service.Pool.QueryRow(ctx, `SELECT id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at FROM artifacts WHERE id=$1`, artifactID))
 }
 
 func (service Service) CurrentRevision(ctx context.Context, artifactID uuid.UUID) (int64, error) {
@@ -317,14 +322,18 @@ func (service Service) CurrentRevision(ctx context.Context, artifactID uuid.UUID
 
 func (service Service) OpenPublic(ctx context.Context, artifactID uuid.UUID) (PublicContent, error) {
 	artifact, err := scanArtifact(service.Pool.QueryRow(ctx, `
-		SELECT artifacts.id, artifacts.project_id, artifacts.type, artifacts.display_name, artifacts.original_filename, artifacts.storage_key, artifacts.mime_type, artifacts.extension, artifacts.byte_count, artifacts.sha256, artifacts.status, artifacts.revision, artifacts.actor_id, artifacts.created_at, artifacts.updated_at, artifacts.deleted_at
+		SELECT artifacts.id, artifacts.project_id, artifacts.type, artifacts.display_name, artifacts.original_filename, artifacts.storage_key, artifacts.storage_backend, artifacts.mime_type, artifacts.extension, artifacts.byte_count, artifacts.sha256, artifacts.status, artifacts.revision, artifacts.actor_id, artifacts.created_at, artifacts.updated_at, artifacts.deleted_at
 		FROM artifacts JOIN projects ON projects.id=artifacts.project_id
 		WHERE artifacts.id=$1 AND artifacts.status='active' AND projects.status='published'`, artifactID))
 	if err != nil {
 		return PublicContent{}, err
 	}
-	file, size, err := service.Storage.Open(artifact.StorageKey)
-	if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrUnsafeStoragePath) {
+	backend, lookupErr := service.Storage.Lookup(artifact.StorageBackend)
+	if lookupErr != nil {
+		return PublicContent{}, ErrContentUnavailable
+	}
+	file, size, err := backend.Open(ctx, artifact.StorageKey)
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, ErrUnsafeStoragePath) || errors.Is(err, ErrContentUnavailable) {
 		return PublicContent{}, ErrContentUnavailable
 	}
 	if err != nil {
@@ -371,7 +380,7 @@ func lockProject(ctx context.Context, transaction pgx.Tx, projectID uuid.UUID) (
 }
 
 func lockArtifact(ctx context.Context, transaction pgx.Tx, artifactID uuid.UUID) (Artifact, error) {
-	return scanArtifact(transaction.QueryRow(ctx, `SELECT id, project_id, type, display_name, original_filename, storage_key, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at FROM artifacts WHERE id=$1 FOR UPDATE`, artifactID))
+	return scanArtifact(transaction.QueryRow(ctx, `SELECT id, project_id, type, display_name, original_filename, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id, created_at, updated_at, deleted_at FROM artifacts WHERE id=$1 FOR UPDATE`, artifactID))
 }
 
 func updateProjectAfterArtifactMutation(ctx context.Context, transaction pgx.Tx, projectID uuid.UUID, projectStatus string) (int64, error) {
@@ -402,7 +411,7 @@ func scanArtifact(row rowScanner) (Artifact, error) {
 	var result Artifact
 	var digest []byte
 	var actorID *uuid.UUID
-	err := row.Scan(&result.ID, &result.ProjectID, &result.ArtifactType, &result.DisplayName, &result.OriginalFilename, &result.StorageKey, &result.MIMEType, &result.Extension, &result.ByteCount, &digest, &result.Status, &result.Revision, &actorID, &result.CreatedAt, &result.UpdatedAt, &result.DeletedAt)
+	err := row.Scan(&result.ID, &result.ProjectID, &result.ArtifactType, &result.DisplayName, &result.OriginalFilename, &result.StorageKey, &result.StorageBackend, &result.MIMEType, &result.Extension, &result.ByteCount, &digest, &result.Status, &result.Revision, &actorID, &result.CreatedAt, &result.UpdatedAt, &result.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Artifact{}, ErrNotFound
 	}

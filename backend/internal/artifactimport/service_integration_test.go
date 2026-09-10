@@ -26,10 +26,13 @@ func TestDemoAndManifestImportsAreValidatedAndRepeatable(t *testing.T) {
 	pool := createArtifactImportTestDatabase(t, ctx, databaseURL)
 	projectIDs := seedArtifactImportProjects(t, ctx, pool)
 	sourceDirectory := createDemoFiles(t)
-	storage := artifacts.Storage{Root: t.TempDir(), MaxBytes: 1024 * 1024}
+	storageSet, storageErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: t.TempDir(), MaxArtifactBytes: 1024 * 1024})
+	if storageErr != nil {
+		t.Fatalf("build storage set: %v", storageErr)
+	}
 	service := Service{
 		Pool:             pool,
-		Artifacts:        artifacts.Service{Pool: pool, Storage: storage, MaxProjectBytes: 10 * 1024 * 1024},
+		Artifacts:        artifacts.Service{Pool: pool, Storage: storageSet, MaxProjectBytes: 10 * 1024 * 1024},
 		MaxArtifactBytes: 1024 * 1024,
 	}
 

@@ -26,25 +26,30 @@ const (
 )
 
 type Config struct {
-	Environment             string
-	ListenAddress           string
-	PublicBasePath          string
-	DatabaseURL             string
-	MeilisearchURL          string
-	MeilisearchAPIKey       string
-	MeilisearchIndex        string
-	ArtifactRoot            string
-	ImportTemporaryRoot     string
-	MaxArtifactBytes        int64
-	MaxProjectArtifactBytes int64
-	SessionIdleTTL          time.Duration
-	SessionAbsoluteTTL      time.Duration
-	SessionSecret           string
-	CookieSecure            bool
-	TrustedProxyCIDRs       []string
-	FeaturedProjectIDs      []string
-	LogLevel                string
-	CatalogRoot             string
+	Environment              string
+	ListenAddress            string
+	PublicBasePath           string
+	DatabaseURL              string
+	MeilisearchURL           string
+	MeilisearchAPIKey        string
+	MeilisearchIndex         string
+	ArtifactStorageBackend   string
+	ArtifactRoot             string
+	ArtifactB2Endpoint       string
+	ArtifactB2Bucket         string
+	ArtifactB2KeyID          string
+	ArtifactB2ApplicationKey string
+	ImportTemporaryRoot      string
+	MaxArtifactBytes         int64
+	MaxProjectArtifactBytes  int64
+	SessionIdleTTL           time.Duration
+	SessionAbsoluteTTL       time.Duration
+	SessionSecret            string
+	CookieSecure             bool
+	TrustedProxyCIDRs        []string
+	FeaturedProjectIDs       []string
+	LogLevel                 string
+	CatalogRoot              string
 }
 
 func Load(getenv func(string) string) (Config, error) {
@@ -83,26 +88,53 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("AUSE_COOKIE_SECURE must be true or false: %w", err)
 	}
 
+	artifactStorageBackend := valueOrDefault(getenv("AUSE_ARTIFACT_STORAGE_BACKEND"), "local")
+	if artifactStorageBackend != "local" && artifactStorageBackend != "b2" {
+		return Config{}, errors.New("AUSE_ARTIFACT_STORAGE_BACKEND must be local or b2")
+	}
+	b2Endpoint := strings.TrimSpace(getenv("AUSE_ARTIFACT_B2_ENDPOINT"))
+	b2Bucket := strings.TrimSpace(getenv("AUSE_ARTIFACT_B2_BUCKET"))
+	b2KeyID := strings.TrimSpace(getenv("AUSE_ARTIFACT_B2_KEY_ID"))
+	b2ApplicationKey := strings.TrimSpace(getenv("AUSE_ARTIFACT_B2_APPLICATION_KEY"))
+	b2Values := []string{b2Endpoint, b2Bucket, b2KeyID, b2ApplicationKey}
+	b2ConfiguredCount := 0
+	for _, value := range b2Values {
+		if value != "" {
+			b2ConfiguredCount++
+		}
+	}
+	if b2ConfiguredCount != 0 && b2ConfiguredCount != len(b2Values) {
+		return Config{}, errors.New("AUSE_ARTIFACT_B2_* values must be set together: endpoint, bucket, key ID, and application key")
+	}
+	if artifactStorageBackend == "b2" && b2ConfiguredCount == 0 {
+		return Config{}, errors.New("AUSE_ARTIFACT_STORAGE_BACKEND=b2 requires the four AUSE_ARTIFACT_B2_* values")
+	}
+
 	config := Config{
-		Environment:             environment,
-		ListenAddress:           valueOrDefault(getenv("AUSE_LISTEN_ADDR"), defaultListenAddress),
-		PublicBasePath:          publicBasePath,
-		DatabaseURL:             valueOrDefault(getenv("AUSE_DATABASE_URL"), defaultDatabaseURL),
-		MeilisearchURL:          valueOrDefault(getenv("AUSE_MEILISEARCH_URL"), defaultMeilisearchURL),
-		MeilisearchAPIKey:       getenv("AUSE_MEILISEARCH_API_KEY"),
-		MeilisearchIndex:        valueOrDefault(getenv("AUSE_MEILISEARCH_INDEX"), defaultMeilisearchIndex),
-		ArtifactRoot:            valueOrDefault(getenv("AUSE_ARTIFACT_ROOT"), defaultArtifactRoot),
-		ImportTemporaryRoot:     valueOrDefault(getenv("AUSE_IMPORT_TEMP_ROOT"), defaultImportTemporaryRoot),
-		MaxArtifactBytes:        maxArtifactBytes,
-		MaxProjectArtifactBytes: maxProjectArtifactBytes,
-		SessionIdleTTL:          sessionIdleTTL,
-		SessionAbsoluteTTL:      sessionAbsoluteTTL,
-		SessionSecret:           getenv("AUSE_SESSION_SECRET"),
-		CookieSecure:            cookieSecure,
-		TrustedProxyCIDRs:       splitCommaSeparated(getenv("AUSE_TRUSTED_PROXY_CIDRS")),
-		FeaturedProjectIDs:      splitCommaSeparated(getenv("AUSE_FEATURED_PROJECT_IDS")),
-		LogLevel:                valueOrDefault(getenv("AUSE_LOG_LEVEL"), defaultLogLevel),
-		CatalogRoot:             valueOrDefault(getenv("AUSE_CATALOG_ROOT"), defaultCatalogRoot),
+		Environment:              environment,
+		ListenAddress:            valueOrDefault(getenv("AUSE_LISTEN_ADDR"), defaultListenAddress),
+		PublicBasePath:           publicBasePath,
+		DatabaseURL:              valueOrDefault(getenv("AUSE_DATABASE_URL"), defaultDatabaseURL),
+		MeilisearchURL:           valueOrDefault(getenv("AUSE_MEILISEARCH_URL"), defaultMeilisearchURL),
+		MeilisearchAPIKey:        getenv("AUSE_MEILISEARCH_API_KEY"),
+		MeilisearchIndex:         valueOrDefault(getenv("AUSE_MEILISEARCH_INDEX"), defaultMeilisearchIndex),
+		ArtifactStorageBackend:   artifactStorageBackend,
+		ArtifactRoot:             valueOrDefault(getenv("AUSE_ARTIFACT_ROOT"), defaultArtifactRoot),
+		ArtifactB2Endpoint:       b2Endpoint,
+		ArtifactB2Bucket:         b2Bucket,
+		ArtifactB2KeyID:          b2KeyID,
+		ArtifactB2ApplicationKey: b2ApplicationKey,
+		ImportTemporaryRoot:      valueOrDefault(getenv("AUSE_IMPORT_TEMP_ROOT"), defaultImportTemporaryRoot),
+		MaxArtifactBytes:         maxArtifactBytes,
+		MaxProjectArtifactBytes:  maxProjectArtifactBytes,
+		SessionIdleTTL:           sessionIdleTTL,
+		SessionAbsoluteTTL:       sessionAbsoluteTTL,
+		SessionSecret:            getenv("AUSE_SESSION_SECRET"),
+		CookieSecure:             cookieSecure,
+		TrustedProxyCIDRs:        splitCommaSeparated(getenv("AUSE_TRUSTED_PROXY_CIDRS")),
+		FeaturedProjectIDs:       splitCommaSeparated(getenv("AUSE_FEATURED_PROJECT_IDS")),
+		LogLevel:                 valueOrDefault(getenv("AUSE_LOG_LEVEL"), defaultLogLevel),
+		CatalogRoot:              valueOrDefault(getenv("AUSE_CATALOG_ROOT"), defaultCatalogRoot),
 	}
 
 	if err := config.validateProductionSecrets(); err != nil {
@@ -143,8 +175,20 @@ func NormalizePublicBasePath(value string) (string, error) {
 	return "/" + strings.Join(segments, "/") + "/", nil
 }
 
+// ArtifactStorageDirectoriesActive reports whether the local filesystem
+// artifact store is the primary write backend. When it is not, the artifact
+// directory is neither created nor probed, so a B2 deployment does not fail
+// readiness over a directory it does not use.
+func (config Config) ArtifactStorageDirectoriesActive() bool {
+	return config.ArtifactStorageBackend != "b2"
+}
+
 func (config Config) EnsureStorageDirectories() error {
-	for _, directory := range []string{config.ArtifactRoot, config.ImportTemporaryRoot} {
+	directories := []string{config.ImportTemporaryRoot}
+	if config.ArtifactStorageDirectoriesActive() {
+		directories = append(directories, config.ArtifactRoot)
+	}
+	for _, directory := range directories {
 		if err := os.MkdirAll(directory, 0750); err != nil {
 			return fmt.Errorf("create required storage directory %q: %w", directory, err)
 		}
@@ -153,7 +197,11 @@ func (config Config) EnsureStorageDirectories() error {
 }
 
 func (config Config) CheckStorageDirectories() error {
-	for _, directory := range []string{config.ArtifactRoot, config.ImportTemporaryRoot} {
+	directories := []string{config.ImportTemporaryRoot}
+	if config.ArtifactStorageDirectoriesActive() {
+		directories = append(directories, config.ArtifactRoot)
+	}
+	for _, directory := range directories {
 		probe, err := os.CreateTemp(directory, ".write-check-")
 		if err != nil {
 			return fmt.Errorf("verify required storage directory %q: %w", directory, err)

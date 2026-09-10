@@ -54,12 +54,12 @@ type requestContextKey string
 
 const actorContextKey requestContextKey = "actor"
 
-func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config) http.Handler {
+func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config, artifactStorage artifacts.StorageSet) http.Handler {
 	controller := Controller{
 		Audit:     audit.Service{Pool: pool},
 		Auth:      auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL},
 		Catalogs:  catalog.Service{Pool: pool},
-		Artifacts: artifacts.Service{Pool: pool, Storage: artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes}, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
+		Artifacts: artifacts.Service{Pool: pool, Storage: artifactStorage, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
 		People:    people.Service{Pool: pool},
 		Projects:  projects.Service{Pool: pool},
@@ -1524,6 +1524,8 @@ func (controller *Controller) writeArtifactError(writer http.ResponseWriter, req
 		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
 	case errors.Is(err, artifacts.ErrContentUnavailable):
 		problem(writer, request, http.StatusNotFound, "artifact_content_unavailable", "Artifact content unavailable", "The Artifact metadata exists, but its content is unavailable.")
+	case errors.Is(err, artifacts.ErrStorageUnavailable):
+		problem(writer, request, http.StatusServiceUnavailable, "artifact_storage_unavailable", "Artifact storage unavailable", "Artifact storage is temporarily unavailable. Try again later.")
 	case errors.Is(err, artifacts.ErrRevisionConflict):
 		revision, revisionErr := controller.Artifacts.CurrentRevision(request.Context(), artifactID)
 		if revisionErr != nil {

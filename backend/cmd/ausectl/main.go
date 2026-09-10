@@ -89,6 +89,26 @@ type artifactCommand struct {
 	Apply           bool
 }
 
+func runArtifactMigration(operationContext context.Context, databasePool *pgxpool.Pool, storageSet artifacts.StorageSet, apply bool) error {
+	result, err := artifacts.MigrateStorage(operationContext, databasePool, storageSet, apply)
+	mode := "dry-run"
+	if apply {
+		mode = "apply"
+	}
+	fmt.Fprintf(os.Stdout, "mode: %s\ntarget backend: %s\non source backend: %d\non target backend: %d\nplanned: %d\ncopied: %d\ndigest-verified: %d\nfailed: %d\n",
+		mode, storageSet.DefaultName, result.OnSourceBackend, result.OnTargetBackend, result.Planned, result.Copied, result.Verified, len(result.Failed))
+	for _, failure := range result.Failed {
+		fmt.Fprintf(os.Stdout, "failed artifact %s (%s): %v\n", failure.ArtifactID, failure.StorageKey, failure.Err)
+	}
+	if err != nil {
+		return err
+	}
+	if apply && len(result.Failed) == 0 && result.OnSourceBackend > 0 && result.Copied == 0 {
+		return errors.New("artifact storage migration copied nothing although source artifacts exist")
+	}
+	return nil
+}
+
 func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 	if len(arguments) == 0 {
 		return artifactCommand{}, usageError()
@@ -122,6 +142,11 @@ func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.ManifestPath) == "" {
 			return artifactCommand{}, usageError()
 		}
+	case "migrate":
+		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) != "" || strings.TrimSpace(command.ManifestPath) != "" {
+			return artifactCommand{}, usageError()
+		}
+		command.ActorUsername = ""
 	default:
 		return artifactCommand{}, usageError()
 	}
@@ -146,11 +171,26 @@ func runArtifacts(arguments []string) error {
 	if err := databasePool.Ping(operationContext); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
+	storageSet, err := artifacts.NewStorageSet(artifacts.StorageOptions{
+		DefaultName:      configuration.ArtifactStorageBackend,
+		LocalRoot:        configuration.ArtifactRoot,
+		MaxArtifactBytes: configuration.MaxArtifactBytes,
+		B2Endpoint:       configuration.ArtifactB2Endpoint,
+		B2Bucket:         configuration.ArtifactB2Bucket,
+		B2KeyID:          configuration.ArtifactB2KeyID,
+		B2ApplicationKey: configuration.ArtifactB2ApplicationKey,
+	})
+	if err != nil {
+		return fmt.Errorf("configure artifact storage: %w", err)
+	}
+	if command.Kind == "migrate" {
+		return runArtifactMigration(operationContext, databasePool, storageSet, command.Apply)
+	}
 	service := artifactimport.Service{
 		Pool: databasePool,
 		Artifacts: artifacts.Service{
 			Pool:            databasePool,
-			Storage:         artifacts.Storage{Root: configuration.ArtifactRoot, MaxBytes: configuration.MaxArtifactBytes},
+			Storage:         storageSet,
 			MaxProjectBytes: configuration.MaxProjectArtifactBytes,
 		},
 		MaxArtifactBytes: configuration.MaxArtifactBytes,
@@ -330,5 +370,5 @@ func runMigrationStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
+	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--apply] | artifacts migrate [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
 }

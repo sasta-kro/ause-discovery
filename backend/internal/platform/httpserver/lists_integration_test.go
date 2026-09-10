@@ -9,6 +9,7 @@ import (
 	"time"
 
 	api "ause-discovery.local/backend/generated/api"
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
@@ -24,7 +25,11 @@ func TestAdminListsPageThroughCursorsAndRejectMalformedOnes(t *testing.T) {
 	ctx := context.Background()
 	pool := createAuditHTTPTestDatabase(t, ctx, databaseURL)
 	configuration := config.Config{PublicBasePath: "/ause-discovery/", SessionIdleTTL: 30 * time.Minute, SessionAbsoluteTTL: 12 * time.Hour}
-	handler := NewAPIHandler(pool, configuration)
+	storageSet, storageSetErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: t.TempDir(), MaxArtifactBytes: 1024})
+	if storageSetErr != nil {
+		t.Fatalf("build artifact storage set: %v", storageSetErr)
+	}
+	handler := NewAPIHandler(pool, configuration, storageSet)
 
 	authService := auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL}
 	adminID, err := authService.CreateUser(ctx, "list-http-admin", "List-Http-2026!x")

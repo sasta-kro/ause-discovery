@@ -27,8 +27,9 @@ func TestArtifactLifecycleMaintainsProjectSearchAuditAndBytes(t *testing.T) {
 	ctx := context.Background()
 	pool := createArtifactTestDatabase(t, ctx, databaseURL)
 	actorID, projectID := seedArtifactOwner(t, ctx, pool)
-	storage := Storage{Root: t.TempDir(), MaxBytes: 1024}
-	service := Service{Pool: pool, Storage: storage, MaxProjectBytes: 4096}
+	storage := LocalStorage{Root: t.TempDir(), MaxBytes: 1024}
+	storageSet := newLocalStorageSet(t, storage)
+	service := Service{Pool: pool, Storage: storageSet, MaxProjectBytes: 4096}
 	content := []byte("%PDF-1.7\nartifact")
 
 	created, err := service.Upload(ctx, actorID, projectID, 1, UploadInput{
@@ -37,7 +38,7 @@ func TestArtifactLifecycleMaintainsProjectSearchAuditAndBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upload returned an error: %v", err)
 	}
-	if created.Status != "active" || created.Revision != 1 || !storage.Exists(created.StorageKey) {
+	if created.Status != "active" || created.Revision != 1 || created.StorageBackend != BackendLocal || !storage.Exists(ctx, created.StorageKey) {
 		t.Fatalf("Upload returned invalid Artifact state: %#v", created)
 	}
 	assertProjectArtifactState(t, ctx, pool, projectID, 2, "remove", 1)
@@ -54,7 +55,7 @@ func TestArtifactLifecycleMaintainsProjectSearchAuditAndBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Delete returned an error: %v", err)
 	}
-	if deleted.Status != "deleted" || !storage.Exists(deleted.StorageKey) {
+	if deleted.Status != "deleted" || !storage.Exists(ctx, deleted.StorageKey) {
 		t.Fatalf("Delete removed content or returned invalid state: %#v", deleted)
 	}
 
@@ -73,7 +74,7 @@ func TestArtifactLifecycleMaintainsProjectSearchAuditAndBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Replace returned an error: %v", err)
 	}
-	if replacement.ID == created.ID || replacement.StorageKey == created.StorageKey || !storage.Exists(replacement.StorageKey) || !storage.Exists(created.StorageKey) {
+	if replacement.ID == created.ID || replacement.StorageKey == created.StorageKey || !storage.Exists(ctx, replacement.StorageKey) || !storage.Exists(ctx, created.StorageKey) {
 		t.Fatalf("Replace did not preserve immutable content identities: %#v", replacement)
 	}
 	var oldStatus string
@@ -103,9 +104,9 @@ func TestArtifactUploadEnforcesRevisionQuotaAndPublicVisibility(t *testing.T) {
 	ctx := context.Background()
 	pool := createArtifactTestDatabase(t, ctx, databaseURL)
 	actorID, projectID := seedArtifactOwner(t, ctx, pool)
-	storage := Storage{Root: t.TempDir(), MaxBytes: 1024}
+	storage := LocalStorage{Root: t.TempDir(), MaxBytes: 1024}
 	content := []byte("%PDF-1.7\nartifact")
-	service := Service{Pool: pool, Storage: storage, MaxProjectBytes: int64(len(content))}
+	service := Service{Pool: pool, Storage: newLocalStorageSet(t, storage), MaxProjectBytes: int64(len(content))}
 
 	created, err := service.Upload(ctx, actorID, projectID, 1, UploadInput{ArtifactType: "report", DisplayName: "Report", OriginalFilename: "report.pdf", ExpectedSize: int64(len(content)), Content: bytes.NewReader(content)})
 	if err != nil {
@@ -136,6 +137,15 @@ func TestArtifactUploadEnforcesRevisionQuotaAndPublicVisibility(t *testing.T) {
 	if err != nil || !bytes.Equal(opened, content) {
 		t.Fatalf("public Open returned content %q and error %v", opened, err)
 	}
+}
+
+func newLocalStorageSet(t *testing.T, storage LocalStorage) StorageSet {
+	t.Helper()
+	set, err := NewStorageSet(StorageOptions{DefaultName: BackendLocal, LocalRoot: storage.Root, MaxArtifactBytes: storage.MaxBytes})
+	if err != nil {
+		t.Fatalf("build local storage set: %v", err)
+	}
+	return set
 }
 
 func assertProjectArtifactState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, projectID uuid.UUID, expectedRevision int64, expectedAction string, expectedActiveCount int) {

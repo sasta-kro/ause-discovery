@@ -14,16 +14,89 @@ import (
 	"github.com/google/uuid"
 )
 
-var (
-	ErrEmptyContent      = errors.New("artifact content is empty")
-	ErrContentTooLarge   = errors.New("artifact content exceeds the configured limit")
-	ErrSizeMismatch      = errors.New("artifact content size does not match the declared size")
-	ErrUnsafeStoragePath = errors.New("artifact storage path is unsafe")
+const (
+	BackendLocal = "local"
+	BackendB2    = "b2"
 )
 
-type Storage struct {
-	Root     string
-	MaxBytes int64
+var (
+	ErrEmptyContent       = errors.New("artifact content is empty")
+	ErrContentTooLarge    = errors.New("artifact content exceeds the configured limit")
+	ErrSizeMismatch       = errors.New("artifact content size does not match the declared size")
+	ErrUnsafeStoragePath  = errors.New("artifact storage path is unsafe")
+	ErrStorageUnavailable = errors.New("artifact storage backend is unavailable")
+	ErrUnknownStorageName = errors.New("artifact storage backend name is not configured")
+)
+
+// Backend stores Artifact bytes under opaque storage keys. Implementations
+// must be safe for concurrent use. Put generates a fresh key; PutAt writes
+// under an explicit key, which migration uses to keep a record's key stable
+// across backends.
+type Backend interface {
+	Name() string
+	Put(ctx context.Context, reader io.Reader, expectedSize int64) (StoredContent, error)
+	PutAt(ctx context.Context, storageKey string, reader io.Reader, expectedSize int64) (StoredContent, error)
+	Open(ctx context.Context, storageKey string) (io.ReadSeekCloser, int64, error)
+	Exists(ctx context.Context, storageKey string) bool
+	RemoveNew(ctx context.Context, storageKey string) error
+}
+
+// StorageOptions carries every configured backend's construction values.
+// LocalStorage is always registered; B2 is registered whenever its values
+// are present so records stamped for it remain servable regardless of the
+// configured default.
+type StorageOptions struct {
+	DefaultName      string
+	LocalRoot        string
+	MaxArtifactBytes int64
+	B2Endpoint       string
+	B2Bucket         string
+	B2KeyID          string
+	B2ApplicationKey string
+}
+
+// StorageSet routes Artifact byte operations by backend name. Writes always
+// target the configured default backend; reads consult the per-Artifact
+// storage_backend marker so migration and rollback need no rewrites.
+type StorageSet struct {
+	DefaultName string
+	Backends    map[string]Backend
+}
+
+func NewStorageSet(options StorageOptions) (StorageSet, error) {
+	defaultName := options.DefaultName
+	if defaultName == "" {
+		defaultName = BackendLocal
+	}
+	if defaultName != BackendLocal && defaultName != BackendB2 {
+		return StorageSet{}, fmt.Errorf("unknown artifact storage backend %q", defaultName)
+	}
+	set := StorageSet{DefaultName: defaultName, Backends: map[string]Backend{}}
+	set.Backends[BackendLocal] = LocalStorage{Root: options.LocalRoot, MaxBytes: options.MaxArtifactBytes}
+	b2Configured := options.B2Endpoint != "" || options.B2Bucket != "" || options.B2KeyID != "" || options.B2ApplicationKey != ""
+	if defaultName == BackendB2 || b2Configured {
+		b2, err := NewB2Storage(options.B2Endpoint, options.B2Bucket, options.B2KeyID, options.B2ApplicationKey, options.MaxArtifactBytes)
+		if err != nil {
+			return StorageSet{}, err
+		}
+		set.Backends[BackendB2] = b2
+	}
+	if _, ok := set.Backends[defaultName]; !ok {
+		return StorageSet{}, fmt.Errorf("artifact storage backend %q has no configuration", defaultName)
+	}
+	return set, nil
+}
+
+func (set StorageSet) Default() Backend {
+	return set.Backends[set.DefaultName]
+}
+
+func (set StorageSet) Lookup(name string) (Backend, error) {
+	backend, ok := set.Backends[name]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownStorageName, name)
+	}
+	return backend, nil
 }
 
 type StoredContent struct {
@@ -34,7 +107,22 @@ type StoredContent struct {
 	Prefix       []byte
 }
 
-func (storage Storage) Put(ctx context.Context, reader io.Reader, expectedSize int64) (StoredContent, error) {
+// LocalStorage stores Artifact bytes on the local filesystem under an
+// absolute root. It is the canonical LocalStorage backend of AD-008.
+type LocalStorage struct {
+	Root     string
+	MaxBytes int64
+}
+
+func (storage LocalStorage) Name() string { return BackendLocal }
+
+func (storage LocalStorage) Put(ctx context.Context, reader io.Reader, expectedSize int64) (StoredContent, error) {
+	contentID := uuid.NewString()
+	storageKey := filepath.ToSlash(filepath.Join("v1", contentID[0:2], contentID[2:4], contentID))
+	return storage.PutAt(ctx, storageKey, reader, expectedSize)
+}
+
+func (storage LocalStorage) PutAt(ctx context.Context, storageKey string, reader io.Reader, expectedSize int64) (StoredContent, error) {
 	if expectedSize == 0 {
 		return StoredContent{}, ErrEmptyContent
 	}
@@ -48,8 +136,6 @@ func (storage Storage) Put(ctx context.Context, reader io.Reader, expectedSize i
 		return StoredContent{}, err
 	}
 
-	contentID := uuid.NewString()
-	storageKey := filepath.ToSlash(filepath.Join("v1", contentID[0:2], contentID[2:4], contentID))
 	finalPath, err := storage.resolve(storageKey, false)
 	if err != nil {
 		return StoredContent{}, err
@@ -62,7 +148,7 @@ func (storage Storage) Put(ctx context.Context, reader io.Reader, expectedSize i
 	}
 
 	temporaryDirectory := filepath.Join(storage.Root, ".tmp")
-	temporaryFile, err := os.CreateTemp(temporaryDirectory, contentID+"-*.part")
+	temporaryFile, err := os.CreateTemp(temporaryDirectory, "artifact-*.part")
 	if err != nil {
 		return StoredContent{}, fmt.Errorf("create artifact temporary file: %w", err)
 	}
@@ -113,7 +199,8 @@ func (storage Storage) Put(ctx context.Context, reader io.Reader, expectedSize i
 	}, nil
 }
 
-func (storage Storage) Open(storageKey string) (*os.File, int64, error) {
+func (storage LocalStorage) Open(ctx context.Context, storageKey string) (io.ReadSeekCloser, int64, error) {
+	_ = ctx
 	path, err := storage.resolve(storageKey, true)
 	if err != nil {
 		return nil, 0, err
@@ -134,8 +221,8 @@ func (storage Storage) Open(storageKey string) (*os.File, int64, error) {
 	return file, information.Size(), nil
 }
 
-func (storage Storage) Exists(storageKey string) bool {
-	file, _, err := storage.Open(storageKey)
+func (storage LocalStorage) Exists(ctx context.Context, storageKey string) bool {
+	file, _, err := storage.Open(ctx, storageKey)
 	if err != nil {
 		return false
 	}
@@ -143,7 +230,8 @@ func (storage Storage) Exists(storageKey string) bool {
 	return true
 }
 
-func (storage Storage) removeNew(storageKey string) error {
+func (storage LocalStorage) RemoveNew(ctx context.Context, storageKey string) error {
+	_ = ctx
 	path, err := storage.resolve(storageKey, true)
 	if err != nil {
 		return err
@@ -154,7 +242,7 @@ func (storage Storage) removeNew(storageKey string) error {
 	return nil
 }
 
-func (storage Storage) ensureRoot() error {
+func (storage LocalStorage) ensureRoot() error {
 	if !filepath.IsAbs(storage.Root) {
 		return ErrUnsafeStoragePath
 	}
@@ -171,7 +259,7 @@ func (storage Storage) ensureRoot() error {
 	return storage.rejectSymlinks(temporaryDirectory)
 }
 
-func (storage Storage) resolve(storageKey string, requireExisting bool) (string, error) {
+func (storage LocalStorage) resolve(storageKey string, requireExisting bool) (string, error) {
 	if storageKey == "" || filepath.IsAbs(storageKey) || filepath.Clean(storageKey) != storageKey || strings.HasPrefix(storageKey, ".."+string(filepath.Separator)) {
 		return "", ErrUnsafeStoragePath
 	}
@@ -194,7 +282,7 @@ func (storage Storage) resolve(storageKey string, requireExisting bool) (string,
 	return path, nil
 }
 
-func (storage Storage) rejectSymlinks(path string) error {
+func (storage LocalStorage) rejectSymlinks(path string) error {
 	root, err := filepath.Abs(storage.Root)
 	if err != nil {
 		return ErrUnsafeStoragePath

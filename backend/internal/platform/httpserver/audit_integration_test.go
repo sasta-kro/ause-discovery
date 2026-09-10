@@ -12,6 +12,7 @@ import (
 	"time"
 
 	api "ause-discovery.local/backend/generated/api"
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
 	"ause-discovery.local/backend/internal/platform/config"
 	"github.com/jackc/pgx/v5"
@@ -29,7 +30,11 @@ func TestListAuditEventsRequiresSessionAndMapsValidationErrors(t *testing.T) {
 	ctx := context.Background()
 	pool := createAuditHTTPTestDatabase(t, ctx, databaseURL)
 	configuration := config.Config{PublicBasePath: "/ause-discovery/", SessionIdleTTL: 30 * time.Minute, SessionAbsoluteTTL: 12 * time.Hour}
-	handler := NewAPIHandler(pool, configuration)
+	storageSet, storageSetErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: t.TempDir(), MaxArtifactBytes: 1024})
+	if storageSetErr != nil {
+		t.Fatalf("build artifact storage set: %v", storageSetErr)
+	}
+	handler := NewAPIHandler(pool, configuration, storageSet)
 
 	unauthenticated := httptest.NewRequest("GET", "/ause-discovery/api/v1/admin/audit-events", nil)
 	unauthenticatedResponse := httptest.NewRecorder()

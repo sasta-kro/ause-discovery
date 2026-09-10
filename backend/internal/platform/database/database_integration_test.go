@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,6 +23,12 @@ func TestDatabaseContract(t *testing.T) {
 	pool := createEmptyDatabase(t, context, databaseURL)
 	defer pool.Close()
 
+	migrationFiles, err := filepath.Glob("../../../migrations/*.sql")
+	if err != nil || len(migrationFiles) == 0 {
+		t.Fatalf("list migration files: %v (%d found)", err, len(migrationFiles))
+	}
+	expectedVersion := int64(len(migrationFiles))
+
 	if err := CheckSchema(context, pool); err == nil {
 		t.Fatal("empty database reported a supported schema")
 	}
@@ -35,8 +42,8 @@ func TestDatabaseContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationStatus returned an error: %v", err)
 	}
-	if migrationState.Version != 1 || !migrationState.Applied {
-		t.Fatalf("unexpected migration state: %+v", migrationState)
+	if migrationState.Version != expectedVersion || !migrationState.Applied {
+		t.Fatalf("unexpected migration state: %+v, expected version %d", migrationState, expectedVersion)
 	}
 
 	assertMigrationCreatedTables(t, context, pool)
@@ -45,7 +52,7 @@ func TestDatabaseContract(t *testing.T) {
 	if err := CheckSchema(context, pool); err != nil {
 		t.Fatalf("migrated database rejected: %v", err)
 	}
-	if _, err := pool.Exec(context, "INSERT INTO goose_db_version (version_id, is_applied) VALUES (2, true)"); err != nil {
+	if _, err := pool.Exec(context, "INSERT INTO goose_db_version (version_id, is_applied) VALUES ($1, true)", expectedVersion+1); err != nil {
 		t.Fatal(err)
 	}
 	if err := CheckSchema(context, pool); err == nil {

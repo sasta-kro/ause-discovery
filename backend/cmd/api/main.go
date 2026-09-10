@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"ause-discovery.local/backend/internal/artifacts"
 	importservice "ause-discovery.local/backend/internal/imports"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
@@ -61,6 +62,18 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 	if err := configuration.EnsureStorageDirectories(); err != nil {
 		return err
 	}
+	artifactStorage, err := artifacts.NewStorageSet(artifacts.StorageOptions{
+		DefaultName:      configuration.ArtifactStorageBackend,
+		LocalRoot:        configuration.ArtifactRoot,
+		MaxArtifactBytes: configuration.MaxArtifactBytes,
+		B2Endpoint:       configuration.ArtifactB2Endpoint,
+		B2Bucket:         configuration.ArtifactB2Bucket,
+		B2KeyID:          configuration.ArtifactB2KeyID,
+		B2ApplicationKey: configuration.ArtifactB2ApplicationKey,
+	})
+	if err != nil {
+		return err
+	}
 
 	applicationContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -85,7 +98,7 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 		return httpserver.CheckReadiness(ctx, databasePool, configuration)
 	}}.Register(mux, configuration.PublicBasePath)
 	apiPath := configuration.PublicBasePath + "api/v1/"
-	mux.Handle(apiPath, httpserver.NewAPIHandler(databasePool, configuration))
+	mux.Handle(apiPath, httpserver.NewAPIHandler(databasePool, configuration, artifactStorage))
 
 	server := &http.Server{
 		Addr:              configuration.ListenAddress,
