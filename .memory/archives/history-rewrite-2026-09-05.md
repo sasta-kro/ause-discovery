@@ -20,3 +20,18 @@ The repository owner rewrote Git history on 2026-09-05 with `git filter-repo` to
 | `9c97ba9` | `6dfab2a` | Recorded technical MVP completion |
 
 All commits before `e4e1f00`, including `722a6ff`, `2460a7f`, `b9a8a9a`, and the foundation history, keep their original hashes.
+
+
+## Second rewrite, 2026-09-09: deployment-log purge
+
+The VM deployment log was removed from all Git history before the first push beyond `513af4f`, so its contents never reached any remote. Paths removed: `docs/dev-notes/vm-deployment-log.md` and `.memory/sasta-dev-notes/vm-deployment-log.md`. Commits `1bcb830` and `5938c15` touched only that file and were pruned entirely. Mapping for the remaining affected commits:
+
+| Old | New | Subject |
+| --- | --- | --- |
+| `49e0700` | `9b74a14` | recorded full corpus extraction status in memory |
+| `3391597` | `086e5c7` | Wrote professional README with technology badges |
+| `8077082` | `61c4b61` | updated readme to this point |
+| `b282412` | `7808b24` | Documented internal and public documentation boundaries |
+| `b66cfad` | `bf3f338` | restructere memory |
+
+All commits before `49e0700` (including `513af4f` on the remote) keep their hashes, so pushing remains a fast-forward. Backup bundle: `ause-discover-pre-leak-fix.bundle`.

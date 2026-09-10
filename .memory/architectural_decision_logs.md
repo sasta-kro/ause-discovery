@@ -72,7 +72,7 @@
 
 ## AD-008 Local controlled Artifact storage
 
-**Status:** Accepted
+**Status:** Superseded 2026-09-10 by AD-011
 
 **Decision:** MVP Artifacts are stored files on persistent local storage behind an application storage boundary.
 
@@ -99,3 +99,13 @@
 **Reason:** Reproducible implementation and production operation require known versions.
 
 **Consequence:** Lockfiles and generated outputs are tracked. Container images use exact tags and manifest digests. Upgrades require explicit review.
+
+## AD-011 Pluggable Artifact storage
+
+**Status:** Accepted 2026-09-10 (supersedes AD-008). Provider: Backblaze B2.
+
+**Decision:** Artifact bytes move behind a storage interface with a per-Artifact backend marker, so implementations are exchanged by configuration. The external backend is Backblaze B2 through its S3-compatible API. Public serving always proxies through the API and never exposes storage URLs to visitors.
+
+**Reason:** The institution's other administrator rejected VM-local storage as the primary backend and S3 as a service. Google Drive was evaluated and rejected: consumer-account lock exposure for a public archive, OAuth refresh-token fragility, per-user API rate limits, and no institutional second copy. Requirements are zero running cost and no storage outage that permanently breaks downloads. B2 over Cloudflare R2: no payment method is required, the first 10 GB are always free, and the free monthly egress allowance of 3x average stored bytes is sufficient at current scale and grows with the corpus. R2's distinguishing advantage, unmetered egress, is unusable at current scale and comes with a payment method on file. If traffic grows beyond the free allowances, the provider can change later without a rewrite.
+
+**Consequence:** The filesystem implementation remains for development and tests. The B2 backend must support streamed put and range-capable open, a one-time migration of existing bytes, an institutional second copy, upstream-unavailability mapping to controlled 503 responses, and backend selection without rewrite. Operators monitor monthly egress against the 3x allowance and stored bytes against 10 GB; crossing either is a trigger to re-evaluate the provider, not an outage.
