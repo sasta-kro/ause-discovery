@@ -268,8 +268,11 @@ func runArtifacts(arguments []string) error {
 }
 
 // formatProjectProgress renders one completed Project as a single physical
-// line. All text passes through sanitizeProgressText so titles, filenames,
-// reasons, and errors can never inject line breaks or control characters.
+// line. Every entry carries its Artifact type and original filename, skips
+// carry their reason, failures carry the controlled error, and the Project
+// ID keeps duplicate titles distinguishable. All text passes through
+// sanitizeProgressText so titles, filenames, reasons, and errors can never
+// inject line breaks or control characters.
 func formatProjectProgress(progress artifactimport.ProjectProgress) string {
 	var uploaded, skipped, failed []string
 	for _, file := range progress.Files {
@@ -277,9 +280,9 @@ func formatProjectProgress(progress artifactimport.ProjectProgress) string {
 		case artifactimport.FileUploaded:
 			uploaded = append(uploaded, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.OriginalFilename, 120)))
 		case artifactimport.FileSkipped:
-			skipped = append(skipped, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.SkipReason, 80)))
+			skipped = append(skipped, fmt.Sprintf("%s (%s): %s", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.OriginalFilename, 120), sanitizeProgressText(file.SkipReason, 80)))
 		case artifactimport.FileFailed:
-			failed = append(failed, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.Error, 160)))
+			failed = append(failed, fmt.Sprintf("%s (%s): %s", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.OriginalFilename, 120), sanitizeProgressText(file.Error, 160)))
 		}
 	}
 	segments := []string{}
@@ -295,7 +298,8 @@ func formatProjectProgress(progress artifactimport.ProjectProgress) string {
 	if len(segments) == 0 {
 		segments = append(segments, "no files processed")
 	}
-	return fmt.Sprintf("[%d/%d] %s: %s; %.1fs", progress.Completed, progress.Total, sanitizeProgressText(progress.Title, 80), strings.Join(segments, "; "), progress.Duration.Seconds())
+	identity := sanitizeProgressText(progress.Title, 80) + " (" + sanitizeProgressText(progress.ProjectID.String(), 0) + ")"
+	return fmt.Sprintf("[%d/%d] %s: %s; %.1fs", progress.Completed, progress.Total, identity, strings.Join(segments, "; "), progress.Duration.Seconds())
 }
 
 // sanitizeProgressText collapses control characters and line breaks and

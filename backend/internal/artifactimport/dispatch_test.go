@@ -107,25 +107,25 @@ func TestDispatchBoundsConcurrencyAndSerializesCallbacks(t *testing.T) {
 	}
 }
 
-func TestDispatchFatalOutcomeStopsFurtherProjects(t *testing.T) {
-	groups := testProjectGroups(8)
+func TestDispatchFatalOutcomeStopsFurtherAssignments(t *testing.T) {
+	groups := testProjectGroups(16)
 	fatalID := groups[0].ID
-	processed := map[uuid.UUID]bool{}
+	// Primed non-fatal Projects block until the coordinator has applied
+	// the fatal outcome, so no replacement assignment can exist yet and
+	// the processed count is exact without timing sleeps.
+	release := make(chan struct{})
 	process := func(ctx context.Context, work projectWork) projectOutcome {
 		if work.ID == fatalID {
 			return projectOutcome{Progress: ProjectProgress{ProjectID: work.ID}, Failed: true, Fatal: true, FirstError: "storage unavailable"}
 		}
-		// Normal Projects occupy their worker long enough that the fatal
-		// outcome reaches the coordinator and stops dispatch before the
-		// feeder can hand out every remaining group.
-		time.Sleep(30 * time.Millisecond)
+		<-release
 		return projectOutcome{Progress: ProjectProgress{ProjectID: work.ID}}
 	}
-	fatalSeen := false
-	firstError, canceled := dispatchProjects(context.Background(), groups, 1, process, func(outcome projectOutcome) {
+	processed := map[uuid.UUID]bool{}
+	firstError, canceled := dispatchProjects(context.Background(), groups, 4, process, func(outcome projectOutcome) {
 		processed[outcome.Progress.ProjectID] = true
-		if outcome.Progress.ProjectID == fatalID {
-			fatalSeen = true
+		if outcome.Fatal {
+			close(release)
 		}
 	})
 	if !canceled {
@@ -134,11 +134,11 @@ func TestDispatchFatalOutcomeStopsFurtherProjects(t *testing.T) {
 	if firstError != "storage unavailable" {
 		t.Fatalf("first error was %q", firstError)
 	}
-	if !fatalSeen {
+	if !processed[fatalID] {
 		t.Fatal("fatal Project never completed")
 	}
-	if len(processed) >= len(groups) {
-		t.Fatalf("dispatch ran all %d Projects despite the fatal outcome", len(groups))
+	if len(processed) != 4 {
+		t.Fatalf("dispatch processed %d Projects, expected exactly the 4 primed assignments and no replacements", len(processed))
 	}
 }
 

@@ -273,12 +273,16 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work p
 	return outcome
 }
 
-// dispatchProjects runs a fixed worker pool over Project groups. Workers
-// process one Project at a time through process; outcomes flow through a
-// single coordinator goroutine that assigns completion positions, folds
-// results into the aggregate through apply, and stops dispatching further
-// Projects after a fatal outcome or context cancellation. It returns the
-// first failure text and whether the run stopped early.
+// dispatchProjects runs a fixed worker pool over Project groups. The single
+// coordinator goroutine owns assignment: it primes the pool, replaces each
+// completed assignment with the next group, and never assigns another group
+// after a fatal outcome reaches it or the context is canceled, so no new
+// Project can start behind a fatal failure. Workers process one Project at
+// a time through process and deliver outcomes through a channel buffered
+// for every group, so they can always deliver and exit. The coordinator
+// assigns completion positions and folds results through apply, which
+// therefore never runs concurrently. It returns the first failure text and
+// whether the run stopped early.
 func dispatchProjects(ctx context.Context, groups []projectWork, workers int, process func(context.Context, projectWork) projectOutcome, apply func(projectOutcome)) (string, bool) {
 	if len(groups) == 0 {
 		return "", false
@@ -289,8 +293,6 @@ func dispatchProjects(ctx context.Context, groups []projectWork, workers int, pr
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// The outcomes channel is buffered for every group so workers can
-	// always deliver and exit, regardless of coordinator progress.
 	jobs := make(chan projectWork)
 	outcomes := make(chan projectOutcome, len(groups))
 	var workersDone sync.WaitGroup
@@ -304,23 +306,27 @@ func dispatchProjects(ctx context.Context, groups []projectWork, workers int, pr
 		}()
 	}
 
-	go func() {
-		defer close(jobs)
-		for index := range groups {
-			select {
-			case jobs <- groups[index]:
-			case <-runContext.Done():
-				return
-			}
-		}
-	}()
-
 	firstError := ""
 	canceled := false
 	completed := 0
+	nextGroup := 0
+	jobsClosed := false
+	stopAssigning := func() {
+		if !jobsClosed {
+			jobsClosed = true
+			close(jobs)
+		}
+	}
 	coordinatorDone := make(chan struct{})
 	go func() {
 		defer close(coordinatorDone)
+		for nextGroup < len(groups) && nextGroup < workers {
+			jobs <- groups[nextGroup]
+			nextGroup++
+		}
+		if nextGroup == len(groups) {
+			stopAssigning()
+		}
 		for outcome := range outcomes {
 			completed++
 			outcome.Progress.Completed = completed
@@ -332,6 +338,15 @@ func dispatchProjects(ctx context.Context, groups []projectWork, workers int, pr
 			if outcome.Fatal {
 				canceled = true
 				cancel()
+				stopAssigning()
+				continue
+			}
+			if nextGroup < len(groups) && !jobsClosed {
+				jobs <- groups[nextGroup]
+				nextGroup++
+				if nextGroup == len(groups) {
+					stopAssigning()
+				}
 			}
 		}
 	}()

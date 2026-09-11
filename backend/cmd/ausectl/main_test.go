@@ -110,10 +110,11 @@ func uuidPointer(value string) *uuid.UUID {
 }
 
 func TestFormatProjectProgressGroupsAndSanitizes(t *testing.T) {
+	projectID := uuid.MustParse("018f0000-0000-7000-8000-0000000000ab")
 	progress := artifactimport.ProjectProgress{
 		Completed: 17,
 		Total:     209,
-		ProjectID: uuid.New(),
+		ProjectID: projectID,
 		Title:     "Senior Project\nwith injected\rcontrol characters",
 		Files: []artifactimport.FileOutcome{
 			{ArtifactType: "report", OriginalFilename: "final-report.pdf", State: artifactimport.FileUploaded},
@@ -127,7 +128,7 @@ func TestFormatProjectProgressGroupsAndSanitizes(t *testing.T) {
 	if strings.ContainsAny(line, "\n\r") {
 		t.Fatalf("progress line contained a line break: %q", line)
 	}
-	expected := "[17/209] Senior Project with injected control characters: uploaded report (final-report.pdf), slides (presentation-slides.pdf); skipped poster (Project already has an active file of this type); failed source_code (upload source-code.zip: artifact storage backend is unavailable: status 503); 2.1s"
+	expected := "[17/209] Senior Project with injected control characters (" + projectID.String() + "): uploaded report (final-report.pdf), slides (presentation-slides.pdf); skipped poster (project-poster.png): Project already has an active file of this type; failed source_code (source-code.zip): upload source-code.zip: artifact storage backend is unavailable: status 503; 2.1s"
 	if line != expected {
 		t.Fatalf("progress line mismatch:\n got %q\nwant %q", line, expected)
 	}

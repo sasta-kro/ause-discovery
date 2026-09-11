@@ -136,6 +136,16 @@ func TestDemoAndManifestImportsAreValidatedAndRepeatable(t *testing.T) {
 	}
 }
 
+// renamedLocalStorage serves a LocalStorage root under a different backend
+// name, so rows stamped for the b2 provider stay readable through a healthy
+// b2-named adapter in tests.
+type renamedLocalStorage struct {
+	artifacts.LocalStorage
+	name string
+}
+
+func (storage renamedLocalStorage) Name() string { return storage.name }
+
 // contentFailingStorage delegates to a real LocalStorage but returns one
 // ordinary upload error for content matching a targeted byte slice, so a
 // single file fails deterministically while every other upload succeeds.
@@ -238,13 +248,16 @@ func TestTargetedFailureFailsOneProjectAndRerunCompletes(t *testing.T) {
 	}
 	assertArtifactImportCount(t, ctx, pool, 2)
 
-	recoveredSet, storageErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: realStorage.Root, MaxArtifactBytes: 1024 * 1024})
-	if storageErr != nil {
-		t.Fatalf("build recovered storage set: %v", storageErr)
-	}
+	// Successful uploads from the failing run are stamped for its b2
+	// default, so recovery must register a healthy b2-named adapter over
+	// the same root for marker-routed reads while new uploads go to local.
+	recoverySet := artifacts.StorageSet{DefaultName: artifacts.BackendLocal, Backends: map[string]artifacts.Backend{
+		artifacts.BackendLocal: realStorage,
+		artifacts.BackendB2:    renamedLocalStorage{LocalStorage: realStorage, name: artifacts.BackendB2},
+	}}
 	recoveredService := Service{
 		Pool:             pool,
-		Artifacts:        artifacts.Service{Pool: pool, Storage: recoveredSet, MaxProjectBytes: 10 * 1024 * 1024},
+		Artifacts:        artifacts.Service{Pool: pool, Storage: recoverySet, MaxProjectBytes: 10 * 1024 * 1024},
 		MaxArtifactBytes: 1024 * 1024,
 	}
 	recoveredProgress := []ProjectProgress{}
@@ -261,6 +274,51 @@ func TestTargetedFailureFailsOneProjectAndRerunCompletes(t *testing.T) {
 		t.Fatalf("recovered apply produced %d progress events, expected 2", len(recoveredProgress))
 	}
 	assertArtifactImportCount(t, ctx, pool, 3)
+
+	// Both the previous b2-stamped rows and the newly uploaded local row
+	// must open through the recovery set with their exact content.
+	expectedContent := map[string]string{
+		"report-a.pdf": "%PDF-1.7\nreport a",
+		"slides-b.pdf": "%PDF-1.7\nslides b",
+		"report-c.pdf": "%PDF-1.7\nreport c",
+	}
+	expectedBackend := map[string]string{
+		"report-a.pdf": artifacts.BackendB2,
+		"slides-b.pdf": artifacts.BackendLocal,
+		"report-c.pdf": artifacts.BackendB2,
+	}
+	rows, err := pool.Query(ctx, `SELECT id, storage_backend, original_filename FROM artifacts WHERE original_filename IN ('report-a.pdf','slides-b.pdf','report-c.pdf')`)
+	if err != nil {
+		t.Fatalf("read recovered Artifacts: %v", err)
+	}
+	defer rows.Close()
+	verified := 0
+	for rows.Next() {
+		var artifactID uuid.UUID
+		var storageBackend, filename string
+		if err := rows.Scan(&artifactID, &storageBackend, &filename); err != nil {
+			t.Fatalf("scan recovered Artifact: %v", err)
+		}
+		if storageBackend != expectedBackend[filename] {
+			t.Fatalf("Artifact %s was stamped %q, expected %q", filename, storageBackend, expectedBackend[filename])
+		}
+		content, openErr := recoveredService.Artifacts.OpenPublic(ctx, artifactID)
+		if openErr != nil {
+			t.Fatalf("open recovered Artifact %s through backend %q: %v", filename, storageBackend, openErr)
+		}
+		opened, readErr := io.ReadAll(content.File)
+		_ = content.File.Close()
+		if readErr != nil || string(opened) != expectedContent[filename] {
+			t.Fatalf("recovered Artifact %s opened as %q with error %v", filename, opened, readErr)
+		}
+		verified++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate recovered Artifacts: %v", err)
+	}
+	if verified != 3 {
+		t.Fatalf("verified %d recovered Artifacts, expected 3", verified)
+	}
 }
 
 func createDemoFiles(t *testing.T) string {
