@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
@@ -104,6 +106,18 @@ func (service Service) DemoEntries(ctx context.Context, sourceDirectory string, 
 	return entries, nil
 }
 
+// normalizeWorkers maps an unset or out-of-range worker count onto the
+// bounded default.
+func normalizeWorkers(count int) int {
+	if count < 1 {
+		return DefaultWorkers
+	}
+	if count > MaxWorkers {
+		return MaxWorkers
+	}
+	return count
+}
+
 func (service Service) Run(ctx context.Context, entries []Entry, options Options) (Result, error) {
 	if service.Pool == nil {
 		return Result{}, errors.New("database pool is required")
@@ -116,29 +130,121 @@ func (service Service) Run(ctx context.Context, entries []Entry, options Options
 	if err != nil || !options.Apply {
 		return result, err
 	}
+	workers := normalizeWorkers(options.Workers)
+	groups := groupByProject(plan)
+	if options.OnApplyStart != nil {
+		options.OnApplyStart(ApplyStart{ProjectCount: len(groups), PlannedUploads: result.PlannedUploads, Workers: workers})
+	}
+	firstError, canceled := dispatchProjects(ctx, groups, workers, func(ctx context.Context, work projectWork) projectOutcome {
+		return service.runProject(ctx, actorID, work)
+	}, func(outcome projectOutcome) {
+		result.Uploaded += outcome.Uploaded
+		result.Skipped += outcome.Skipped
+		result.FailedFiles += outcome.FailedFiles
+		if outcome.Failed {
+			result.FailedProjects++
+		}
+		if options.OnProjectDone != nil {
+			options.OnProjectDone(outcome.Progress)
+		}
+	})
+	if canceled && result.FailedProjects == 0 {
+		return result, fmt.Errorf("Project file import was canceled: %w", ctx.Err())
+	}
+	if result.FailedProjects > 0 {
+		summary := fmt.Sprintf("%d of %d Projects failed during import", result.FailedProjects, len(groups))
+		if firstError != "" {
+			summary += ": first error: " + firstError
+		}
+		return result, errors.New(summary)
+	}
+	return result, nil
+}
+
+// groupByProject splits the validated plan into Project groups, preserving
+// first-appearance Project order for dispatch and file order within each
+// Project.
+func groupByProject(plan []plannedUpload) []projectWork {
+	index := map[uuid.UUID]int{}
+	groups := []projectWork{}
 	for _, upload := range plan {
+		position, found := index[upload.ProjectID]
+		if !found {
+			position = len(groups)
+			index[upload.ProjectID] = position
+			groups = append(groups, projectWork{ID: upload.ProjectID, Name: upload.ProjectName})
+		}
+		groups[position].Uploads = append(groups[position].Uploads, upload)
+	}
+	return groups
+}
+
+// runProject uploads one Project's planned files sequentially, preserving
+// the final skip check and the fresh revision read before every upload. The
+// first failure stops that Project's remaining files without discarding
+// committed work.
+func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work projectWork) projectOutcome {
+	outcome := projectOutcome{Progress: ProjectProgress{ProjectID: work.ID, Title: work.Name}}
+	started := time.Now()
+	fail := func(upload plannedUpload, err error) {
+		outcome.Failed = true
+		outcome.FailedFiles++
+		outcome.FirstError = err.Error()
+		outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+			ArtifactType:     upload.Entry.ArtifactType,
+			OriginalFilename: originalFilename(upload.Entry),
+			State:            FileFailed,
+			Error:            err.Error(),
+		})
+		if errors.Is(err, artifacts.ErrStorageUnavailable) || ctx.Err() != nil {
+			outcome.Fatal = true
+		}
+	}
+	for _, upload := range work.Uploads {
+		if ctx.Err() != nil {
+			fail(upload, fmt.Errorf("canceled before upload: %w", ctx.Err()))
+			break
+		}
 		if upload.SkipReason != "" {
+			// Planned skips are already counted by plan(); report them on
+			// the progress line without counting them again.
+			outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+				ArtifactType:     upload.Entry.ArtifactType,
+				OriginalFilename: originalFilename(upload.Entry),
+				State:            FileSkipped,
+				SkipReason:       upload.SkipReason,
+			})
 			continue
 		}
 		skip, err := service.shouldSkip(ctx, upload)
 		if err != nil {
-			return result, err
+			fail(upload, fmt.Errorf("check existing Artifacts: %w", err))
+			break
 		}
 		if skip {
-			result.Skipped++
+			outcome.Skipped++
+			outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+				ArtifactType:     upload.Entry.ArtifactType,
+				OriginalFilename: originalFilename(upload.Entry),
+				State:            FileSkipped,
+				SkipReason:       "already present",
+			})
 			continue
 		}
 		var revision int64
 		var status string
 		if err := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", upload.ProjectID).Scan(&revision, &status); err != nil {
-			return result, fmt.Errorf("read Project %s: %w", upload.ProjectName, err)
+			fail(upload, fmt.Errorf("read Project %s: %w", upload.ProjectName, err))
+			break
 		}
 		if status == "deleted" {
-			return result, fmt.Errorf("Project %s is deleted", upload.ProjectName)
+			fail(upload, fmt.Errorf("Project %s is deleted", upload.ProjectName))
+			break
 		}
 		file, err := os.Open(upload.Entry.SourcePath)
 		if err != nil {
-			return result, fmt.Errorf("open %s for Project %s: %w", upload.Entry.SourcePath, upload.ProjectName, err)
+			fail(upload, fmt.Errorf("open source file %s: %w", filepath.Base(upload.Entry.SourcePath), err))
+			break
 		}
 		_, uploadErr := service.Artifacts.Upload(ctx, actorID, upload.ProjectID, revision, artifacts.UploadInput{
 			ArtifactType:     upload.Entry.ArtifactType,
@@ -149,14 +255,94 @@ func (service Service) Run(ctx context.Context, entries []Entry, options Options
 		})
 		closeErr := file.Close()
 		if uploadErr != nil {
-			return result, fmt.Errorf("upload %s to Project %s: %w", filepath.Base(upload.Entry.SourcePath), upload.ProjectName, uploadErr)
+			fail(upload, fmt.Errorf("upload %s: %w", filepath.Base(upload.Entry.SourcePath), uploadErr))
+			break
 		}
 		if closeErr != nil {
-			return result, fmt.Errorf("close %s: %w", upload.Entry.SourcePath, closeErr)
+			fail(upload, fmt.Errorf("close source file %s: %w", filepath.Base(upload.Entry.SourcePath), closeErr))
+			break
 		}
-		result.Uploaded++
+		outcome.Uploaded++
+		outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+			ArtifactType:     upload.Entry.ArtifactType,
+			OriginalFilename: originalFilename(upload.Entry),
+			State:            FileUploaded,
+		})
 	}
-	return result, nil
+	outcome.Progress.Duration = time.Since(started)
+	return outcome
+}
+
+// dispatchProjects runs a fixed worker pool over Project groups. Workers
+// process one Project at a time through process; outcomes flow through a
+// single coordinator goroutine that assigns completion positions, folds
+// results into the aggregate through apply, and stops dispatching further
+// Projects after a fatal outcome or context cancellation. It returns the
+// first failure text and whether the run stopped early.
+func dispatchProjects(ctx context.Context, groups []projectWork, workers int, process func(context.Context, projectWork) projectOutcome, apply func(projectOutcome)) (string, bool) {
+	if len(groups) == 0 {
+		return "", false
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// The outcomes channel is buffered for every group so workers can
+	// always deliver and exit, regardless of coordinator progress.
+	jobs := make(chan projectWork)
+	outcomes := make(chan projectOutcome, len(groups))
+	var workersDone sync.WaitGroup
+	for worker := 0; worker < workers && worker < len(groups); worker++ {
+		workersDone.Add(1)
+		go func() {
+			defer workersDone.Done()
+			for work := range jobs {
+				outcomes <- process(runContext, work)
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for index := range groups {
+			select {
+			case jobs <- groups[index]:
+			case <-runContext.Done():
+				return
+			}
+		}
+	}()
+
+	firstError := ""
+	canceled := false
+	completed := 0
+	coordinatorDone := make(chan struct{})
+	go func() {
+		defer close(coordinatorDone)
+		for outcome := range outcomes {
+			completed++
+			outcome.Progress.Completed = completed
+			outcome.Progress.Total = len(groups)
+			if outcome.Failed && firstError == "" {
+				firstError = outcome.FirstError
+			}
+			apply(outcome)
+			if outcome.Fatal {
+				canceled = true
+				cancel()
+			}
+		}
+	}()
+
+	workersDone.Wait()
+	close(outcomes)
+	<-coordinatorDone
+	if ctx.Err() != nil {
+		canceled = true
+	}
+	return firstError, canceled
 }
 
 func (service Service) plan(ctx context.Context, entries []Entry) ([]plannedUpload, Result, error) {

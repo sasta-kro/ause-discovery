@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,6 +88,7 @@ type artifactCommand struct {
 	AllPublished    bool
 	ProjectID       *uuid.UUID
 	Apply           bool
+	Workers         int
 }
 
 func runArtifactMigration(operationContext context.Context, databasePool *pgxpool.Pool, storageSet artifacts.StorageSet, apply bool) error {
@@ -109,6 +111,33 @@ func runArtifactMigration(operationContext context.Context, databasePool *pgxpoo
 	return nil
 }
 
+// onceWorkersFlag rejects a repeated --workers flag, which the standard
+// flag package would silently overwrite.
+type onceWorkersFlag struct {
+	target *int
+	seen   bool
+}
+
+func (value *onceWorkersFlag) String() string {
+	if value == nil || value.target == nil {
+		return strconv.Itoa(artifactimport.DefaultWorkers)
+	}
+	return strconv.Itoa(*value.target)
+}
+
+func (value *onceWorkersFlag) Set(text string) error {
+	if value.seen {
+		return errors.New("workers may only be set once")
+	}
+	parsed, err := strconv.Atoi(text)
+	if err != nil {
+		return err
+	}
+	value.seen = true
+	*value.target = parsed
+	return nil
+}
+
 func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 	if len(arguments) == 0 {
 		return artifactCommand{}, usageError()
@@ -118,16 +147,24 @@ func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&command.ActorUsername, "actor-username", "", "active administrator username")
 	flags.BoolVar(&command.Apply, "apply", false, "write validated files")
+	registerWorkers := func() {
+		command.Workers = artifactimport.DefaultWorkers
+		flags.Var(&onceWorkersFlag{target: &command.Workers}, "workers", "concurrent Projects, 1 through 8")
+	}
 	switch command.Kind {
 	case "seed-demo":
 		flags.StringVar(&command.SourceDirectory, "source-directory", "", "directory containing the four demo files")
 		flags.BoolVar(&command.AllPublished, "all-published", false, "target every published Project")
+		registerWorkers()
 		projectID := ""
 		flags.StringVar(&projectID, "project-id", "", "target one published Project")
 		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 {
 			return artifactCommand{}, usageError()
 		}
 		if strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.SourceDirectory) == "" || command.AllPublished == (strings.TrimSpace(projectID) != "") {
+			return artifactCommand{}, usageError()
+		}
+		if command.Workers < 1 || command.Workers > artifactimport.MaxWorkers {
 			return artifactCommand{}, usageError()
 		}
 		if projectID != "" {
@@ -139,7 +176,11 @@ func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 		}
 	case "import-manifest":
 		flags.StringVar(&command.ManifestPath, "manifest", "", "Project-file manifest path")
+		registerWorkers()
 		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.ManifestPath) == "" {
+			return artifactCommand{}, usageError()
+		}
+		if command.Workers < 1 || command.Workers > artifactimport.MaxWorkers {
 			return artifactCommand{}, usageError()
 		}
 	case "migrate":
@@ -204,13 +245,78 @@ func runArtifacts(arguments []string) error {
 	if err != nil {
 		return err
 	}
-	result, runErr := service.Run(operationContext, entries, artifactimport.Options{ActorUsername: command.ActorUsername, Apply: command.Apply})
+	result, runErr := service.Run(operationContext, entries, artifactimport.Options{
+		ActorUsername: command.ActorUsername,
+		Apply:         command.Apply,
+		Workers:       command.Workers,
+		OnApplyStart: func(start artifactimport.ApplyStart) {
+			fmt.Fprintf(os.Stdout, "Starting Project file import: %d Projects, %d planned uploads, %d workers\n", start.ProjectCount, start.PlannedUploads, start.Workers)
+		},
+		OnProjectDone: func(progress artifactimport.ProjectProgress) {
+			fmt.Fprintln(os.Stdout, formatProjectProgress(progress))
+		},
+	})
 	mode := "dry-run"
 	if command.Apply {
 		mode = "apply"
 	}
 	fmt.Fprintf(os.Stdout, "mode: %s\nProjects: %d\nplanned uploads: %d\nuploaded: %d\nskipped: %d\n", mode, result.ProjectCount, result.PlannedUploads, result.Uploaded, result.Skipped)
+	if result.FailedProjects > 0 {
+		fmt.Fprintf(os.Stdout, "failed Projects: %d\nfailed files: %d\n", result.FailedProjects, result.FailedFiles)
+	}
 	return runErr
+}
+
+// formatProjectProgress renders one completed Project as a single physical
+// line. All text passes through sanitizeProgressText so titles, filenames,
+// reasons, and errors can never inject line breaks or control characters.
+func formatProjectProgress(progress artifactimport.ProjectProgress) string {
+	var uploaded, skipped, failed []string
+	for _, file := range progress.Files {
+		switch file.State {
+		case artifactimport.FileUploaded:
+			uploaded = append(uploaded, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.OriginalFilename, 120)))
+		case artifactimport.FileSkipped:
+			skipped = append(skipped, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.SkipReason, 80)))
+		case artifactimport.FileFailed:
+			failed = append(failed, fmt.Sprintf("%s (%s)", sanitizeProgressText(file.ArtifactType, 40), sanitizeProgressText(file.Error, 160)))
+		}
+	}
+	segments := []string{}
+	if len(uploaded) > 0 {
+		segments = append(segments, "uploaded "+strings.Join(uploaded, ", "))
+	}
+	if len(skipped) > 0 {
+		segments = append(segments, "skipped "+strings.Join(skipped, ", "))
+	}
+	if len(failed) > 0 {
+		segments = append(segments, "failed "+strings.Join(failed, ", "))
+	}
+	if len(segments) == 0 {
+		segments = append(segments, "no files processed")
+	}
+	return fmt.Sprintf("[%d/%d] %s: %s; %.1fs", progress.Completed, progress.Total, sanitizeProgressText(progress.Title, 80), strings.Join(segments, "; "), progress.Duration.Seconds())
+}
+
+// sanitizeProgressText collapses control characters and line breaks and
+// bounds the rendered length.
+func sanitizeProgressText(text string, limit int) string {
+	var builder strings.Builder
+	for _, character := range text {
+		if character < 0x20 || character == 0x7f {
+			builder.WriteRune(' ')
+		} else {
+			builder.WriteRune(character)
+		}
+	}
+	collapsed := strings.Join(strings.Fields(builder.String()), " ")
+	if limit > 0 {
+		runes := []rune(collapsed)
+		if len(runes) > limit {
+			collapsed = string(runes[:limit]) + "..."
+		}
+	}
+	return collapsed
 }
 
 type searchCommand struct {
@@ -370,5 +476,5 @@ func runMigrationStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--apply] | artifacts migrate [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
+	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--workers <1-8>] [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--workers <1-8>] [--apply] | artifacts migrate [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
 }

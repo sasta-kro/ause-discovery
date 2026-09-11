@@ -2,8 +2,10 @@ package artifactimport
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,9 +48,35 @@ func TestDemoAndManifestImportsAreValidatedAndRepeatable(t *testing.T) {
 	}
 	assertArtifactImportCount(t, ctx, pool, 0)
 
-	applied, err := service.Run(ctx, entries, Options{ActorUsername: "artifact-import-admin", Apply: true})
+	// Progress callbacks run only inside the coordinator goroutine, so
+	// plain collection here is safe by design; the race detector validates.
+	startSummaries := []ApplyStart{}
+	progressEvents := []ProjectProgress{}
+	applied, err := service.Run(ctx, entries, Options{
+		ActorUsername: "artifact-import-admin",
+		Apply:         true,
+		Workers:       4,
+		OnApplyStart:  func(start ApplyStart) { startSummaries = append(startSummaries, start) },
+		OnProjectDone: func(progress ProjectProgress) { progressEvents = append(progressEvents, progress) },
+	})
 	if err != nil || applied.ProjectCount != 2 || applied.PlannedUploads != 8 || applied.Uploaded != 8 || applied.Skipped != 0 {
 		t.Fatalf("unexpected apply result %#v and error %v", applied, err)
+	}
+	if len(startSummaries) != 1 || startSummaries[0].ProjectCount != 2 || startSummaries[0].PlannedUploads != 8 || startSummaries[0].Workers != 4 {
+		t.Fatalf("unexpected start summaries %#v", startSummaries)
+	}
+	if len(progressEvents) != 2 {
+		t.Fatalf("apply produced %d Project progress events, expected 2", len(progressEvents))
+	}
+	for index, progress := range progressEvents {
+		if progress.Completed != index+1 || progress.Total != 2 || len(progress.Files) != 4 {
+			t.Fatalf("progress event %d was %+v", index, progress)
+		}
+		for _, file := range progress.Files {
+			if file.State != FileUploaded {
+				t.Fatalf("progress event %d contained %s %s", index, file.State, file.OriginalFilename)
+			}
+		}
 	}
 	assertArtifactImportCount(t, ctx, pool, 8)
 	var realisticDownloadNames int
@@ -59,9 +87,28 @@ func TestDemoAndManifestImportsAreValidatedAndRepeatable(t *testing.T) {
 		t.Fatalf("found %d realistic download filenames, expected 8", realisticDownloadNames)
 	}
 
-	repeated, err := service.Run(ctx, entries, Options{ActorUsername: "artifact-import-admin", Apply: true})
+	repeatedProgress := []ProjectProgress{}
+	repeated, err := service.Run(ctx, entries, Options{
+		ActorUsername: "artifact-import-admin",
+		Apply:         true,
+		Workers:       2,
+		OnProjectDone: func(progress ProjectProgress) { repeatedProgress = append(repeatedProgress, progress) },
+	})
 	if err != nil || repeated.PlannedUploads != 0 || repeated.Uploaded != 0 || repeated.Skipped != 8 {
 		t.Fatalf("unexpected repeated result %#v and error %v", repeated, err)
+	}
+	if len(repeatedProgress) != 2 {
+		t.Fatalf("repeated apply produced %d progress events, expected 2", len(repeatedProgress))
+	}
+	for _, progress := range repeatedProgress {
+		if progress.Completed < 1 || progress.Completed > 2 || progress.Total != 2 || len(progress.Files) != 4 {
+			t.Fatalf("repeated progress event was %+v", progress)
+		}
+		for _, file := range progress.Files {
+			if file.State != FileSkipped || file.SkipReason == "" {
+				t.Fatalf("repeated progress contained %s %s with reason %q", file.State, file.OriginalFilename, file.SkipReason)
+			}
+		}
 	}
 	assertArtifactImportCount(t, ctx, pool, 8)
 
@@ -87,6 +134,133 @@ func TestDemoAndManifestImportsAreValidatedAndRepeatable(t *testing.T) {
 	if importedProjectID != projectIDs[0] {
 		t.Fatalf("manifest Artifact was attached to Project %s", importedProjectID)
 	}
+}
+
+// contentFailingStorage delegates to a real LocalStorage but returns one
+// ordinary upload error for content matching a targeted byte slice, so a
+// single file fails deterministically while every other upload succeeds.
+type contentFailingStorage struct {
+	artifacts.LocalStorage
+	failContent []byte
+}
+
+func (storage *contentFailingStorage) Name() string { return artifacts.BackendB2 }
+
+func (storage *contentFailingStorage) Put(ctx context.Context, reader io.Reader, expectedSize int64) (artifacts.StoredContent, error) {
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return artifacts.StoredContent{}, err
+	}
+	if bytes.Equal(content, storage.failContent) {
+		return artifacts.StoredContent{}, artifacts.ErrSizeMismatch
+	}
+	return storage.LocalStorage.Put(ctx, bytes.NewReader(content), expectedSize)
+}
+
+func (storage *contentFailingStorage) PutAt(ctx context.Context, storageKey string, reader io.Reader, expectedSize int64) (artifacts.StoredContent, error) {
+	content, err := io.ReadAll(reader)
+	if err != nil {
+		return artifacts.StoredContent{}, err
+	}
+	if bytes.Equal(content, storage.failContent) {
+		return artifacts.StoredContent{}, artifacts.ErrSizeMismatch
+	}
+	return storage.LocalStorage.PutAt(ctx, storageKey, bytes.NewReader(content), expectedSize)
+}
+
+func TestTargetedFailureFailsOneProjectAndRerunCompletes(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createArtifactImportTestDatabase(t, ctx, databaseURL)
+	projectIDs := seedArtifactImportProjects(t, ctx, pool)
+	directory := t.TempDir()
+	writeImportSource := func(name, content string) string {
+		path := filepath.Join(directory, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		return path
+	}
+	reportA := writeImportSource("report-a.pdf", "%PDF-1.7\nreport a")
+	slidesB := writeImportSource("slides-b.pdf", "%PDF-1.7\nslides b")
+	reportC := writeImportSource("report-c.pdf", "%PDF-1.7\nreport c")
+	entries := []Entry{
+		{ProjectID: projectIDs[0], ArtifactType: "report", DisplayName: "Report A", OriginalFilename: "report-a.pdf", SourcePath: reportA},
+		{ProjectID: projectIDs[0], ArtifactType: "slides", DisplayName: "Slides B", OriginalFilename: "slides-b.pdf", SourcePath: slidesB},
+		{ProjectID: projectIDs[1], ArtifactType: "report", DisplayName: "Report C", OriginalFilename: "report-c.pdf", SourcePath: reportC},
+	}
+
+	realStorage := artifacts.LocalStorage{Root: t.TempDir(), MaxBytes: 1024 * 1024}
+	failing := &contentFailingStorage{LocalStorage: realStorage, failContent: []byte("%PDF-1.7\nslides b")}
+	failingSet := artifacts.StorageSet{DefaultName: artifacts.BackendB2, Backends: map[string]artifacts.Backend{
+		artifacts.BackendLocal: realStorage,
+		artifacts.BackendB2:    failing,
+	}}
+	failingService := Service{
+		Pool:             pool,
+		Artifacts:        artifacts.Service{Pool: pool, Storage: failingSet, MaxProjectBytes: 10 * 1024 * 1024},
+		MaxArtifactBytes: 1024 * 1024,
+	}
+
+	dryRun, err := failingService.Run(ctx, entries, Options{ActorUsername: "artifact-import-admin"})
+	if err != nil || dryRun.PlannedUploads != 3 {
+		t.Fatalf("unexpected dry-run result %#v and error %v", dryRun, err)
+	}
+
+	// With one worker the interleaving is deterministic: the first Project
+	// uploads its report, fails its slides file, and stops; the second
+	// Project still runs because an ordinary failure is not fatal.
+	failedProgress := []ProjectProgress{}
+	failed, err := failingService.Run(ctx, entries, Options{
+		ActorUsername: "artifact-import-admin",
+		Apply:         true,
+		Workers:       1,
+		OnProjectDone: func(progress ProjectProgress) { failedProgress = append(failedProgress, progress) },
+	})
+	if err == nil || !strings.Contains(err.Error(), "1 of 2 Projects failed") {
+		t.Fatalf("apply with a targeted failure returned %v", err)
+	}
+	if !strings.Contains(err.Error(), "size does not match") {
+		t.Fatalf("failure summary omitted the controlled error: %v", err)
+	}
+	if failed.Uploaded != 2 || failed.FailedFiles != 1 || failed.FailedProjects != 1 || failed.Skipped != 0 {
+		t.Fatalf("unexpected failed result %#v", failed)
+	}
+	if len(failedProgress) != 2 || len(failedProgress[0].Files) != 2 || len(failedProgress[1].Files) != 1 {
+		t.Fatalf("failing apply produced progress %+v", failedProgress)
+	}
+	states := []string{failedProgress[0].Files[0].State, failedProgress[0].Files[1].State, failedProgress[1].Files[0].State}
+	if states[0] != FileUploaded || states[1] != FileFailed || states[2] != FileUploaded {
+		t.Fatalf("file outcomes were %v", states)
+	}
+	assertArtifactImportCount(t, ctx, pool, 2)
+
+	recoveredSet, storageErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: realStorage.Root, MaxArtifactBytes: 1024 * 1024})
+	if storageErr != nil {
+		t.Fatalf("build recovered storage set: %v", storageErr)
+	}
+	recoveredService := Service{
+		Pool:             pool,
+		Artifacts:        artifacts.Service{Pool: pool, Storage: recoveredSet, MaxProjectBytes: 10 * 1024 * 1024},
+		MaxArtifactBytes: 1024 * 1024,
+	}
+	recoveredProgress := []ProjectProgress{}
+	recovered, err := recoveredService.Run(ctx, entries, Options{
+		ActorUsername: "artifact-import-admin",
+		Apply:         true,
+		Workers:       2,
+		OnProjectDone: func(progress ProjectProgress) { recoveredProgress = append(recoveredProgress, progress) },
+	})
+	if err != nil || recovered.Uploaded != 1 || recovered.Skipped != 2 {
+		t.Fatalf("unexpected recovered result %#v and error %v", recovered, err)
+	}
+	if len(recoveredProgress) != 2 {
+		t.Fatalf("recovered apply produced %d progress events, expected 2", len(recoveredProgress))
+	}
+	assertArtifactImportCount(t, ctx, pool, 3)
 }
 
 func createDemoFiles(t *testing.T) string {

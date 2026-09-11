@@ -2,8 +2,11 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
+	"ause-discovery.local/backend/internal/artifactimport"
 	"github.com/google/uuid"
 )
 
@@ -48,21 +51,39 @@ func TestParseArtifactCommand(t *testing.T) {
 		{
 			name:      "demo dry run for all published Projects",
 			arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published"},
-			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", AllPublished: true},
+			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", AllPublished: true, Workers: artifactimport.DefaultWorkers},
 			valid:     true,
 		},
 		{
 			name:      "demo apply for one Project",
 			arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--project-id", projectID, "--apply"},
-			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", ProjectID: uuidPointer(projectID), Apply: true},
+			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", ProjectID: uuidPointer(projectID), Apply: true, Workers: artifactimport.DefaultWorkers},
 			valid:     true,
 		},
 		{
 			name:      "manifest dry run",
 			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin"},
-			want:      artifactCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.csv", ActorUsername: "admin"},
+			want:      artifactCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.csv", ActorUsername: "admin", Workers: artifactimport.DefaultWorkers},
 			valid:     true,
 		},
+		{
+			name:      "demo accepts minimum workers",
+			arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "1"},
+			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", AllPublished: true, Workers: 1},
+			valid:     true,
+		},
+		{
+			name:      "manifest accepts maximum workers",
+			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "8"},
+			want:      artifactCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.csv", ActorUsername: "admin", Workers: 8},
+			valid:     true,
+		},
+		{name: "demo rejects zero workers", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "0"}},
+		{name: "demo rejects workers above eight", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "9"}},
+		{name: "manifest rejects negative workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "-1"}},
+		{name: "manifest rejects malformed workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "many"}},
+		{name: "manifest rejects repeated workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "2", "--workers", "4"}},
+		{name: "migrate rejects workers flag", arguments: []string{"migrate", "--workers", "4"}},
 		{name: "demo requires explicit scope", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin"}},
 		{name: "demo rejects overlapping scopes", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--project-id", projectID}},
 		{name: "manifest requires actor", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv"}},
@@ -86,4 +107,50 @@ func TestParseArtifactCommand(t *testing.T) {
 func uuidPointer(value string) *uuid.UUID {
 	id := uuid.MustParse(value)
 	return &id
+}
+
+func TestFormatProjectProgressGroupsAndSanitizes(t *testing.T) {
+	progress := artifactimport.ProjectProgress{
+		Completed: 17,
+		Total:     209,
+		ProjectID: uuid.New(),
+		Title:     "Senior Project\nwith injected\rcontrol characters",
+		Files: []artifactimport.FileOutcome{
+			{ArtifactType: "report", OriginalFilename: "final-report.pdf", State: artifactimport.FileUploaded},
+			{ArtifactType: "slides", OriginalFilename: "presentation-slides.pdf", State: artifactimport.FileUploaded},
+			{ArtifactType: "poster", OriginalFilename: "project-poster.png", State: artifactimport.FileSkipped, SkipReason: "Project already has an active file of this type"},
+			{ArtifactType: "source_code", OriginalFilename: "source-code.zip", State: artifactimport.FileFailed, Error: "upload source-code.zip: artifact storage backend is unavailable: status 503"},
+		},
+		Duration: 2100 * time.Millisecond,
+	}
+	line := formatProjectProgress(progress)
+	if strings.ContainsAny(line, "\n\r") {
+		t.Fatalf("progress line contained a line break: %q", line)
+	}
+	expected := "[17/209] Senior Project with injected control characters: uploaded report (final-report.pdf), slides (presentation-slides.pdf); skipped poster (Project already has an active file of this type); failed source_code (upload source-code.zip: artifact storage backend is unavailable: status 503); 2.1s"
+	if line != expected {
+		t.Fatalf("progress line mismatch:\n got %q\nwant %q", line, expected)
+	}
+}
+
+func TestFormatProjectProgressBoundsAndCoversEmpty(t *testing.T) {
+	long := strings.Repeat("t", 200)
+	line := formatProjectProgress(artifactimport.ProjectProgress{
+		Completed: 1,
+		Total:     1,
+		Title:     long,
+		Files:     []artifactimport.FileOutcome{{ArtifactType: "report", OriginalFilename: long, State: artifactimport.FileUploaded}},
+		Duration:  time.Millisecond,
+	})
+	if !strings.HasSuffix(line, "s") {
+		t.Fatalf("unexpected line shape: %q", line)
+	}
+	if strings.Contains(line, strings.Repeat("t", 121)) {
+		t.Fatalf("long filename was not bounded: %q", line)
+	}
+
+	empty := formatProjectProgress(artifactimport.ProjectProgress{Completed: 1, Total: 1, Title: "Untouched", Duration: time.Millisecond})
+	if !strings.Contains(empty, "no files processed") {
+		t.Fatalf("empty progress line lost its outcome: %q", empty)
+	}
 }
