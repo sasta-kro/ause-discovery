@@ -66,9 +66,17 @@ _Avoid_: Public Topic filter, active Topic assignment
 A stored file associated with a Project, such as a report, slides, source archive, proposal, poster, dataset, or demo video. The internal domain term is Artifact. User-facing interfaces call it a Project file.
 _Avoid_: Attachment URL, Project file column
 
-**Project File Import**:
-An operator-controlled collection of files attached to existing Projects after their metadata exists.
-_Avoid_: Metadata Import Batch, direct Artifact copy
+**Artifact Store**:
+The subsystem that persists and opens opaque Project-owned bytes for Artifact and Project Logo services. Sharing this infrastructure does not make a Project Logo a domain Artifact. A storage provider is a configured implementation, such as the local filesystem or Backblaze B2. A storage adapter is the code implementing that provider contract. `Backend` is reserved for the AUSE Backend API and must not describe an Artifact store or storage provider.
+_Avoid_: Storage backend, B2 backend, filesystem backend
+
+**Project Content Import**:
+An operator-controlled import that maps existing Projects to Project Files and optional Project Logos through one manifest after Project metadata exists. Each content item retains its own domain behavior after import.
+_Avoid_: Metadata Import Batch, Logo Import, direct object-store copy
+
+**Project Logo**:
+An optional Project-owned representative image used for visual identification. Its bytes use the configured object store, but it is presentation metadata rather than an Artifact and never appears as a downloadable Project file.
+_Avoid_: Logo Artifact, downloadable logo, Project attachment
 
 ## Import and Search
 

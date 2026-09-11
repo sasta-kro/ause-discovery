@@ -2,7 +2,7 @@
 
 The `ausectl artifacts` commands attach files to existing Projects through the same validation, storage, quota, revision, search-synchronization, and audit boundaries as administrator uploads. Project metadata must exist before Project files are imported. Direct database inserts and direct copies into `AUSE_ARTIFACT_ROOT` are unsupported.
 
-Both commands default to a read-only dry-run. Add `--apply` only after the dry-run succeeds. An active administrator username is required so every uploaded Artifact has an audit actor.
+Both commands default to a read-only dry-run. Add `--apply` only after the dry-run succeeds. An active administrator username is required so every uploaded Artifact has an audit actor. Final bytes go through the configured Artifact storage backend. With B2 selected, validation stages one file at a time in the container operating system temporary directory before uploading it to B2. This staging location is separate from `AUSE_IMPORT_TEMP_ROOT`, which is reserved for metadata import previews.
 
 ## Demonstration files for every published Project
 
@@ -73,7 +73,7 @@ docker compose --env-file <file> \
   --all-published
 ```
 
-Add `--apply` after the dry-run succeeds. The API service writes final bytes into the configured persistent Artifact volume. The read-only source mount can be removed after import.
+Add `--apply` after the dry-run succeeds. The API service writes final bytes into the configured Artifact backend. With `AUSE_ARTIFACT_STORAGE_BACKEND=b2`, final objects are written to B2 rather than the local Artifact volume. The read-only source mount can be removed after import.
 
 ## Manifest import for real Project files
 
