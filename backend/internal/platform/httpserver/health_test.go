@@ -156,3 +156,75 @@ func TestReadinessCompositionIncludesTheStorageProvider(t *testing.T) {
 		t.Fatalf("versioned liveness returned %d during storage failure", liveResponse.Code)
 	}
 }
+
+// b2ListEndpoint is a minimal S3-compatible ListObjectsV2 endpoint for
+// proving the real B2 provider wiring without network access. It counts
+// signed list requests and answers with an empty healthy result.
+type b2ListEndpoint struct {
+	requests int
+}
+
+func (endpoint *b2ListEndpoint) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Query().Get("list-type") == "2" {
+		if strings.HasPrefix(request.Header.Get("Authorization"), "AWS4-HMAC-SHA256") {
+			endpoint.requests++
+		}
+		writer.Header().Set("Content-Type", "application/xml")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>test-bucket</Name><IsTruncated>false</IsTruncated><MaxKeys>1</MaxKeys><Prefix>v1/</Prefix></ListBucketResult>`))
+		return
+	}
+	writer.WriteHeader(http.StatusNotFound)
+}
+
+// TestBothReadinessEndpointFormsShareOneB2Request proves the real wiring:
+// one constructed B2Storage instance serves the unversioned HealthHandler
+// route and the versioned NewAPIHandler route, and both endpoint forms
+// inside the success cache window result in exactly one remote request.
+func TestBothReadinessEndpointFormsShareOneB2Request(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createLogoHTTPTestDatabase(t, ctx, databaseURL)
+	endpoint := &b2ListEndpoint{}
+	server := httptest.NewServer(endpoint)
+	t.Cleanup(server.Close)
+	storage, storageErr := artifacts.NewB2Storage(server.URL, "test-bucket", "key-id", "application-key", 1024)
+	if storageErr != nil {
+		t.Fatalf("NewB2Storage returned an error: %v", storageErr)
+	}
+	set := artifacts.StorageSet{DefaultName: artifacts.BackendB2, Backends: map[string]artifacts.Backend{
+		artifacts.BackendLocal: artifacts.LocalStorage{Root: t.TempDir()},
+		artifacts.BackendB2:    storage,
+	}}
+	configuration := config.Config{
+		PublicBasePath:      "/ause-discovery/",
+		ImportTemporaryRoot: t.TempDir(),
+		SessionIdleTTL:      time.Minute,
+		SessionAbsoluteTTL:  time.Minute,
+	}
+	check := func(ctx context.Context) error { return CheckReadiness(ctx, pool, configuration, set) }
+
+	// The unversioned health route wired the way cmd/api wires it.
+	mux := http.NewServeMux()
+	HealthHandler{CheckReadiness: check}.Register(mux, configuration.PublicBasePath)
+	unversioned := httptest.NewRecorder()
+	mux.ServeHTTP(unversioned, httptest.NewRequest("GET", "/ause-discovery/health/ready", nil))
+	if unversioned.Code != http.StatusOK {
+		t.Fatalf("unversioned readiness returned %d: %s", unversioned.Code, unversioned.Body.String())
+	}
+
+	// The versioned route through the real generated handler.
+	apiHandler := NewAPIHandler(pool, configuration, set)
+	versioned := httptest.NewRecorder()
+	apiHandler.ServeHTTP(versioned, httptest.NewRequest("GET", "/ause-discovery/api/v1/health/ready", nil))
+	if versioned.Code != http.StatusOK {
+		t.Fatalf("versioned readiness returned %d: %s", versioned.Code, versioned.Body.String())
+	}
+
+	if endpoint.requests != 1 {
+		t.Fatalf("both endpoint forms issued %d signed list requests, expected 1 within the success cache window", endpoint.requests)
+	}
+}

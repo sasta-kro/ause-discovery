@@ -23,7 +23,11 @@ type s3Stub struct {
 	forcedStatus  int
 	rangeRequests []string
 	listRequests  []string
+	listHeaders   []string
 	listDelay     chan struct{}
+	listArrival   chan struct{}
+	listBody      string
+	malformedList bool
 }
 
 func newS3Stub() *s3Stub {
@@ -96,6 +100,14 @@ func (stub *s3Stub) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 // the response until released so tests can exercise leaders, waiters, and
 // cancellation deterministically.
 func (stub *s3Stub) serveList(writer http.ResponseWriter, request *http.Request) {
+	// Announce arrival before any delay so tests know the leader request
+	// has started, then gate the response when a delay is configured.
+	if arrival := stub.listArrival; arrival != nil {
+		select {
+		case arrival <- struct{}{}:
+		default:
+		}
+	}
 	stub.mutex.Lock()
 	if stub.listDelay != nil {
 		stub.mutex.Unlock()
@@ -107,7 +119,10 @@ func (stub *s3Stub) serveList(writer http.ResponseWriter, request *http.Request)
 		stub.mutex.Lock()
 	}
 	stub.listRequests = append(stub.listRequests, request.URL.RawQuery)
+	stub.listHeaders = append(stub.listHeaders, request.Header.Get("Authorization"))
 	forced := stub.forcedStatus
+	body := stub.listBody
+	malformed := stub.malformedList
 	stub.mutex.Unlock()
 	if forced != 0 {
 		writer.WriteHeader(forced)
@@ -115,8 +130,15 @@ func (stub *s3Stub) serveList(writer http.ResponseWriter, request *http.Request)
 	}
 	writer.Header().Set("Content-Type", "application/xml")
 	writer.WriteHeader(http.StatusOK)
-	_, _ = writer.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
-<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>test-bucket</Name><IsTruncated>false</IsTruncated><MaxKeys>1</MaxKeys><Prefix>v1/</Prefix></ListBucketResult>`))
+	if malformed {
+		_, _ = writer.Write([]byte(`<?xml version="1.0"?><ListBucketResult><Name>broken`))
+		return
+	}
+	if body == "" {
+		body = `<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>test-bucket</Name><IsTruncated>false</IsTruncated><MaxKeys>1</MaxKeys><Prefix>v1/</Prefix></ListBucketResult>`
+	}
+	_, _ = writer.Write([]byte(body))
 }
 
 func (stub *s3Stub) forceStatus(status int) {
@@ -135,6 +157,26 @@ func (stub *s3Stub) delayLists(release chan struct{}) {
 	stub.mutex.Lock()
 	defer stub.mutex.Unlock()
 	stub.listDelay = release
+}
+
+// signalListArrival registers a channel that receives once for every
+// ListObjectsV2 request the stub accepts, before any configured delay.
+func (stub *s3Stub) signalListArrival(arrival chan struct{}) {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	stub.listArrival = arrival
+}
+
+func (stub *s3Stub) forceMalformedList() {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	stub.malformedList = true
+}
+
+func (stub *s3Stub) recordedListHeaders() []string {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	return append([]string(nil), stub.listHeaders...)
 }
 
 func (stub *s3Stub) storedContent(key string) ([]byte, bool) {

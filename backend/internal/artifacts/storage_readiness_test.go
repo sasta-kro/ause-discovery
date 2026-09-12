@@ -3,12 +3,12 @@ package artifacts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -113,18 +113,63 @@ func TestB2CheckReadyIssuesOneBoundedListRequest(t *testing.T) {
 	}
 }
 
-func TestB2CheckReadyClassifiesEveryFailureAsUnavailable(t *testing.T) {
-	cases := map[string]func(t *testing.T, stub *s3Stub){
-		"authentication failure": func(t *testing.T, stub *s3Stub) { stub.forceStatus(http.StatusForbidden) },
-		"missing bucket":         func(t *testing.T, stub *s3Stub) { stub.forceStatus(http.StatusNotFound) },
-		"server failure":         func(t *testing.T, stub *s3Stub) { stub.forceStatus(http.StatusInternalServerError) },
+func TestB2CheckReadyRejectsMalformedSuccessResponse(t *testing.T) {
+	stub := newS3Stub()
+	stub.forceMalformedList()
+	err := newTestB2Storage(t, stub).CheckReady(context.Background())
+	if !errors.Is(err, ErrStorageUnavailable) {
+		t.Fatalf("malformed success response returned %v, expected unavailable", err)
 	}
-	for name, prepare := range cases {
+}
+
+func TestB2CheckReadySignsTheListRequest(t *testing.T) {
+	stub := newS3Stub()
+	storage := newTestB2Storage(t, stub)
+	if err := storage.CheckReady(context.Background()); err != nil {
+		t.Fatalf("CheckReady returned an error: %v", err)
+	}
+	headers := stub.recordedListHeaders()
+	if len(headers) != 1 {
+		t.Fatalf("readiness sent %d list requests, expected 1", len(headers))
+	}
+	if !strings.HasPrefix(headers[0], "AWS4-HMAC-SHA256") || !strings.Contains(headers[0], "Credential=key-id/") {
+		t.Fatalf("list request was not SigV4-signed with the configured key: %q", headers[0])
+	}
+}
+
+func TestB2StorageWithoutConstructedControllerReportsUnavailable(t *testing.T) {
+	var unconstructed *B2Storage
+	if err := unconstructed.CheckReady(context.Background()); !errors.Is(err, ErrStorageUnavailable) {
+		t.Fatalf("nil receiver returned %v, expected unavailable", err)
+	}
+	literal := &B2Storage{Bucket: "test-bucket"}
+	if err := literal.CheckReady(context.Background()); !errors.Is(err, ErrStorageUnavailable) {
+		t.Fatalf("storage without a controller returned %v, expected unavailable", err)
+	}
+}
+
+func TestB2CheckReadyClassifiesEveryFailureAsUnavailable(t *testing.T) {
+	cases := map[string]struct {
+		status int
+	}{
+		"authentication failure": {status: http.StatusUnauthorized},
+		"authorization failure":  {status: http.StatusForbidden},
+		"missing bucket":         {status: http.StatusNotFound},
+		"server failure":         {status: http.StatusInternalServerError},
+	}
+	for name, scenario := range cases {
 		t.Run(name, func(t *testing.T) {
 			stub := newS3Stub()
-			prepare(t, stub)
-			if err := newTestB2Storage(t, stub).CheckReady(context.Background()); !errors.Is(err, ErrStorageUnavailable) {
+			stub.forceStatus(scenario.status)
+			err := newTestB2Storage(t, stub).CheckReady(context.Background())
+			if !errors.Is(err, ErrStorageUnavailable) {
 				t.Fatalf("CheckReady returned %v, expected unavailable", err)
+			}
+			// Each failure keeps its own status in the safe internal
+			// context so authentication and authorization remain
+			// distinguishable in logs.
+			if !strings.Contains(err.Error(), fmt.Sprintf("status %d", scenario.status)) {
+				t.Fatalf("%s error %q omitted its status", name, err)
 			}
 		})
 	}
@@ -228,31 +273,35 @@ func TestB2CheckReadyCachesSuccessAndFailure(t *testing.T) {
 func TestB2CheckReadyCoalescesConcurrentCalls(t *testing.T) {
 	stub := newS3Stub()
 	release := make(chan struct{})
+	arrival := make(chan struct{}, 1)
+	stub.signalListArrival(arrival)
 	stub.delayLists(release)
 	storage := newTestB2Storage(t, stub)
 
 	const waiters = 4
+	// Each waiter announces through this channel once it has joined the
+	// in-flight call and is about to wait.
+	joined := make(chan struct{}, waiters)
+	storage.readiness.onWaiter = func() { joined <- struct{}{} }
+
 	results := make(chan error, waiters+1)
 	leaderDone := make(chan struct{})
 	go func() {
 		results <- storage.CheckReady(context.Background())
 		close(leaderDone)
 	}()
-	// Let the leader reach the blocked request before starting waiters.
-	deadline := time.Now().Add(time.Second)
-	for len(stub.recordedListRequests()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	var waiterGroup sync.WaitGroup
+	// The leader's request has started once the stub accepts it.
+	<-arrival
+
 	for index := 0; index < waiters; index++ {
-		waiterGroup.Add(1)
-		go func() {
-			defer waiterGroup.Done()
-			results <- storage.CheckReady(context.Background())
-		}()
+		go func() { results <- storage.CheckReady(context.Background()) }()
+	}
+	// Every waiter has reached the in-flight call before the leader is
+	// released, so no waiter can become a second leader.
+	for index := 0; index < waiters; index++ {
+		<-joined
 	}
 	close(release)
-	waiterGroup.Wait()
 	<-leaderDone
 	for index := 0; index < waiters+1; index++ {
 		if err := <-results; err != nil {
@@ -267,20 +316,24 @@ func TestB2CheckReadyCoalescesConcurrentCalls(t *testing.T) {
 func TestB2CheckReadyCanceledWaiterDoesNotDisturbLeader(t *testing.T) {
 	stub := newS3Stub()
 	release := make(chan struct{})
+	arrival := make(chan struct{}, 1)
+	stub.signalListArrival(arrival)
 	stub.delayLists(release)
 	storage := newTestB2Storage(t, stub)
+	joined := make(chan struct{}, 1)
+	storage.readiness.onWaiter = func() { joined <- struct{}{} }
 
 	leaderResult := make(chan error, 1)
 	go func() { leaderResult <- storage.CheckReady(context.Background()) }()
-	deadline := time.Now().Add(time.Second)
-	for len(stub.recordedListRequests()) == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
+	<-arrival
 
 	waiterContext, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	waiterResult := make(chan error, 1)
 	go func() { waiterResult <- storage.CheckReady(waiterContext) }()
-	time.Sleep(20 * time.Millisecond)
+	// The waiter is waiting on the in-flight call before its context is
+	// canceled.
+	<-joined
 	cancel()
 	if err := <-waiterResult; !errors.Is(err, ErrStorageUnavailable) {
 		t.Fatalf("canceled waiter returned %v, expected unavailable", err)

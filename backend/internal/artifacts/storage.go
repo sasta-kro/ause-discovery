@@ -269,6 +269,11 @@ func (storage LocalStorage) CheckReady(ctx context.Context) error {
 	if !filepath.IsAbs(storage.Root) {
 		return fmt.Errorf("%w: local readiness requires an absolute root", ErrStorageUnavailable)
 	}
+	// The same symlink validation as the write path: os.Stat would follow a
+	// symlinked root, so readiness would probe a location uploads reject.
+	if err := storage.rejectSymlinks(storage.Root); err != nil {
+		return fmt.Errorf("%w: local readiness root: %v", ErrStorageUnavailable, err)
+	}
 	root, err := os.Stat(storage.Root)
 	if err != nil {
 		return fmt.Errorf("%w: local readiness root: %v", ErrStorageUnavailable, err)

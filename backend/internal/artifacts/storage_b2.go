@@ -186,13 +186,13 @@ func (storage B2Storage) Exists(ctx context.Context, storageKey string) bool {
 // healthy; response contents are irrelevant. The probe is coalesced and
 // briefly cached by the shared readiness controller.
 func (storage *B2Storage) CheckReady(ctx context.Context) error {
-	probe := storage.readiness
-	if probe == nil {
-		// A literal without the constructor gets a fresh controller: still
-		// correct, only without cross-call caching.
-		probe = newReadinessProbe(nil)
+	// NewB2Storage is the supported construction path and always wires the
+	// controller. Anything else is a programming error, reported as a
+	// controlled unavailability rather than a panic.
+	if storage == nil || storage.readiness == nil {
+		return fmt.Errorf("%w: b2 readiness controller is not initialized", ErrStorageUnavailable)
 	}
-	return probe.check(ctx)
+	return storage.readiness.check(ctx)
 }
 
 // listReady issues the single readiness list request against the bucket.
@@ -243,6 +243,10 @@ type readinessProbe struct {
 	successTTL time.Duration
 	failureTTL time.Duration
 	request    func(context.Context) error
+	// onWaiter, when set by tests, is invoked once a caller has joined the
+	// in-flight call and is about to wait, giving deterministic
+	// synchronization without sleeps.
+	onWaiter func()
 }
 
 type readinessCall struct {
@@ -287,7 +291,11 @@ func (probe *readinessProbe) check(ctx context.Context) error {
 		}
 	}
 	if call := probe.leader; call != nil {
+		waiterHook := probe.onWaiter
 		probe.mu.Unlock()
+		if waiterHook != nil {
+			waiterHook()
+		}
 		select {
 		case <-call.done:
 			return call.err
