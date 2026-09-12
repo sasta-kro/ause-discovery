@@ -109,3 +109,13 @@
 **Reason:** The institution's other administrator rejected VM-local storage as the primary backend and S3 as a service. Google Drive was evaluated and rejected: consumer-account lock exposure for a public archive, OAuth refresh-token fragility, per-user API rate limits, and no institutional second copy. Requirements are zero running cost and no storage outage that permanently breaks downloads. B2 over Cloudflare R2: no payment method is required, the first 10 GB are always free, and the free monthly egress allowance of 3x average stored bytes is sufficient at current scale and grows with the corpus. R2's distinguishing advantage, unmetered egress, is unusable at current scale and comes with a payment method on file. If traffic grows beyond the free allowances, the provider can change later without a rewrite.
 
 **Consequence:** The filesystem implementation remains for development and tests. The B2 backend must support streamed put and range-capable open, a one-time migration of existing bytes, an institutional second copy, upstream-unavailability mapping to controlled 503 responses, and backend selection without rewrite. Operators monitor monthly egress against the 3x allowance and stored bytes against 10 GB; crossing either is a trigger to re-evaluate the provider, not an outage.
+
+## AD-012 Project Repository Links in the unified Project Content manifest
+
+**Status:** Accepted 2026-09-12
+
+**Decision:** Verified Project Repository Links are ordered Project metadata, persisted separately from Artifacts and imported through the existing versioned Project Content manifest alongside optional Project Logos and Project Files. Only extractor links classified as `project_repo` are eligible. Third-party references remain extractor provenance and do not enter application data.
+
+**Reason:** One Project can have multiple repositories, each with last-checked availability. A separate CSV or CLI would duplicate Project mapping, while treating URLs as Artifacts would introduce fake storage, MIME, byte-count, quota, migration, and download semantics for content that has no stored bytes. A dedicated Project metadata relation preserves the Artifact boundary and permits public presentation without leaking extractor internals.
+
+**Consequence:** The Project Content manifest gains an optional links collection. Public Project details may display imported repositories and their last-checked availability, but search documents, Artifact counts and facets, Artifact storage, B2 migration, direct-download behavior, and third-party-reference URLs remain unaffected. Links open externally with normal external-link safeguards. Liveness is evidence at its recorded check time, not a runtime availability guarantee.

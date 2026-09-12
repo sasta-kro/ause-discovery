@@ -67,39 +67,43 @@ Add `--apply` after the dry-run counts are correct. With B2 selected, the
 command uploads the mock bytes to B2 and writes their Project associations to
 the VM PostgreSQL database.
 
-## Quick copy: real Project Files and Logos
+## Quick copy: real Project Content
 
-The application command is ready to import each Project's real files and Logo
-in one run. It uses the same storage and PostgreSQL association path as the
-mock seeder.
+The application command is ready to import each Project's real files, Logo,
+and Repository Links in one run. It uses the same storage and PostgreSQL
+association path as the mock seeder for byte-backed content, while links are
+stored as Project metadata.
 
-The current source material is not yet an import-ready bundle. At present:
+The extractor assembles the complete bundle in one command (from the
+extractor repository root):
 
-- a logo-only Project Content manifest can be generated on demand (see the
-  "Building the logo manifest" section below); it carries Logo entries but
-  no Project Files yet.
-- `resources/all-sp-projects/` contains the raw Project material. Some reports
-  and posters are inside ZIP containers, and no combined
-  `project-content.json` maps those files to Project import keys and Project
-  File types.
+```sh
+.venv/bin/python pipeline/build_import_bundle.py
+```
 
-Before these commands are run, the extractor must produce one portable bundle
-with this layout or an equivalent layout:
+This writes, or fully rebuilds, `resources/REAL_IMPORT_BUNDLE/` in the main
+repository with this layout:
 
 ```text
-project-content/
-  project-content.json
+REAL_IMPORT_BUNDLE/
+  project-content-manifest.json
   logos/
   projects/
     sp-<identifier>/
       <real Project files>
 ```
 
-The manifest must use the same `sp-<identifier>` import keys as
-`ause-discovery-projects-metadata-import.csv`, classify every file with a supported Project File type,
-and reference extracted files rather than a ZIP that merely contains a report
-or poster. The manifest can contain a Logo, Project Files, or both for each
-Project.
+The current bundle contains 209 Project entries, 69 Logos, 336 Project Files,
+and 15 Repository Links across 13 Projects. The manifest uses the same
+`sp-<identifier>` import keys as
+`ause-discovery-projects-metadata-import.csv`, classifies every file with a
+supported Project File type, references extracted files rather than a ZIP
+that merely contains a report or poster, and carries each Project's Logo and
+repository links alongside its files. The legacy `.doc` report and two
+presentation decks mislabeled as `.pptx` posters are converted to PDF and
+included under their correct types. Three award images remain excluded because
+no current Project File type admits them, as recorded in the extractor's
+`notes/bundle-building.md` and backlog item 19.
 
 Do not seed mock files first on a clean deployment intended for real content.
 Mock files create active Project File records and would coexist with, or cause
@@ -107,18 +111,18 @@ skips during, the later real import. Import the real combined bundle directly.
 
 ### Local stack
 
-The following commands assume the completed bundle is at
-`tools/ausesp-data-extractor/output/project-content/`.
+The following commands assume the completed bundle the extractor built at
+`resources/REAL_IMPORT_BUNDLE/`.
 
 Dry-run:
 
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/tools/ausesp-data-extractor/output/project-content:/bundle:ro" \
+  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/project-content.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username Test1234567890 \
   --workers 4
 ```
@@ -128,10 +132,10 @@ Apply only after the complete plan succeeds:
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/tools/ausesp-data-extractor/output/project-content:/bundle:ro" \
+  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/project-content.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username Test1234567890 \
   --workers 4 \
   --apply
@@ -150,7 +154,7 @@ docker compose -p ause-discovery --env-file .env.production \
   --volume /srv/ause-discovery/project-content:/bundle:ro \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/project-content.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username <admin-username> \
   --workers 4
 ```
@@ -163,7 +167,7 @@ docker compose -p ause-discovery --env-file .env.production \
   --volume /srv/ause-discovery/project-content:/bundle:ro \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/project-content.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username <admin-username> \
   --workers 4 \
   --apply
@@ -175,15 +179,18 @@ only the import source and can be removed after a successful import.
 
 ## Quick copy: extracted logos on the local stack
 
-A logo-only Project Content manifest is generated on demand (see the next
-section) into `resources/REAL_IMPORT_BUNDLE/`, beside a copy of the
-extractor's `output/logos/` directory. Run from the main repository root
-after Project metadata import:
+The combined bundle builder (previous section) is the primary path and its
+manifest already carries every Logo. The logo-only export below remains
+for one-off runs against a fresh Project metadata import. Write it outside
+`resources/REAL_IMPORT_BUNDLE/`, for example into
+`resources/logo-only-bundle/`, because the builder wipes and fully
+rebuilds that directory. Run from the main repository root after Project
+metadata import:
 
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
+  --volume "$PWD/resources/logo-only-bundle:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
   --manifest /bundle/project-content-manifest.json \
@@ -196,7 +203,7 @@ Apply after the complete bundle plans successfully:
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
+  --volume "$PWD/resources/logo-only-bundle:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
   --manifest /bundle/project-content-manifest.json \
@@ -358,7 +365,7 @@ rows or storage objects. `--apply` enables writes.
 
 `--workers` accepts 1 through 8 and defaults to 4. It controls how many
 Projects run concurrently. Content within one Project stays sequential, with
-the Logo first and Project Files afterward.
+the Logo first, Project Files afterward, and Repository Links last.
 
 Apply prints one progress line per completed Project. The line contains the
 Project title and UUID plus each uploaded, skipped, or failed item. This gives
@@ -386,24 +393,27 @@ it can never reference a Project without a database row). Run from the
 extractor repository root:
 
 ```sh
-jq -R -s 'split("\n") | map(select(startswith("sp-"))) | .[0:-1] as $keys
-  | (input | to_entries) as $m
-  | {version: 1, projects: [$m[]
+mkdir -p ../../resources/logo-only-bundle
+
+jq -n --rawfile csv output/ause-discovery-projects-metadata-import.csv \
+  --slurpfile m output/extraction-evidence/manifest.json '
+  ($csv | split("\n")
+    | map(select(length > 0 and (startswith("import_key") | not)))
+    | map(split(",")[0])) as $keys
+  | {version: 1, projects: [$m[0] | to_entries[]
       | select(.value.logo.output != null)
-      | select((.key | "sp-" + .) as $k | $keys | index($k))
+      | select(("sp-" + .key) as $k | ($keys | index($k)))
       | {project_import_key: ("sp-" + .key),
          logo: {file_path: .value.logo.output},
-         files: []}]}' \
-  <(cut -d, -f1 output/ause-discovery-projects-metadata-import.csv) \
-  output/extraction-evidence/manifest.json \
-  > ../../resources/REAL_IMPORT_BUNDLE/project-content-manifest.json
+         files: []}]}
+' > ../../resources/logo-only-bundle/project-content-manifest.json
 ```
 
-Copy `output/logos/` into `resources/REAL_IMPORT_BUNDLE/logos/` so the
-manifest's relative paths resolve. A planned bundle-builder script will
-assemble the full bundle (logos, repository links, and extracted Project
-Files with types and display names) in one command; until then the jq plus
-the copy is the manual path.
+Copy `output/logos/` to `../../resources/logo-only-bundle/logos/` so the
+manifest's relative paths resolve. The full bundle-builder script
+(`pipeline/build_import_bundle.py`) is now the primary path and assembles
+the complete bundle, Project Files and repository links included, in one
+command. The jq export above remains the one-off logo-only fallback.
 
 Historical note: an earlier revision hardcoded `select(.key != "2021")`
 because the slide-only project sp-2021 had metadata missing at the time. The
@@ -442,9 +452,13 @@ links with a fresh revision read.
 Build the repository-link manifest from the extractor evidence (extractor
 repository root; only `kind == "project_repo"` survives, so third-party
 references never reach the manifest, and projects missing from the metadata
-CSV are filtered out the same way as the logo export):
+CSV are filtered out the same way as the logo export). Write this one-off
+manifest outside `REAL_IMPORT_BUNDLE` because the primary builder owns that
+directory:
 
 ```sh
+mkdir -p ../../resources/link-only-bundle
+
 jq -n --rawfile csv output/ause-discovery-projects-metadata-import.csv \
   --slurpfile m output/extraction-evidence/manifest.json '
   ($csv | split("\n") | map(select(length > 0 and (startswith("import_key") | not))) | map(split(",")[0])) as $keys
@@ -460,16 +474,16 @@ jq -n --rawfile csv output/ause-discovery-projects-metadata-import.csv \
                             else "unverified" end),
              checked_at: (.liveness.checked_at // "")}]}]
   | {version: 1, projects: .}
-' > ../../resources/REAL_IMPORT_BUNDLE/project-content-manifest.json
+' > ../../resources/link-only-bundle/project-content-manifest.json
 ```
 
 Verified 2026-09-12: the export produced exactly 13 Project entries and 15
 links (13 accessible, 1 not accessible, 1 unverified), every timestamp valid,
 every set carrying exactly one primary, and the guarded evidence test
 planned all 13 entries through the real loader and planner. A link-only run
-uses the same `ausectl project-content import-manifest` command, and the
-same `links` arrays can be merged into the final combined logo and Project
-File bundle.
+uses the same `ausectl project-content import-manifest` command. The bundle
+builder merges these same `links` arrays into the combined manifest
+automatically, so the jq export is only needed for one-off link-only runs.
 
 ## Temporary disk use
 
