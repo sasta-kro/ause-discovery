@@ -1,6 +1,7 @@
 package projectcontentimport
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"fmt"
@@ -404,4 +405,54 @@ func TestProjectContentImportRejectsDuplicateResolvedProjects(t *testing.T) {
 		t.Fatalf("duplicate resolution returned %v, expected a duplicate rejection", err)
 	}
 	assertContentCounts(t, ctx, fixture.pool, 0, 0)
+}
+
+// contentDOCX builds a minimal DOCX-compatible package inside the bundle.
+func contentDOCX(t *testing.T) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	archive := zip.NewWriter(&buffer)
+	for name, body := range map[string]string{
+		"[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>`,
+		"word/document.xml":   `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>`,
+	} {
+		entry, err := archive.Create(name)
+		if err != nil {
+			t.Fatalf("create fixture entry: %v", err)
+		}
+		if _, err := entry.Write([]byte(body)); err != nil {
+			t.Fatalf("write fixture entry: %v", err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatalf("close fixture archive: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func TestProjectContentImportPlansDOCXReports(t *testing.T) {
+	fixture := newContentFixture(t)
+	ctx := context.Background()
+	docx := contentDOCX(t)
+	if err := os.MkdirAll(filepath.Join(fixture.bundle, "files", "first"), 0o750); err != nil {
+		t.Fatalf("create bundle directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.bundle, "files", "first", "final-report.docx"), docx, 0o600); err != nil {
+		t.Fatalf("write DOCX source: %v", err)
+	}
+	manifest := fixture.manifest(t, `{"project_import_key": "sp-first", "files": [
+		{"artifact_type": "report", "display_name": "Final report", "original_filename": "final-report.docx", "file_path": "files/first/final-report.docx"}]}`)
+	dryRun, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser})
+	if err != nil || dryRun.FileUploads != 1 || dryRun.LogoUploads != 0 {
+		t.Fatalf("DOCX report planning returned %#v and error %v, expected one file upload", dryRun, err)
+	}
+
+	applied, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true})
+	if err != nil || applied.FileUploads != 1 {
+		t.Fatalf("DOCX report apply returned %#v and error %v", applied, err)
+	}
+	var extension string
+	if err := fixture.pool.QueryRow(ctx, "SELECT extension FROM artifacts WHERE type='report' LIMIT 1").Scan(&extension); err != nil || extension != "docx" {
+		t.Fatalf("stored report extension was %q with error %v, expected docx", extension, err)
+	}
 }

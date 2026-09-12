@@ -91,6 +91,19 @@ func TestArtifactResponseExposesPublicURLsOnlyForActiveContent(t *testing.T) {
 	}
 }
 
+func TestArtifactResponseGivesDOCXReportsDownloadOnly(t *testing.T) {
+	artifactID := uuid.MustParse("018f0000-0000-7000-8000-000000000511")
+	projectID := uuid.MustParse("018f0000-0000-7000-8000-000000000512")
+	docx := artifacts.Artifact{ID: artifactID, ProjectID: projectID, ArtifactType: "report", DisplayName: "Report", OriginalFilename: "final-report.docx", MIMEType: "application/zip", Extension: "docx", ByteCount: 42, Status: "active", Revision: 1, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	response := artifactResponse(docx, "/ause-discovery/")
+	if response.ViewUrl != nil {
+		t.Fatalf("DOCX report exposed a view URL: %v", *response.ViewUrl)
+	}
+	if response.DownloadUrl == nil {
+		t.Fatal("DOCX report omitted its download URL")
+	}
+}
+
 func TestArtifactContentDispositionUsesSafeFallbackAndUTF8Filename(t *testing.T) {
 	disposition := artifactContentDisposition("attachment", "résumé \"final\".pdf")
 	expected := `attachment; filename="r_sum_ _final_.pdf"; filename*=UTF-8''r%C3%A9sum%C3%A9%20%22final%22.pdf`

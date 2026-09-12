@@ -24,7 +24,7 @@ type uploadMetadata struct {
 }
 
 var allowedExtensions = map[string]map[string]bool{
-	"report":      {"pdf": true},
+	"report":      {"pdf": true, "docx": true},
 	"slides":      {"pdf": true, "ppt": true, "pptx": true},
 	"source_code": {"zip": true, "tar.gz": true, "tgz": true},
 	"proposal":    {"pdf": true, "docx": true},

@@ -335,7 +335,7 @@ Common Project File extensions are:
 
 | Type | Allowed extensions |
 |---|---|
-| `report` | `pdf` |
+| `report` | `pdf`, `docx` |
 | `slides` | `pdf`, `ppt`, `pptx` |
 | `source_code` | `zip`, `tar.gz`, `tgz` |
 | `proposal` | `pdf`, `docx` |

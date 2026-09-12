@@ -837,7 +837,7 @@ Core allowlist:
 
 | Artifact type | Extensions | Inline view |
 | --- | --- | --- |
-| `report` | `.pdf` | PDF |
+| `report` | `.pdf`, `.docx` | PDF only |
 | `slides` | `.pdf`, `.ppt`, `.pptx` | PDF only |
 | `source_code` | `.zip`, `.tar.gz`, `.tgz` | none |
 | `proposal` | `.pdf`, `.docx` | PDF only |
