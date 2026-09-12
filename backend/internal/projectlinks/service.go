@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"ause-discovery.local/backend/generated"
 	"ause-discovery.local/backend/internal/audit"
@@ -71,14 +72,16 @@ func Validate(inputs []Input) ([]Link, error) {
 	primarySeen := false
 	for index, input := range inputs {
 		trimmed := strings.TrimSpace(input.URL)
-		if trimmed == "" || len(trimmed) > MaxURLLength {
+		if trimmed == "" {
 			return nil, fmt.Errorf("%w: %q", ErrInvalidURL, input.URL)
 		}
 		if strings.ContainsAny(trimmed, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f") {
 			return nil, fmt.Errorf("%w: control characters", ErrInvalidURL)
 		}
 		parsed, err := url.Parse(trimmed)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		// Hostname() excludes the port: https://:443/repo carries a Host
+		// but no actual hostname and must be rejected.
+		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
 			return nil, fmt.Errorf("%w: %q must be an absolute https URL with a hostname", ErrInvalidURL, trimmed)
 		}
 		if parsed.User != nil {
@@ -88,6 +91,12 @@ func Validate(inputs []Input) ([]Link, error) {
 			return nil, fmt.Errorf("%w: fragments are not permitted", ErrInvalidURL)
 		}
 		canonical := parsed.String()
+		// PostgreSQL length(text) counts characters of the stored value, so
+		// the bound applies to the canonical form that will be inserted,
+		// measured in runes rather than bytes.
+		if utf8.RuneCountInString(canonical) > MaxURLLength {
+			return nil, fmt.Errorf("%w: %q exceeds %d characters after normalization", ErrInvalidURL, canonical, MaxURLLength)
+		}
 		if seen[canonical] {
 			return nil, fmt.Errorf("%w: %q appears more than once", ErrDuplicateURL, canonical)
 		}

@@ -1,7 +1,7 @@
 // Package projectcontentimport imports one strict versioned JSON Project
-// Content manifest describing each Project's optional logo and Project
-// Files, dispatching the two kinds of content to their separate domain
-// services through the shared bounded Project pool.
+// Content manifest describing each Project's optional logo, Project Files,
+// and repository links, dispatching each kind of content to its separate
+// domain service through the shared bounded Project pool.
 package projectcontentimport
 
 import (
@@ -34,12 +34,37 @@ type ManifestProject struct {
 	Links            *optionalLinks `json:"links"`
 }
 
-// ManifestLink is one authoritative repository link declaration.
+// ManifestLink is one authoritative repository link declaration. Every
+// required field must be explicitly present: a JSON object, never null,
+// carrying url, primary, availability, and checked_at. An omitted primary
+// is rejected rather than read as false.
 type ManifestLink struct {
 	URL          string `json:"url"`
 	IsPrimary    bool   `json:"primary"`
 	Availability string `json:"availability"`
 	CheckedAt    string `json:"checked_at"`
+}
+
+func (link *ManifestLink) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return errors.New("repository link must be an object, not null")
+	}
+	var present struct {
+		URL          *string `json:"url"`
+		IsPrimary    *bool   `json:"primary"`
+		Availability *string `json:"availability"`
+		CheckedAt    *string `json:"checked_at"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&present); err != nil {
+		return err
+	}
+	if present.URL == nil || present.IsPrimary == nil || present.Availability == nil || present.CheckedAt == nil {
+		return errors.New("repository link requires url, primary, availability, and checked_at")
+	}
+	link.URL, link.IsPrimary, link.Availability, link.CheckedAt = *present.URL, *present.IsPrimary, *present.Availability, *present.CheckedAt
+	return nil
 }
 
 // optionalLinks keeps field presence distinct from emptiness: omitted links

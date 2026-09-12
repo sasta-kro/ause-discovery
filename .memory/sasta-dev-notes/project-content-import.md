@@ -4,8 +4,8 @@ This note covers both bulk Project Content paths:
 
 - `artifacts seed-demo` attaches the same realistic mock Project Files to
   published Projects.
-- `project-content import-manifest` imports individually mapped Project Logos
-  and Project Files from one JSON bundle.
+- `project-content import-manifest` imports individually mapped Project
+  Logos, Project Files, and Repository Links from one JSON bundle.
 
 Both commands attach content to Projects that already exist in PostgreSQL.
 Project metadata must therefore be imported first from
@@ -414,15 +414,20 @@ Each project may declare an authoritative `links` array beside `logo` and
 - present `links` (including `[]`): the complete desired set, so an empty
   array removes every link;
 - `null` is rejected;
-- each link requires `url`, `primary`, `availability`, and `checked_at`
-  (RFC 3339). URLs must be absolute HTTPS without credentials, fragments,
-  or control characters, at most 2048 characters, unique after
-  normalization, and a nonempty set needs exactly one primary link;
+- each link must explicitly carry `url`, `primary`, `availability`, and
+  `checked_at` (RFC 3339); an omitted `primary` is rejected rather than
+  read as false. URLs must be absolute HTTPS with a hostname, without
+  credentials, fragments, or control characters, at most 2048 characters of
+  the normalized form, unique after normalization, and a nonempty set needs
+  exactly one primary link;
 - availability is `accessible`, `not_accessible`, or `unverified`.
 
 Dry-run and the summary report declared links plus replaced and unchanged
-link sets, and progress lines carry `links replaced (N repositories)` style
-entries. Links own no bytes and never enter byte totals, quotas, Project
+link sets, and progress lines read `links replaced (N repositories)`,
+`links unchanged (N repositories)`, or `links failed` with the controlled
+error. Apply rechecks every declared set under the transactional Project
+lock, so a set changed after planning is restored and reported as
+replaced. Links own no bytes and never enter byte totals, quotas, Project
 File lists, or search. Within one Project apply runs logo, then files, then
 links with a fresh revision read.
 

@@ -582,13 +582,25 @@ func runProjectContent(arguments []string) error {
 // importer.
 func formatProjectContentProgress(progress projectcontentimport.ProjectProgress) string {
 	var uploaded, skipped, failed []string
+	var linksReplaced, linksUnchanged, linksFailed []string
 	for _, item := range progress.Items {
 		descriptor := sanitizeProgressText(item.ArtifactType, 40)
 		if item.Kind == projectcontentimport.KindFile {
 			descriptor = fmt.Sprintf("%s (%s)", sanitizeProgressText(item.ArtifactType, 40), sanitizeProgressText(item.OriginalFilename, 120))
 		}
 		if item.Kind == projectcontentimport.KindLink {
-			descriptor = fmt.Sprintf("links %s", sanitizeProgressText(item.OriginalFilename, 40))
+			// Repository links are set replacements, not uploads: report
+			// them in link language and keep them out of the upload counts.
+			count := sanitizeProgressText(item.OriginalFilename, 40)
+			switch item.State {
+			case projectcontentimport.StateUploaded:
+				linksReplaced = append(linksReplaced, fmt.Sprintf("links replaced (%s)", count))
+			case projectcontentimport.StateSkipped:
+				linksUnchanged = append(linksUnchanged, fmt.Sprintf("links unchanged (%s)", count))
+			case projectcontentimport.StateFailed:
+				linksFailed = append(linksFailed, fmt.Sprintf("links failed (%s)", sanitizeProgressText(item.Error, 160)))
+			}
+			continue
 		}
 		switch item.State {
 		case projectcontentimport.StateUploaded:
@@ -608,6 +620,15 @@ func formatProjectContentProgress(progress projectcontentimport.ProjectProgress)
 	}
 	if len(failed) > 0 {
 		segments = append(segments, "failed "+strings.Join(failed, ", "))
+	}
+	if len(linksReplaced) > 0 {
+		segments = append(segments, strings.Join(linksReplaced, ", "))
+	}
+	if len(linksUnchanged) > 0 {
+		segments = append(segments, strings.Join(linksUnchanged, ", "))
+	}
+	if len(linksFailed) > 0 {
+		segments = append(segments, strings.Join(linksFailed, ", "))
 	}
 	if len(segments) == 0 {
 		segments = append(segments, "no content processed")

@@ -183,3 +183,31 @@ func TestFormatProjectProgressBoundsAndCoversEmpty(t *testing.T) {
 		t.Fatalf("empty progress line lost its outcome: %q", empty)
 	}
 }
+
+func TestFormatProjectContentProgressUsesLinkLanguage(t *testing.T) {
+	progress := projectcontentimport.ProjectProgress{
+		Completed: 1, Total: 2,
+		ProjectID: uuid.MustParse("018f0000-0000-7000-8000-000000000b01"),
+		Title:     "Linkful Project",
+		Items: []projectcontentimport.ItemOutcome{
+			{Kind: projectcontentimport.KindLogo, ArtifactType: projectcontentimport.KindLogo, OriginalFilename: "logo.png", State: projectcontentimport.StateUploaded},
+			{Kind: projectcontentimport.KindLink, ArtifactType: projectcontentimport.KindLink, OriginalFilename: "2 repositories", State: projectcontentimport.StateUploaded},
+			{Kind: projectcontentimport.KindLink, ArtifactType: projectcontentimport.KindLink, OriginalFilename: "1 repositories", State: projectcontentimport.StateSkipped},
+			{Kind: projectcontentimport.KindLink, ArtifactType: projectcontentimport.KindLink, OriginalFilename: "1 repositories", State: projectcontentimport.StateFailed, Error: "replace repository links: revision conflict"},
+		},
+	}
+	line := formatProjectContentProgress(progress)
+	for _, required := range []string{
+		"uploaded logo",
+		"links replaced (2 repositories)",
+		"links unchanged (1 repositories)",
+		"links failed (replace repository links: revision conflict)",
+	} {
+		if !strings.Contains(line, required) {
+			t.Fatalf("progress line %q omitted %q", line, required)
+		}
+	}
+	if strings.Contains(line, "uploaded links") || strings.Contains(line, "unchanged links (") {
+		t.Fatalf("progress line used upload language for repository links: %q", line)
+	}
+}

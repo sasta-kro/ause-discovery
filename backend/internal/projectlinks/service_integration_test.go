@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,6 +22,8 @@ func TestValidateRejectsInvalidLinkSets(t *testing.T) {
 		"http url":             {{URL: "http://github.com/example/repo", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
 		"relative url":         {{URL: "/example/repo", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
 		"missing host":         {{URL: "https:///repo", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
+		"port without host":    {{URL: "https://:443/repo", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
+		"overlong in runes":    {{URL: "https://github.com/" + strings.Repeat("é", 1100), IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
 		"credentials":          {{URL: "https://user:secret@github.com/example/repo", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
 		"fragment":             {{URL: "https://github.com/example/repo#readme", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
 		"control characters":   {{URL: "https://github.com/example/repo\x00", IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}},
@@ -60,6 +63,19 @@ func TestValidateRejectsInvalidLinkSets(t *testing.T) {
 	}
 	if _, err := Validate([]Input{}); err != nil {
 		t.Fatalf("empty set returned an error: %v", err)
+	}
+	// PostgreSQL length(text) counts characters of the stored canonical
+	// value: a multibyte path percent-encodes during normalization, so the
+	// bound applies to the canonical form. A URL whose canonical form stays
+	// within 2048 characters is valid for both the application and the
+	// schema even though its raw bytes grow.
+	multibyte := Input{URL: "https://github.com/" + strings.Repeat("é", 300), IsPrimary: true, Availability: AvailabilityAccessible, CheckedAt: checked}
+	accepted, err := Validate([]Input{multibyte})
+	if err != nil {
+		t.Fatalf("canonical-bounded multibyte URL rejected: %v", err)
+	}
+	if !strings.Contains(accepted[0].URL, "%C3%A9") || utf8.RuneCountInString(accepted[0].URL) > MaxURLLength {
+		t.Fatalf("canonical form was %q", accepted[0].URL)
 	}
 }
 

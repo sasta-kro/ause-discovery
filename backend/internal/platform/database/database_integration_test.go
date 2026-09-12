@@ -11,6 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 )
 
 func TestDatabaseContract(t *testing.T) {
@@ -185,5 +187,59 @@ func assertStatementFails(t *testing.T, context context.Context, pool *pgxpool.P
 
 	if _, err := pool.Exec(context, statement, arguments...); err == nil {
 		t.Fatalf("statement did not fail: %s", statement)
+	}
+}
+
+// TestRepositoryLinkMigrationRollsBackCleanly proves migration 00004 is
+// reversible: the table exists at schema 4, disappears after a rollback to
+// schema 3, and returns after migrating up again.
+func TestRepositoryLinkMigrationRollsBackCleanly(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createEmptyDatabase(t, ctx, databaseURL)
+	defer pool.Close()
+
+	tableExists := func() bool {
+		var exists bool
+		if err := pool.QueryRow(ctx, "SELECT to_regclass('public.project_repository_links') IS NOT NULL").Scan(&exists); err != nil {
+			t.Fatalf("check table existence: %v", err)
+		}
+		return exists
+	}
+
+	if err := ApplyMigrations(ctx, pool); err != nil {
+		t.Fatalf("ApplyMigrations returned an error: %v", err)
+	}
+	if !tableExists() {
+		t.Fatal("project_repository_links was absent after migrating to schema 4")
+	}
+
+	sqlDatabase := stdlib.OpenDBFromPool(pool)
+	defer sqlDatabase.Close()
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatalf("set dialect: %v", err)
+	}
+	if err := goose.DownToContext(ctx, sqlDatabase, migrationDirectory(), 3); err != nil {
+		t.Fatalf("roll back to schema 3: %v", err)
+	}
+	if tableExists() {
+		t.Fatal("project_repository_links survived a rollback to schema 3")
+	}
+	state, err := MigrationStatus(ctx, pool)
+	if err != nil || state.Version != 3 || !state.Applied {
+		t.Fatalf("rollback state was %+v with error %v, expected schema 3 applied", state, err)
+	}
+
+	if err := goose.UpContext(ctx, sqlDatabase, migrationDirectory()); err != nil {
+		t.Fatalf("migrate back to schema 4: %v", err)
+	}
+	if !tableExists() {
+		t.Fatal("project_repository_links did not return after migrating to schema 4 again")
+	}
+	if err := CheckSchema(ctx, pool); err != nil {
+		t.Fatalf("re-migrated database rejected: %v", err)
 	}
 }

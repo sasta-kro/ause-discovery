@@ -31,10 +31,11 @@ const (
 )
 
 // Service coordinates one Project Content import: planning validates the
-// complete bundle, and apply dispatches each Project's optional logo and
-// Project Files sequentially through the shared bounded Project pool. Logos
-// go through the Project Logo service, files through the Artifact service;
-// the two domains never share records or validation rules.
+// complete bundle, and apply dispatches each Project's optional logo,
+// Project Files, and repository-link set through the shared bounded Project
+// pool. Logos go through the Project Logo service, files through the
+// Artifact service, and links through the Project Repository Link service;
+// the domains never share records or validation rules.
 type Service struct {
 	Pool  *pgxpool.Pool
 	Logos projectlogos.Service
@@ -139,8 +140,8 @@ type projectOutcome struct {
 }
 
 // Run plans the complete manifest and optionally applies it. Planning is
-// synchronous and whole-operation: every Project, logo, and Project File is
-// resolved and validated before any write.
+// synchronous and whole-operation: every Project, logo, Project File, and
+// repository-link set is resolved and validated before any write.
 func (service Service) Run(ctx context.Context, manifest Manifest, bundleRoot string, options Options) (Result, error) {
 	if service.Pool == nil {
 		return Result{}, errors.New("database pool is required")
@@ -213,9 +214,9 @@ func contentWorks(groups []projectContent) []projectpool.Work[projectContent] {
 }
 
 // plan validates the complete bundle: resolves every Project, validates and
-// digests every logo, classifies unchanged logos and files, and delegates
-// Project File planning (including whole-operation quota validation) to the
-// Artifact importer.
+// digests every logo, classifies unchanged logos, files, and repository-link
+// sets, and delegates Project File planning (including whole-operation
+// quota validation) to the Artifact importer.
 func (service Service) plan(ctx context.Context, manifest Manifest, bundleRoot string) ([]projectContent, Result, error) {
 	result := Result{}
 	groups := make([]projectContent, 0, len(manifest.Projects))
@@ -394,11 +395,12 @@ func (service Service) resolveProject(ctx context.Context, entry *ManifestProjec
 	return matches[0].ID, matches[0].Name, nil
 }
 
-// runProject applies one Project's optional logo then its Project Files
-// sequentially, reading the current Project revision before the logo
-// mutation and delegating per-file revision handling to the Artifact
-// importer. The first failure stops that Project's remaining content
-// without discarding committed work.
+// runProject applies one Project's optional logo, then its Project Files
+// sequentially, then its declared repository-link set, reading the current
+// Project revision before the logo mutation, delegating per-file revision
+// handling to the Artifact importer, and rechecking the link set under the
+// transactional Project lock. The first failure stops that Project's
+// remaining content without discarding committed work.
 func (service Service) runProject(ctx context.Context, actorID uuid.UUID, content projectContent) projectpool.Outcome[projectOutcome] {
 	outcome := projectpool.Outcome[projectOutcome]{ID: content.ID, Title: content.Name}
 	started := time.Now()
@@ -501,38 +503,32 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, conten
 		return outcome
 	}
 	if content.Links != nil {
+		// Every declared set is rechecked under the transactional Project
+		// lock: the planning classification serves dry-run reporting only,
+		// and the authoritative Replace decides changed versus unchanged
+		// against the current stored set.
 		item := ItemOutcome{Kind: KindLink, ArtifactType: KindLink, OriginalFilename: fmt.Sprintf("%d repositories", len(content.Links.Inputs))}
-		if content.Links.Unchanged {
-			outcome.Body.LinksUnchanged++
-			item.State = StateSkipped
-			item.SkipReason = fmt.Sprintf("unchanged (%d repositories)", len(content.Links.Inputs))
-			outcome.Body.Items = append(outcome.Body.Items, item)
-		} else {
-			var revision int64
-			var status string
-			readErr := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", content.ID).Scan(&revision, &status)
-			switch {
-			case readErr != nil:
-				fail(item, fmt.Errorf("read Project %s: %w", content.Name, readErr))
-			case status == "deleted":
-				fail(item, fmt.Errorf("Project %s is deleted", content.Name))
-			default:
-				replaced, replaceErr := service.Links.Replace(ctx, actorID, content.ID, revision, content.Links.Inputs)
-				if replaceErr != nil {
-					fail(item, fmt.Errorf("replace repository links: %w", replaceErr))
+		var revision int64
+		var status string
+		readErr := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", content.ID).Scan(&revision, &status)
+		switch {
+		case readErr != nil:
+			fail(item, fmt.Errorf("read Project %s: %w", content.Name, readErr))
+		case status == "deleted":
+			fail(item, fmt.Errorf("Project %s is deleted", content.Name))
+		default:
+			replaced, replaceErr := service.Links.Replace(ctx, actorID, content.ID, revision, content.Links.Inputs)
+			if replaceErr != nil {
+				fail(item, fmt.Errorf("replace repository links: %w", replaceErr))
+			} else {
+				if replaced {
+					outcome.Body.LinksReplaced++
+					item.State = StateUploaded
 				} else {
-					// A concurrent set change may already match the desired
-					// set; that is still success without a write.
-					if replaced {
-						outcome.Body.LinksReplaced++
-						item.State = StateUploaded
-					} else {
-						outcome.Body.LinksUnchanged++
-						item.State = StateSkipped
-						item.SkipReason = fmt.Sprintf("unchanged (%d repositories)", len(content.Links.Inputs))
-					}
-					outcome.Body.Items = append(outcome.Body.Items, item)
+					outcome.Body.LinksUnchanged++
+					item.State = StateSkipped
 				}
+				outcome.Body.Items = append(outcome.Body.Items, item)
 			}
 		}
 	}

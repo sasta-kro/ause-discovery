@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"ause-discovery.local/backend/internal/artifactimport"
 	"ause-discovery.local/backend/internal/artifacts"
@@ -550,5 +551,51 @@ func TestProjectContentImportPlansAppliesAndRerunsRepositoryLinks(t *testing.T) 
 	afterOmission, _ := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.secondID)
 	if len(afterOmission) != 1 {
 		t.Fatalf("omitted links changed the stored set to %d rows", len(afterOmission))
+	}
+}
+
+// TestProjectContentApplyRechecksLinkSetsPlannedUnchanged proves apply does
+// not trust the planning classification: the stored set changes after
+// planning through the synchronous OnApplyStart hook, and apply still
+// restores the manifest's declared set and reports a replacement.
+func TestProjectContentApplyRechecksLinkSetsPlannedUnchanged(t *testing.T) {
+	fixture := newContentFixture(t)
+	ctx := context.Background()
+	declared := `{"project_import_key": "sp-first", "links": [{"url": "https://github.com/example/one", "primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}]}`
+	manifest := fixture.manifest(t, declared)
+	links := projectlinks.Service{Pool: fixture.pool}
+
+	// Establish the declared set first so a later dry-run classifies it
+	// unchanged.
+	if _, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true}); err != nil {
+		t.Fatalf("initial apply returned %v", err)
+	}
+	dryRun, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser})
+	if err != nil || dryRun.LinkSetsUnchanged != 1 || dryRun.LinkSetsReplaced != 0 {
+		t.Fatalf("dry-run classified %#v with error %v, expected unchanged", dryRun, err)
+	}
+
+	// OnApplyStart runs synchronously after planning and before dispatch: it
+	// deterministically swaps the stored set so apply must replace it back.
+	applied, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{
+		ActorUsername: fixture.adminUser, Apply: true,
+		OnApplyStart: func(start ApplyStart) {
+			var revision int64
+			if err := fixture.pool.QueryRow(ctx, "SELECT revision FROM projects WHERE id=$1", fixture.firstID).Scan(&revision); err != nil {
+				t.Fatalf("read revision for the injected change: %v", err)
+			}
+			if _, err := links.Replace(ctx, uuid.MustParse("018f0000-0000-7000-8000-000000000b10"), fixture.firstID, revision, []projectlinks.Input{
+				{URL: "https://github.com/example/diverted", IsPrimary: true, Availability: projectlinks.AvailabilityUnverified, CheckedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+			}); err != nil {
+				t.Fatalf("inject the concurrent change: %v", err)
+			}
+		},
+	})
+	if err != nil || applied.LinkSetsReplaced != 1 || applied.LinkSetsUnchanged != 0 {
+		t.Fatalf("apply returned %#v with error %v, expected a replacement of the changed set", applied, err)
+	}
+	current, _ := links.List(ctx, fixture.firstID)
+	if len(current) != 1 || current[0].URL != "https://github.com/example/one" || current[0].Availability != projectlinks.AvailabilityAccessible {
+		t.Fatalf("apply restored %#v instead of the declared set", current)
 	}
 }

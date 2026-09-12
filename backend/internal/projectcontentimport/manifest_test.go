@@ -72,6 +72,16 @@ func TestLoadManifestKeepsLinkPresenceDistinctFromEmptiness(t *testing.T) {
 	if link.URL != "https://github.com/example/repo" || !link.IsPrimary || link.Availability != "unverified" {
 		t.Fatalf("link decoded to %#v", link)
 	}
+
+	// An explicit primary:false is present and valid at load time; whether
+	// the set needs exactly one primary is the planner's contract.
+	explicitFalse, err := LoadManifest(writeManifest(t, `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": false, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}]}]}`))
+	if err != nil {
+		t.Fatalf("explicit primary false returned an error: %v", err)
+	}
+	if explicitFalse.Projects[0].Links.Links[0].IsPrimary {
+		t.Fatal("explicit primary false decoded as true")
+	}
 }
 
 func TestLoadManifestRejectsInvalidContracts(t *testing.T) {
@@ -92,6 +102,9 @@ func TestLoadManifestRejectsInvalidContracts(t *testing.T) {
 		"unknown link field":       `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z", "final_url": "https://github.com/example/repo"}]}]}`,
 		"link missing url":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}]}]}`,
 		"link bad timestamp":       `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": true, "availability": "accessible", "checked_at": "not-a-timestamp"}]}]}`,
+		"link omitted primary":     `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/one", "primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}, {"url": "https://github.com/example/two", "availability": "accessible", "checked_at": "2026-09-11T07:32:30Z"}]}]}`,
+		"link omitted url":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}]}]}`,
+		"link null object":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [null]}]}`,
 		"second json document":     validManifest + "\n{}",
 		"trailing closing brace":   validManifest + "\n}",
 		"trailing closing bracket": validManifest + "\n]",
