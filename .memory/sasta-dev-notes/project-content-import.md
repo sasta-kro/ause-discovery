@@ -376,23 +376,30 @@ separate resume file.
 
 ## Building the logo manifest from extractor output
 
-From the extractor repository root:
-
-Slide-only Projects without an abstract do not enter the reviewed metadata
-CSV and therefore do not exist in PostgreSQL. The current enrichment source
-contains one such Logo, `sp-2021`. The export excludes it so whole-bundle
-planning can resolve every entry.
+The extractor's `steps/apply_sp_pass.py` regenerates
+`output/enrichment/logo-manifest.json` on every CSV rebuild, filtered to the
+projects that actually appear in `reviewed-import.csv`. Prefer that script;
+the jq below is the manual equivalent (membership filter instead of any
+hardcoded project exclusion, so it can never reference a Project without a
+database row):
 
 ```sh
-jq '{version: 1, projects: [to_entries[]
-  | select(.value.logo.output != null)
-  | select(.key != "2021")
-  | {project_import_key: ("sp-" + .key),
-     logo: {file_path: .value.logo.output},
-     files: []}]}' \
-  output/enrichment/manifest.json \
+jq -R -s 'split("\n") | map(select(startswith("sp-"))) | .[0:-1] as $keys
+  | (input | to_entries) as $m
+  | {version: 1, projects: [$m[]
+      | select(.value.logo.output != null)
+      | select((.key | "sp-" + .) as $k | $keys | index($k))
+      | {project_import_key: ("sp-" + .key),
+         logo: {file_path: .value.logo.output},
+         files: []}]}' \
+  <(cut -d, -f1 output/reviewed-import.csv) output/enrichment/manifest.json \
   > output/enrichment/logo-manifest.json
 ```
+
+Historical note: an earlier revision hardcoded `select(.key != "2021")`
+because the slide-only project sp-2021 had metadata missing at the time. The
+2026-09-12 SP1/SP2 pass gave all three slide-only projects full metadata, so
+that exclusion is gone and sp-2021 now carries both metadata and its Logo.
 
 The generated manifest belongs beside the referenced `logos/` directory. Data
 corrections belong in the extractor ground-truth files and generation pipeline,
