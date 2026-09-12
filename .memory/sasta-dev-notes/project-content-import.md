@@ -93,7 +93,7 @@ REAL_IMPORT_BUNDLE/
       <real Project files>
 ```
 
-The current bundle contains 209 Project entries, 69 Logos, 336 Project Files,
+The current bundle contains 205 Project entries, 68 Logos, 332 Project Files,
 and 15 Repository Links across 13 Projects. The manifest uses the same
 `sp-<identifier>` import keys as
 `ause-discovery-projects-metadata-import.csv`, classifies every file with a
