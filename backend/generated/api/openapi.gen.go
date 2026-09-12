@@ -242,6 +242,27 @@ func (e ParticipationRole) Valid() bool {
 	}
 }
 
+// Defines values for ProjectRepositoryLinkAvailability.
+const (
+	Accessible    ProjectRepositoryLinkAvailability = "accessible"
+	NotAccessible ProjectRepositoryLinkAvailability = "not_accessible"
+	Unverified    ProjectRepositoryLinkAvailability = "unverified"
+)
+
+// Valid indicates whether the value is a known member of the ProjectRepositoryLinkAvailability enum.
+func (e ProjectRepositoryLinkAvailability) Valid() bool {
+	switch e {
+	case Accessible:
+		return true
+	case NotAccessible:
+		return true
+	case Unverified:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProjectStatus.
 const (
 	ProjectStatusDeleted   ProjectStatus = "deleted"
@@ -738,6 +759,17 @@ type ProjectDraft struct {
 	TitleAliases      *[]string                  `json:"title_aliases,omitempty"`
 }
 
+// ProjectRepositoryLink defines model for ProjectRepositoryLink.
+type ProjectRepositoryLink struct {
+	Availability ProjectRepositoryLinkAvailability `json:"availability"`
+	CheckedAt    Timestamp                         `json:"checked_at"`
+	Primary      bool                              `json:"primary"`
+	Url          string                            `json:"url"`
+}
+
+// ProjectRepositoryLinkAvailability defines model for ProjectRepositoryLink.Availability.
+type ProjectRepositoryLinkAvailability string
+
 // ProjectStatus defines model for ProjectStatus.
 type ProjectStatus string
 
@@ -801,6 +833,7 @@ type PublicProject struct {
 	Program           CatalogReference        `json:"program"`
 	PublishedAt       Timestamp               `json:"published_at"`
 	ReferenceCode     *string                 `json:"reference_code,omitempty"`
+	RepositoryLinks   []ProjectRepositoryLink `json:"repository_links"`
 	Semester          Semester                `json:"semester"`
 	Status            interface{}             `json:"status"`
 	Taxonomy          []TaxonomyValue         `json:"taxonomy"`

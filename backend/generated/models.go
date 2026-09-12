@@ -206,6 +206,19 @@ type ProjectParticipation struct {
 	Position  int32
 }
 
+type ProjectRepositoryLink struct {
+	ID           pgtype.UUID
+	ProjectID    pgtype.UUID
+	Url          string
+	IsPrimary    bool
+	Availability string
+	CheckedAt    pgtype.Timestamptz
+	SortOrder    int32
+	ActorID      pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type ProjectSearchSync struct {
 	ProjectID       pgtype.UUID
 	DesiredRevision int64

@@ -333,13 +333,31 @@ function excerptOf(highlights: Array<{ field: string; value: string }>, queryTer
   return <p className={styles.excerpt}>{highlightText(excerpt.value, queryTerms)}</p>
 }
 
+export function ProjectRepositories({ links }: { links: Array<{ url: string; primary: boolean; availability: string; checked_at: string }> }) {
+  const { t } = useTranslation()
+  if (!links.length) return null
+  return <section className={styles.detailSection}>
+    <h2>{t('project.repositories')}</h2>
+    <div className={styles.repositoryList}>
+      {links.map((link) => <div className={styles.panel} key={link.url}>
+        <a className={styles.repositoryLink} href={link.url} rel="noopener noreferrer" target="_blank">{link.url}</a>
+        <p className={styles.metadata}>
+          {links.length > 1 && link.primary ? <span>{t('project.repositoryPrimary')}</span> : null}
+          <span className={link.availability === 'accessible' ? styles.repositoryAvailabilityAccessible : undefined}>{t(`project.availability.${link.availability}`)}</span>
+          <span>{t('project.lastChecked', { date: new Date(link.checked_at).toLocaleDateString() })}</span>
+        </p>
+      </div>)}
+    </div>
+  </section>
+}
+
 function ProjectPage() {
   const { t } = useTranslation(); const { projectId = '' } = useParams()
   const projectQuery = useQuery({ queryKey: ['project', projectId], queryFn: () => responseData(getPublicProject({ path: { project_id: projectId }, throwOnError: true })) })
   if (projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
   if (projectQuery.isError || !projectQuery.data) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
   const project = projectQuery.data
-  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><div className={styles.pageHeaderWithIdentity}><ProjectDetailIdentity logoUrl={project.logo_url} title={project.title} /><h1>{project.title}</h1></div></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
+  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><div className={styles.pageHeaderWithIdentity}><ProjectDetailIdentity logoUrl={project.logo_url} title={project.title} /><h1>{project.title}</h1></div></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section><ProjectRepositories links={project.repository_links} /></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
 }
 
 function PersonPage() {

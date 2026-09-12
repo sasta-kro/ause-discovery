@@ -405,6 +405,59 @@ The generated manifest belongs beside the referenced `logos/` directory. Data
 corrections belong in the extractor ground-truth files and generation pipeline,
 rather than in a generated manifest.
 
+## Repository links in the manifest
+
+Each project may declare an authoritative `links` array beside `logo` and
+`files`:
+
+- omitted `links`: the Project's repository links stay unchanged;
+- present `links` (including `[]`): the complete desired set, so an empty
+  array removes every link;
+- `null` is rejected;
+- each link requires `url`, `primary`, `availability`, and `checked_at`
+  (RFC 3339). URLs must be absolute HTTPS without credentials, fragments,
+  or control characters, at most 2048 characters, unique after
+  normalization, and a nonempty set needs exactly one primary link;
+- availability is `accessible`, `not_accessible`, or `unverified`.
+
+Dry-run and the summary report declared links plus replaced and unchanged
+link sets, and progress lines carry `links replaced (N repositories)` style
+entries. Links own no bytes and never enter byte totals, quotas, Project
+File lists, or search. Within one Project apply runs logo, then files, then
+links with a fresh revision read.
+
+Build the repository-link manifest from the extractor evidence (extractor
+repository root; only `kind == "project_repo"` survives, so third-party
+references never reach the manifest, and projects missing from the metadata
+CSV are filtered out the same way as the logo export):
+
+```sh
+jq -n --rawfile csv output/reviewed-import.csv \
+  --slurpfile m output/enrichment/manifest.json '
+  ($csv | split("\n") | map(select(length > 0 and (startswith("import_key") | not))) | map(split(",")[0])) as $keys
+  | [$m[0] | to_entries[]
+     | select((("sp-" + .key)) as $k | ($keys | index($k)))
+     | select(((.value.links // []) | map(select(.kind == "project_repo")) | length) > 0)
+     | {project_import_key: ("sp-" + .key),
+        links: [(.value.links // [])[] | select(.kind == "project_repo")
+          | {url: .normalized,
+             primary: (.primary // false),
+             availability: (if (.liveness.status // "") == "public" then "accessible"
+                            elif (.liveness.status // "") == "not_found" then "not_accessible"
+                            else "unverified" end),
+             checked_at: (.liveness.checked_at // "")}]}]
+  | {version: 1, projects: .}
+' > output/enrichment/link-manifest.json
+```
+
+Verified 2026-09-12: the export produced exactly 13 Project entries and 15
+links (13 accessible, 1 not accessible, 1 unverified), every timestamp valid,
+every set carrying exactly one primary, and the guarded evidence test
+planned all 13 entries through the real loader and planner. A link-only run
+uses the same `ausectl project-content import-manifest` command, and the
+same `links` arrays can be merged into the final combined logo and Project
+File bundle.
+
 ## Temporary disk use
 
 Metadata CSV and XLSX previews use `AUSE_IMPORT_TEMP_ROOT` in the application

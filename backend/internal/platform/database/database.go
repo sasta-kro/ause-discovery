@@ -23,7 +23,7 @@ type MigrationState struct {
 }
 
 // Schema compatibility changes with the migration set shipped by this binary.
-const SupportedSchemaVersion int64 = 3
+const SupportedSchemaVersion int64 = 4
 
 func CheckSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	state, err := MigrationStatus(ctx, pool)

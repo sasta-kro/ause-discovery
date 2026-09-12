@@ -42,6 +42,7 @@ const publicProject = {
   artifacts: [
     { id: '018f0000-0000-7000-8000-0000000000a1', project_id: projectID, artifact_type: 'report', display_name: 'Final report', original_filename: 'report.pdf', mime_type: 'application/pdf', byte_count: 5 * 1024 * 1024, status: 'active', revision: 1, view_url: '/ause-discovery/api/v1/artifacts/018f0000-0000-7000-8000-0000000000a1/view', download_url: '/ause-discovery/api/v1/artifacts/018f0000-0000-7000-8000-0000000000a1/download', created_at: '2026-09-04T00:00:00Z', updated_at: '2026-09-04T00:00:00Z', deleted_at: null },
   ],
+  repository_links: [],
   extension_metadata: {},
   created_at: '2026-09-04T00:00:00Z',
   updated_at: '2026-09-04T00:00:00Z',

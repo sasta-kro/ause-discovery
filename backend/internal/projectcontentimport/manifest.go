@@ -5,6 +5,7 @@
 package projectcontentimport
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"ause-discovery.local/backend/internal/projectpool"
 	"github.com/google/uuid"
@@ -29,6 +31,33 @@ type ManifestProject struct {
 	ProjectImportKey string         `json:"project_import_key"`
 	Logo             *ManifestLogo  `json:"logo"`
 	Files            []ManifestFile `json:"files"`
+	Links            *optionalLinks `json:"links"`
+}
+
+// ManifestLink is one authoritative repository link declaration.
+type ManifestLink struct {
+	URL          string `json:"url"`
+	IsPrimary    bool   `json:"primary"`
+	Availability string `json:"availability"`
+	CheckedAt    string `json:"checked_at"`
+}
+
+// optionalLinks keeps field presence distinct from emptiness: omitted links
+// leave the Project's repository links unchanged, while an explicitly
+// present array, including the empty array, is the complete desired set. A
+// JSON null is rejected.
+type optionalLinks struct {
+	Links []ManifestLink
+}
+
+func (optional *optionalLinks) UnmarshalJSON(data []byte) error {
+	if strings.TrimSpace(string(data)) == "null" {
+		return errors.New("links must be an array, not null")
+	}
+	optional.Links = nil
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(&optional.Links)
 }
 
 type ManifestLogo struct {
@@ -147,8 +176,22 @@ func validateManifest(manifest *Manifest) error {
 			entry.OriginalFilename = original
 			hasContent = true
 		}
+		if project.Links != nil {
+			for linkIndex := range project.Links.Links {
+				link := &project.Links.Links[linkIndex]
+				linkLabel := fmt.Sprintf("%s repository link %d", label, linkIndex+1)
+				link.URL = strings.TrimSpace(link.URL)
+				if link.URL == "" {
+					return fmt.Errorf("%s requires a url", linkLabel)
+				}
+				if _, err := time.Parse(time.RFC3339, link.CheckedAt); err != nil {
+					return fmt.Errorf("%s checked_at must be an RFC 3339 timestamp", linkLabel)
+				}
+			}
+			hasContent = true
+		}
 		if !hasContent {
-			return fmt.Errorf("%s must contain a logo, files, or both", label)
+			return fmt.Errorf("%s must contain a logo, files, links, or a combination", label)
 		}
 	}
 	return nil

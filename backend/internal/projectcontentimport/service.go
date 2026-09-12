@@ -11,6 +11,7 @@ import (
 
 	"ause-discovery.local/backend/internal/artifactimport"
 	"ause-discovery.local/backend/internal/artifacts"
+	"ause-discovery.local/backend/internal/projectlinks"
 	"ause-discovery.local/backend/internal/projectlogos"
 	"ause-discovery.local/backend/internal/projectpool"
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 const (
 	KindLogo = "logo"
 	KindFile = "file"
+	KindLink = "link"
 
 	StateUploaded = "uploaded"
 	StateSkipped  = "skipped"
@@ -37,6 +39,7 @@ type Service struct {
 	Pool  *pgxpool.Pool
 	Logos projectlogos.Service
 	Files artifactimport.Service
+	Links projectlinks.Service
 }
 
 type Options struct {
@@ -53,13 +56,16 @@ type Options struct {
 
 // ApplyStart summarizes the completed plan at the start of apply work.
 type ApplyStart struct {
-	ProjectCount     int
-	LogoUploads      int
-	LogoReplacements int
-	FileUploads      int
-	UnchangedSkips   int
-	TotalBytes       int64
-	Workers          int
+	ProjectCount      int
+	LogoUploads       int
+	LogoReplacements  int
+	FileUploads       int
+	UnchangedSkips    int
+	DeclaredLinks     int
+	LinkSetsReplaced  int
+	LinkSetsUnchanged int
+	TotalBytes        int64
+	Workers           int
 }
 
 // ItemOutcome describes one planned content item of a completed Project.
@@ -83,14 +89,17 @@ type ProjectProgress struct {
 }
 
 type Result struct {
-	ProjectCount     int
-	LogoUploads      int
-	LogoReplacements int
-	FileUploads      int
-	UnchangedSkips   int
-	TotalBytes       int64
-	FailedProjects   int
-	FailedItems      int
+	ProjectCount      int
+	LogoUploads       int
+	LogoReplacements  int
+	FileUploads       int
+	UnchangedSkips    int
+	DeclaredLinks     int
+	LinkSetsReplaced  int
+	LinkSetsUnchanged int
+	TotalBytes        int64
+	FailedProjects    int
+	FailedItems       int
 }
 
 type plannedLogo struct {
@@ -108,6 +117,14 @@ type projectContent struct {
 	Name    string
 	Logo    *plannedLogo
 	Uploads []artifactimport.PreparedUpload
+	Links   *plannedLinks
+}
+
+// plannedLinks is one declared authoritative repository-link set. Links own
+// no bytes, so they never contribute to byte totals.
+type plannedLinks struct {
+	Inputs    []projectlinks.Input
+	Unchanged bool
 }
 
 type projectOutcome struct {
@@ -115,6 +132,8 @@ type projectOutcome struct {
 	LogoReplacements int
 	FilesUploaded    int
 	UnchangedSkips   int
+	LinksReplaced    int
+	LinksUnchanged   int
 	FailedItems      int
 	Items            []ItemOutcome
 }
@@ -137,11 +156,14 @@ func (service Service) Run(ctx context.Context, manifest Manifest, bundleRoot st
 	workers := projectpool.Normalize(options.Workers)
 	start := ApplyStart{
 		ProjectCount: len(groups), LogoUploads: result.LogoUploads, LogoReplacements: result.LogoReplacements,
-		FileUploads: result.FileUploads, UnchangedSkips: result.UnchangedSkips, TotalBytes: result.TotalBytes, Workers: workers,
+		FileUploads: result.FileUploads, UnchangedSkips: result.UnchangedSkips,
+		DeclaredLinks: result.DeclaredLinks, LinkSetsReplaced: result.LinkSetsReplaced, LinkSetsUnchanged: result.LinkSetsUnchanged,
+		TotalBytes: result.TotalBytes, Workers: workers,
 	}
 	// Planning counts describe the plan; apply folds actual outcomes into
 	// the same fields, so they are zeroed first.
 	result.LogoUploads, result.LogoReplacements, result.FileUploads, result.UnchangedSkips = 0, 0, 0, 0
+	result.LinkSetsReplaced, result.LinkSetsUnchanged = 0, 0
 	result.FailedProjects, result.FailedItems = 0, 0
 	if options.OnApplyStart != nil {
 		options.OnApplyStart(start)
@@ -155,6 +177,8 @@ func (service Service) Run(ctx context.Context, manifest Manifest, bundleRoot st
 			result.LogoReplacements += outcome.Body.LogoReplacements
 			result.FileUploads += outcome.Body.FilesUploaded
 			result.UnchangedSkips += outcome.Body.UnchangedSkips
+			result.LinkSetsReplaced += outcome.Body.LinksReplaced
+			result.LinkSetsUnchanged += outcome.Body.LinksUnchanged
 			result.FailedItems += outcome.Body.FailedItems
 			if outcome.Failed {
 				result.FailedProjects++
@@ -263,6 +287,34 @@ func (service Service) plan(ctx context.Context, manifest Manifest, bundleRoot s
 				SourcePath:       sourcePath,
 			})
 			fileEntryProject = append(fileEntryProject, position)
+		}
+		if entry.Links != nil {
+			inputs := make([]projectlinks.Input, 0, len(entry.Links.Links))
+			for _, link := range entry.Links.Links {
+				checkedAt, parseErr := time.Parse(time.RFC3339, link.CheckedAt)
+				if parseErr != nil {
+					return nil, result, fmt.Errorf("project %s repository link %s: %w", name, link.URL, projectlinks.ErrInvalidTimestamp)
+				}
+				inputs = append(inputs, projectlinks.Input{URL: link.URL, IsPrimary: link.IsPrimary, Availability: link.Availability, CheckedAt: checkedAt})
+			}
+			// Validate the complete set now so any invalid URL, primary
+			// designation, or duplicate stops the whole manifest before
+			// writes.
+			desired, validateErr := projectlinks.Validate(inputs)
+			if validateErr != nil {
+				return nil, result, fmt.Errorf("project %s repository links: %w", name, validateErr)
+			}
+			unchanged, equalErr := service.Links.Equal(ctx, projectID, desired)
+			if equalErr != nil {
+				return nil, result, equalErr
+			}
+			result.DeclaredLinks += len(desired)
+			if unchanged {
+				result.LinkSetsUnchanged++
+			} else {
+				result.LinkSetsReplaced++
+			}
+			groups[position].Links = &plannedLinks{Inputs: inputs, Unchanged: unchanged}
 		}
 	}
 	if len(fileEntries) > 0 {
@@ -443,6 +495,46 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, conten
 		outcome.Body.FilesUploaded++
 		item.State = StateUploaded
 		outcome.Body.Items = append(outcome.Body.Items, item)
+	}
+	if outcome.Failed {
+		outcome.Duration = time.Since(started)
+		return outcome
+	}
+	if content.Links != nil {
+		item := ItemOutcome{Kind: KindLink, ArtifactType: KindLink, OriginalFilename: fmt.Sprintf("%d repositories", len(content.Links.Inputs))}
+		if content.Links.Unchanged {
+			outcome.Body.LinksUnchanged++
+			item.State = StateSkipped
+			item.SkipReason = fmt.Sprintf("unchanged (%d repositories)", len(content.Links.Inputs))
+			outcome.Body.Items = append(outcome.Body.Items, item)
+		} else {
+			var revision int64
+			var status string
+			readErr := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", content.ID).Scan(&revision, &status)
+			switch {
+			case readErr != nil:
+				fail(item, fmt.Errorf("read Project %s: %w", content.Name, readErr))
+			case status == "deleted":
+				fail(item, fmt.Errorf("Project %s is deleted", content.Name))
+			default:
+				replaced, replaceErr := service.Links.Replace(ctx, actorID, content.ID, revision, content.Links.Inputs)
+				if replaceErr != nil {
+					fail(item, fmt.Errorf("replace repository links: %w", replaceErr))
+				} else {
+					// A concurrent set change may already match the desired
+					// set; that is still success without a write.
+					if replaced {
+						outcome.Body.LinksReplaced++
+						item.State = StateUploaded
+					} else {
+						outcome.Body.LinksUnchanged++
+						item.State = StateSkipped
+						item.SkipReason = fmt.Sprintf("unchanged (%d repositories)", len(content.Links.Inputs))
+					}
+					outcome.Body.Items = append(outcome.Body.Items, item)
+				}
+			}
+		}
 	}
 	outcome.Duration = time.Since(started)
 	return outcome

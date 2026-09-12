@@ -25,6 +25,7 @@ import (
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/pagecursor"
+	"ause-discovery.local/backend/internal/projectlinks"
 	"ause-discovery.local/backend/internal/projectlogos"
 	"ause-discovery.local/backend/internal/projects"
 	searchservice "ause-discovery.local/backend/internal/search"
@@ -48,6 +49,7 @@ type Controller struct {
 	People    people.Service
 	Projects  projects.Service
 	Logos     projectlogos.Service
+	Links     projectlinks.Service
 	Search    searchservice.Service
 	Config    config.Config
 	Readiness func(context.Context) error
@@ -65,6 +67,7 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config, artifactStor
 		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
 		People:    people.Service{Pool: pool},
 		Logos:     projectlogos.Service{Pool: pool, Storage: artifactStorage},
+		Links:     projectlinks.Service{Pool: pool},
 		Projects:  projects.Service{Pool: pool},
 		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
 		Config:    configuration,
@@ -1100,7 +1103,16 @@ func (controller *Controller) publicProjectResponse(ctx context.Context, value p
 	if err != nil {
 		return api.PublicProject{}, err
 	}
-	response := api.PublicProject{Id: value.ID, Title: valueOrEmpty(value.Title), Abstract: valueOrEmpty(value.Abstract), AcademicYear: valueOrZero(value.AcademicYear), Semester: api.Semester(valueOrEmpty(value.Semester)), ReferenceCode: value.ReferenceCode, TitleAliases: &value.TitleAliases, Artifacts: artifacts, Participations: participations, Taxonomy: taxonomy, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, PublishedAt: publishedAt(value), Status: value.Status}
+	response := api.PublicProject{Id: value.ID, Title: valueOrEmpty(value.Title), Abstract: valueOrEmpty(value.Abstract), AcademicYear: valueOrZero(value.AcademicYear), Semester: api.Semester(valueOrEmpty(value.Semester)), ReferenceCode: value.ReferenceCode, TitleAliases: &value.TitleAliases, Artifacts: artifacts, Participations: participations, Taxonomy: taxonomy, RepositoryLinks: make([]api.ProjectRepositoryLink, 0), CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, PublishedAt: publishedAt(value), Status: value.Status}
+	// Links load only after the parent Project passed the published-only
+	// lookup; they carry no bytes and no separate route.
+	links, linksErr := controller.Links.List(ctx, value.ID)
+	if linksErr != nil {
+		return api.PublicProject{}, linksErr
+	}
+	for _, link := range links {
+		response.RepositoryLinks = append(response.RepositoryLinks, api.ProjectRepositoryLink{Url: link.URL, Primary: link.IsPrimary, Availability: api.ProjectRepositoryLinkAvailability(link.Availability), CheckedAt: link.CheckedAt})
+	}
 	if logoRevision, hasLogo, logoErr := controller.Logos.ActiveRevision(ctx, value.ID); logoErr == nil && hasLogo {
 		logoURL := projectLogoURL(controller.Config.PublicBasePath, value.ID, logoRevision)
 		response.LogoUrl = &logoURL

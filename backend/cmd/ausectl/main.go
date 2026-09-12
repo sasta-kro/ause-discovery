@@ -18,6 +18,7 @@ import (
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
 	"ause-discovery.local/backend/internal/projectcontentimport"
+	"ause-discovery.local/backend/internal/projectlinks"
 	"ause-discovery.local/backend/internal/projectlogos"
 	searchservice "ause-discovery.local/backend/internal/search"
 	"github.com/google/uuid"
@@ -548,14 +549,15 @@ func runProjectContent(arguments []string) error {
 			Artifacts:        artifacts.Service{Pool: databasePool, Storage: storageSet, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 			MaxArtifactBytes: configuration.MaxArtifactBytes,
 		},
+		Links: projectlinks.Service{Pool: databasePool},
 	}
 	result, runErr := service.Run(operationContext, manifest, bundleRoot, projectcontentimport.Options{
 		ActorUsername: command.ActorUsername,
 		Apply:         command.Apply,
 		Workers:       command.Workers,
 		OnApplyStart: func(start projectcontentimport.ApplyStart) {
-			fmt.Fprintf(os.Stdout, "Starting Project content import: %d Projects, %d logo uploads, %d logo replacements, %d planned file uploads, %d unchanged, %.1f MiB, %d workers\n",
-				start.ProjectCount, start.LogoUploads, start.LogoReplacements, start.FileUploads, start.UnchangedSkips, float64(start.TotalBytes)/1024/1024, start.Workers)
+			fmt.Fprintf(os.Stdout, "Starting Project content import: %d Projects, %d logo uploads, %d logo replacements, %d planned file uploads, %d unchanged, %d repository links (%d Projects to replace, %d unchanged), %.1f MiB, %d workers\n",
+				start.ProjectCount, start.LogoUploads, start.LogoReplacements, start.FileUploads, start.UnchangedSkips, start.DeclaredLinks, start.LinkSetsReplaced, start.LinkSetsUnchanged, float64(start.TotalBytes)/1024/1024, start.Workers)
 		},
 		OnProjectDone: func(progress projectcontentimport.ProjectProgress) {
 			fmt.Fprintln(os.Stdout, formatProjectContentProgress(progress))
@@ -565,7 +567,7 @@ func runProjectContent(arguments []string) error {
 	if command.Apply {
 		mode = "apply"
 	}
-	fmt.Fprintf(os.Stdout, "mode: %s\nProjects: %d\nlogo uploads: %d\nlogo replacements: %d\nfile uploads: %d\nunchanged skips: %d\n", mode, result.ProjectCount, result.LogoUploads, result.LogoReplacements, result.FileUploads, result.UnchangedSkips)
+	fmt.Fprintf(os.Stdout, "mode: %s\nProjects: %d\nlogo uploads: %d\nlogo replacements: %d\nfile uploads: %d\nunchanged skips: %d\nrepository links declared: %d\nlink sets replaced: %d\nlink sets unchanged: %d\n", mode, result.ProjectCount, result.LogoUploads, result.LogoReplacements, result.FileUploads, result.UnchangedSkips, result.DeclaredLinks, result.LinkSetsReplaced, result.LinkSetsUnchanged)
 	if command.Apply {
 		fmt.Fprintf(os.Stdout, "planned bytes: %.1f MiB\n", float64(result.TotalBytes)/1024/1024)
 	}
@@ -584,6 +586,9 @@ func formatProjectContentProgress(progress projectcontentimport.ProjectProgress)
 		descriptor := sanitizeProgressText(item.ArtifactType, 40)
 		if item.Kind == projectcontentimport.KindFile {
 			descriptor = fmt.Sprintf("%s (%s)", sanitizeProgressText(item.ArtifactType, 40), sanitizeProgressText(item.OriginalFilename, 120))
+		}
+		if item.Kind == projectcontentimport.KindLink {
+			descriptor = fmt.Sprintf("links %s", sanitizeProgressText(item.OriginalFilename, 40))
 		}
 		switch item.State {
 		case projectcontentimport.StateUploaded:

@@ -116,6 +116,13 @@ export type Artifact = {
     deleted_at?: string | null;
 };
 
+export type ProjectRepositoryLink = {
+    url: string;
+    primary: boolean;
+    availability: 'accessible' | 'not_accessible' | 'unverified';
+    checked_at: Timestamp;
+};
+
 export type ProjectSummary = {
     id: Uuid;
     reference_code?: string | null;
@@ -185,6 +192,7 @@ export type PublicProject = {
     taxonomy: Array<TaxonomyValue>;
     participations: Array<Participation>;
     artifacts: Array<Artifact>;
+    repository_links: Array<ProjectRepositoryLink>;
     extension_metadata?: {
         [key: string]: unknown;
     };

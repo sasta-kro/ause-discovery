@@ -8,6 +8,7 @@ import (
 
 	"ause-discovery.local/backend/internal/artifactimport"
 	"ause-discovery.local/backend/internal/artifacts"
+	"ause-discovery.local/backend/internal/projectlinks"
 	"ause-discovery.local/backend/internal/projectlogos"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,7 +31,6 @@ func TestExtractorLogoBundlePlansCompletely(t *testing.T) {
 	ctx := context.Background()
 	pool := createContentTestDatabase(t, ctx, databaseURL)
 	adminUser := "bundle-evidence-admin"
-	seedBundleEvidenceFixture(t, ctx, pool, adminUser)
 
 	manifest, err := LoadManifest(manifestPath)
 	if err != nil {
@@ -39,6 +39,11 @@ func TestExtractorLogoBundlePlansCompletely(t *testing.T) {
 	if len(manifest.Projects) == 0 {
 		t.Fatal("extractor bundle manifest held no Projects")
 	}
+	keys := make([]string, 0, len(manifest.Projects))
+	for index := range manifest.Projects {
+		keys = append(keys, manifest.Projects[index].ProjectImportKey)
+	}
+	seedBundleEvidenceFixture(t, ctx, pool, adminUser, keys)
 	bundleRoot, err := BundleRoot(manifestPath)
 	if err != nil {
 		t.Fatalf("resolve bundle root: %v", err)
@@ -54,6 +59,7 @@ func TestExtractorLogoBundlePlansCompletely(t *testing.T) {
 			Artifacts:        artifacts.Service{Pool: pool, Storage: storageSet, MaxProjectBytes: 64 << 20},
 			MaxArtifactBytes: 4 << 20,
 		},
+		Links: projectlinks.Service{Pool: pool},
 	}
 	result, err := service.Run(ctx, manifest, bundleRoot, Options{ActorUsername: adminUser})
 	if err != nil {
@@ -68,7 +74,7 @@ func TestExtractorLogoBundlePlansCompletely(t *testing.T) {
 	t.Logf("planned the extractor bundle: %d Projects, %d logo uploads, %d bytes", result.ProjectCount, result.LogoUploads, result.TotalBytes)
 }
 
-func seedBundleEvidenceFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, adminUser string) {
+func seedBundleEvidenceFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, adminUser string, manifestProjects []string) {
 	t.Helper()
 	statements := []string{
 		fmt.Sprintf("INSERT INTO application_users (id, username, status) VALUES ('018f0000-0000-7000-8000-000000000b50', '%s', 'active')", adminUser),
@@ -83,7 +89,6 @@ func seedBundleEvidenceFixture(t *testing.T, ctx context.Context, pool *pgxpool.
 			t.Fatalf("seed bundle evidence fixture: %v", err)
 		}
 	}
-	manifestProjects := loadBundleEvidenceKeys(t)
 	for index, importKey := range manifestProjects {
 		projectID := uuid.New()
 		title := fmt.Sprintf("Bundle Project %d", index+1)
@@ -93,20 +98,54 @@ func seedBundleEvidenceFixture(t *testing.T, ctx context.Context, pool *pgxpool.
 	}
 }
 
-// loadBundleEvidenceKeys reads the manifest a second time through the strict
-// loader so the seeded Projects exactly match what the planner will resolve.
-func loadBundleEvidenceKeys(t *testing.T) []string {
-	t.Helper()
-	manifest, err := LoadManifest(os.Getenv("AUSE_PROJECT_CONTENT_MANIFEST"))
-	if err != nil {
-		t.Fatalf("load extractor bundle manifest for seeding: %v", err)
+// TestExtractorLinkBundlePlansCompletely proves the real extractor-derived
+// repository-link manifest plans end to end: every entry resolves, every
+// link set validates, and no third-party reference appears. It runs only
+// when AUSE_PROJECT_LINK_MANIFEST points at a generated link manifest,
+// because the extractor bundle is not part of the repository.
+func TestExtractorLinkBundlePlansCompletely(t *testing.T) {
+	manifestPath := os.Getenv("AUSE_PROJECT_LINK_MANIFEST")
+	if manifestPath == "" {
+		t.Skip("AUSE_PROJECT_LINK_MANIFEST is required for extractor link bundle evidence")
 	}
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createContentTestDatabase(t, ctx, databaseURL)
+	adminUser := "link-evidence-admin"
+
+	manifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("load extractor link manifest: %v", err)
+	}
+	declared := 0
 	keys := make([]string, 0, len(manifest.Projects))
 	for index := range manifest.Projects {
-		if manifest.Projects[index].ProjectImportKey == "" {
-			t.Fatalf("bundle entry %d carried no project_import_key", index+1)
+		if manifest.Projects[index].Links == nil {
+			t.Fatalf("entry %d omitted its declared link set", index+1)
 		}
+		declared += len(manifest.Projects[index].Links.Links)
 		keys = append(keys, manifest.Projects[index].ProjectImportKey)
 	}
-	return keys
+	seedBundleEvidenceFixture(t, ctx, pool, adminUser, keys)
+	bundleRoot, err := BundleRoot(manifestPath)
+	if err != nil {
+		t.Fatalf("resolve bundle root: %v", err)
+	}
+	service := Service{
+		Pool:  pool,
+		Logos: projectlogos.Service{Pool: pool, Storage: artifacts.StorageSet{DefaultName: artifacts.BackendLocal, Backends: map[string]artifacts.Backend{artifacts.BackendLocal: artifacts.LocalStorage{Root: t.TempDir(), MaxBytes: 4 << 20}}}},
+		Files: artifactimport.Service{Pool: pool, Artifacts: artifacts.Service{Pool: pool, MaxProjectBytes: 64 << 20}, MaxArtifactBytes: 4 << 20},
+		Links: projectlinks.Service{Pool: pool},
+	}
+	result, err := service.Run(ctx, manifest, bundleRoot, Options{ActorUsername: adminUser})
+	if err != nil {
+		t.Fatalf("plan extractor link bundle: %v", err)
+	}
+	if result.ProjectCount != len(manifest.Projects) || result.DeclaredLinks != declared || result.LinkSetsReplaced != len(manifest.Projects) || result.LinkSetsUnchanged != 0 {
+		t.Fatalf("planned %+v for %d entries and %d declared links", result, len(manifest.Projects), declared)
+	}
+	t.Logf("planned the extractor link bundle: %d Projects, %d links", result.ProjectCount, result.DeclaredLinks)
 }

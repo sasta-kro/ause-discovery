@@ -17,6 +17,7 @@ import (
 
 	"ause-discovery.local/backend/internal/artifactimport"
 	"ause-discovery.local/backend/internal/artifacts"
+	"ause-discovery.local/backend/internal/projectlinks"
 	"ause-discovery.local/backend/internal/projectlogos"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -89,7 +90,7 @@ func newContentFixture(t *testing.T) *contentFixture {
 		Artifacts:        artifacts.Service{Pool: fixture.pool, Storage: storageSet, MaxProjectBytes: 10 * 1024 * 1024},
 		MaxArtifactBytes: 1024 * 1024,
 	}
-	fixture.service = Service{Pool: fixture.pool, Logos: fixture.logos, Files: fixture.files}
+	fixture.service = Service{Pool: fixture.pool, Logos: fixture.logos, Files: fixture.files, Links: projectlinks.Service{Pool: fixture.pool}}
 	fixture.writeBundle(t, contentPNG(t, 40), contentPNG(t, 80), contentPNG(t, 200))
 	return fixture
 }
@@ -454,5 +455,100 @@ func TestProjectContentImportPlansDOCXReports(t *testing.T) {
 	var extension string
 	if err := fixture.pool.QueryRow(ctx, "SELECT extension FROM artifacts WHERE type='report' LIMIT 1").Scan(&extension); err != nil || extension != "docx" {
 		t.Fatalf("stored report extension was %q with error %v, expected docx", extension, err)
+	}
+}
+
+func TestProjectContentImportPlansAppliesAndRerunsRepositoryLinks(t *testing.T) {
+	fixture := newContentFixture(t)
+	ctx := context.Background()
+	declared := `{"project_import_key": "sp-first", "links": [
+		{"url": "https://github.com/example/one", "primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"},
+		{"url": "https://github.com/example/two", "primary": false, "availability": "not_accessible", "checked_at": "2026-09-11T07:32:30Z"}]}, {"project_id": "` + fixture.secondID.String() + `", "links": []}`
+	manifest := fixture.manifest(t, declared)
+
+	dryRun, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser})
+	// The second Project declares an explicit empty set against an equally
+	// empty stored set, so it classifies unchanged rather than replaced.
+	if err != nil || dryRun.ProjectCount != 2 || dryRun.DeclaredLinks != 2 || dryRun.LinkSetsReplaced != 1 || dryRun.LinkSetsUnchanged != 1 || dryRun.LogoUploads != 0 || dryRun.FileUploads != 0 || dryRun.TotalBytes != 0 {
+		t.Fatalf("unexpected dry-run result %#v and error %v", dryRun, err)
+	}
+
+	progress := []ProjectProgress{}
+	applied, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{
+		ActorUsername: fixture.adminUser, Apply: true,
+		OnProjectDone: func(done ProjectProgress) { progress = append(progress, done) },
+	})
+	if err != nil || applied.LinkSetsReplaced != 1 || applied.LinkSetsUnchanged != 1 || applied.DeclaredLinks != 2 {
+		t.Fatalf("unexpected apply result %#v and error %v", applied, err)
+	}
+	links, listErr := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.firstID)
+	if listErr != nil || len(links) != 2 || links[0].URL != "https://github.com/example/one" || !links[0].IsPrimary {
+		t.Fatalf("first Project stored links %#v with error %v", links, listErr)
+	}
+	empty, emptyErr := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.secondID)
+	if emptyErr != nil || len(empty) != 0 {
+		t.Fatalf("explicit empty set left %d links with error %v", len(empty), emptyErr)
+	}
+	linkLines := 0
+	for _, done := range progress {
+		for _, item := range done.Items {
+			if item.Kind == KindLink {
+				linkLines++
+			}
+		}
+	}
+	if linkLines != 2 {
+		t.Fatalf("progress reported %d link items, expected 2", linkLines)
+	}
+
+	// An exact rerun classifies both sets unchanged and writes nothing.
+	rerun, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true})
+	if err != nil || rerun.LinkSetsUnchanged != 2 || rerun.LinkSetsReplaced != 0 {
+		t.Fatalf("rerun result %#v and error %v, expected unchanged sets", rerun, err)
+	}
+
+	// A combined logo, file, and links entry plans and applies together.
+	if err := os.MkdirAll(filepath.Join(fixture.bundle, "files", "second"), 0o750); err != nil {
+		t.Fatalf("create second file directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.bundle, "files", "second", "final-report.pdf"), []byte("%PDF-1.7\nsecond report"), 0o600); err != nil {
+		t.Fatalf("write second report: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fixture.bundle, "logos", "second-replacement.png"), contentPNG(t, 120), 0o600); err != nil {
+		t.Fatalf("write second replacement logo: %v", err)
+	}
+	combined := fixture.manifest(t, `{"project_import_key": "sp-second", "logo": {"file_path": "logos/second.png"}, "files": [
+		{"artifact_type": "report", "display_name": "Final report", "file_path": "files/second/final-report.pdf"}],
+		"links": [{"url": "https://github.com/example/second", "primary": true, "availability": "unverified", "checked_at": "2026-09-11T07:32:27Z"}]}`)
+	combinedResult, err := fixture.service.Run(ctx, combined, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true})
+	if err != nil || combinedResult.LogoUploads != 1 || combinedResult.FileUploads != 1 || combinedResult.LinkSetsReplaced != 1 {
+		t.Fatalf("combined result %#v and error %v", combinedResult, err)
+	}
+	secondLinks, _ := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.secondID)
+	if len(secondLinks) != 1 || secondLinks[0].Availability != projectlinks.AvailabilityUnverified {
+		t.Fatalf("combined entry stored links %#v", secondLinks)
+	}
+
+	// Invalid link data stops the whole manifest before any write.
+	invalid := fixture.manifest(t, `{"project_import_key": "sp-first", "links": [
+		{"url": "https://github.com/example/one", "primary": false, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"},
+		{"url": "https://github.com/example/two", "primary": false, "availability": "accessible", "checked_at": "2026-09-11T07:32:30Z"}]}`)
+	if _, err := fixture.service.Run(ctx, invalid, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true}); err == nil || !strings.Contains(err.Error(), "primary") {
+		t.Fatalf("invalid link set returned %v, expected a primary rejection", err)
+	}
+	current, _ := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.firstID)
+	if len(current) != 2 {
+		t.Fatalf("invalid planning mutated stored links to %d rows", len(current))
+	}
+
+	// An omitted links field leaves existing sets untouched: this manifest
+	// touches only the second Project's logo.
+	omitted := fixture.manifest(t, `{"project_import_key": "sp-second", "logo": {"file_path": "logos/second-replacement.png"}}`)
+	if _, err := fixture.service.Run(ctx, omitted, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true}); err != nil {
+		t.Fatalf("omitted-links run returned %v", err)
+	}
+	afterOmission, _ := projectlinks.Service{Pool: fixture.pool}.List(ctx, fixture.secondID)
+	if len(afterOmission) != 1 {
+		t.Fatalf("omitted links changed the stored set to %d rows", len(afterOmission))
 	}
 }

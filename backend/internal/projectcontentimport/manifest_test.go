@@ -47,6 +47,33 @@ func TestLoadManifestAcceptsValidContract(t *testing.T) {
 	}
 }
 
+func TestLoadManifestKeepsLinkPresenceDistinctFromEmptiness(t *testing.T) {
+	omitted, err := LoadManifest(writeManifest(t, `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`))
+	if err != nil {
+		t.Fatalf("manifest without links returned an error: %v", err)
+	}
+	if omitted.Projects[0].Links != nil {
+		t.Fatal("omitted links decoded as present")
+	}
+
+	empty, err := LoadManifest(writeManifest(t, `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": []}]}`))
+	if err != nil {
+		t.Fatalf("link-only empty entry returned an error: %v", err)
+	}
+	if empty.Projects[0].Links == nil || len(empty.Projects[0].Links.Links) != 0 {
+		t.Fatal("present empty links decoded as omitted or nonempty")
+	}
+
+	declared, err := LoadManifest(writeManifest(t, `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": true, "availability": "unverified", "checked_at": "2026-09-11T07:32:27Z"}]}]}`))
+	if err != nil {
+		t.Fatalf("link-only entry returned an error: %v", err)
+	}
+	link := declared.Projects[0].Links.Links[0]
+	if link.URL != "https://github.com/example/repo" || !link.IsPrimary || link.Availability != "unverified" {
+		t.Fatalf("link decoded to %#v", link)
+	}
+}
+
 func TestLoadManifestRejectsInvalidContracts(t *testing.T) {
 	cases := map[string]string{
 		"unsupported version":      `{"version": 2, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
@@ -61,6 +88,10 @@ func TestLoadManifestRejectsInvalidContracts(t *testing.T) {
 		"unknown field":            `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png", "crop": true}}]}`,
 		"unknown top-level field":  `{"version": 1, "source": "extractor", "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`,
 		"invalid project uuid":     `{"version": 1, "projects": [{"project_id": "not-a-uuid", "logo": {"file_path": "l.png"}}]}`,
+		"null links":               `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": null}]}`,
+		"unknown link field":       `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z", "final_url": "https://github.com/example/repo"}]}]}`,
+		"link missing url":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"primary": true, "availability": "accessible", "checked_at": "2026-09-11T07:32:27Z"}]}]}`,
+		"link bad timestamp":       `{"version": 1, "projects": [{"project_import_key": "sp-1", "links": [{"url": "https://github.com/example/repo", "primary": true, "availability": "accessible", "checked_at": "not-a-timestamp"}]}]}`,
 		"second json document":     validManifest + "\n{}",
 		"trailing closing brace":   validManifest + "\n}",
 		"trailing closing bracket": validManifest + "\n]",
