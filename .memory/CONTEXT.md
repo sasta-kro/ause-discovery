@@ -71,12 +71,16 @@ The subsystem that persists and opens opaque Project-owned bytes for Artifact an
 _Avoid_: Storage backend, B2 backend, filesystem backend
 
 **Project Content Import**:
-An operator-controlled import that maps existing Projects to Project Files and optional Project Logos through one manifest after Project metadata exists. Each content item retains its own domain behavior after import.
+An operator-controlled import that maps existing Projects to Project Files, optional Project Logos, and optional Project Repository Links through one manifest after Project metadata exists. Each content item retains its own domain behavior after import.
 _Avoid_: Metadata Import Batch, Logo Import, direct object-store copy
 
 **Project Logo**:
 An optional Project-owned representative image used for visual identification. Its bytes use the configured object store, but it is presentation metadata rather than an Artifact and never appears as a downloadable Project file.
 _Avoid_: Logo Artifact, downloadable logo, Project attachment
+
+**Project Repository Link**:
+An external source-control repository identified as belonging to one Project, with last-checked availability metadata. It is not an Artifact, Project File, or third-party dependency reference.
+_Avoid_: Repository Artifact, external-link Artifact, dependency link
 
 ## Import and Search
 
