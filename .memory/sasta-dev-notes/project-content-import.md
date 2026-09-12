@@ -67,6 +67,111 @@ Add `--apply` after the dry-run counts are correct. With B2 selected, the
 command uploads the mock bytes to B2 and writes their Project associations to
 the VM PostgreSQL database.
 
+## Quick copy: real Project Files and Logos
+
+The application command is ready to import each Project's real files and Logo
+in one run. It uses the same storage and PostgreSQL association path as the
+mock seeder.
+
+The current source material is not yet an import-ready bundle. At present:
+
+- `tools/ausesp-data-extractor/output/enrichment/logo-manifest.json` contains
+  Logo entries but no Project Files.
+- `resources/all-sp-projects/` contains the raw Project material. Some reports
+  and posters are inside ZIP containers, and no combined
+  `project-content.json` maps those files to Project import keys and Project
+  File types.
+
+Before these commands are run, the extractor must produce one portable bundle
+with this layout or an equivalent layout:
+
+```text
+project-content/
+  project-content.json
+  logos/
+  projects/
+    sp-<identifier>/
+      <real Project files>
+```
+
+The manifest must use the same `sp-<identifier>` import keys as
+`reviewed-import.csv`, classify every file with a supported Project File type,
+and reference extracted files rather than a ZIP that merely contains a report
+or poster. The manifest can contain a Logo, Project Files, or both for each
+Project.
+
+Do not seed mock files first on a clean deployment intended for real content.
+Mock files create active Project File records and would coexist with, or cause
+skips during, the later real import. Import the real combined bundle directly.
+
+### Local stack
+
+The following commands assume the completed bundle is at
+`tools/ausesp-data-extractor/output/project-content/`.
+
+Dry-run:
+
+```sh
+docker compose -p ause-local-test --env-file .env.local-test \
+  run --rm --no-deps \
+  --volume "$PWD/tools/ausesp-data-extractor/output/project-content:/bundle:ro" \
+  --entrypoint /usr/local/bin/ausectl \
+  api project-content import-manifest \
+  --manifest /bundle/project-content.json \
+  --actor-username Test1234567890 \
+  --workers 4
+```
+
+Apply only after the complete plan succeeds:
+
+```sh
+docker compose -p ause-local-test --env-file .env.local-test \
+  run --rm --no-deps \
+  --volume "$PWD/tools/ausesp-data-extractor/output/project-content:/bundle:ro" \
+  --entrypoint /usr/local/bin/ausectl \
+  api project-content import-manifest \
+  --manifest /bundle/project-content.json \
+  --actor-username Test1234567890 \
+  --workers 4 \
+  --apply
+```
+
+### VM with B2 storage
+
+Copy the complete bundle to `/srv/ause-discovery/project-content/` on the VM.
+The directory must contain the manifest and every relative path it references.
+
+Dry-run:
+
+```sh
+docker compose -p ause-discovery --env-file .env.production \
+  run --rm --no-deps \
+  --volume /srv/ause-discovery/project-content:/bundle:ro \
+  --entrypoint /usr/local/bin/ausectl \
+  api project-content import-manifest \
+  --manifest /bundle/project-content.json \
+  --actor-username <admin-username> \
+  --workers 4
+```
+
+Apply:
+
+```sh
+docker compose -p ause-discovery --env-file .env.production \
+  run --rm --no-deps \
+  --volume /srv/ause-discovery/project-content:/bundle:ro \
+  --entrypoint /usr/local/bin/ausectl \
+  api project-content import-manifest \
+  --manifest /bundle/project-content.json \
+  --actor-username <admin-username> \
+  --workers 4 \
+  --apply
+```
+
+With `AUSE_ARTIFACT_STORAGE_BACKEND=b2`, Project File and Logo bytes go to B2
+and their associations go to the VM PostgreSQL database. The mounted bundle is
+only the import source and can be removed after a successful import.
+
 ## Quick copy: extracted logos on the local stack
 
 The extractor currently provides a logo-only manifest beside its `logos/`
@@ -96,43 +201,6 @@ docker compose -p ause-local-test --env-file .env.local-test \
   --workers 4 \
   --apply
 ```
-
-## Quick copy: complete content bundle on the VM
-
-Copy the bundle to a temporary VM directory such as
-`/srv/ause-discovery/project-content/`. The directory must contain the JSON
-manifest and every relative path referenced by it.
-
-Dry-run:
-
-```sh
-docker compose -p ause-discovery --env-file .env.production \
-  run --rm --no-deps \
-  --volume /srv/ause-discovery/project-content:/bundle:ro \
-  --entrypoint /usr/local/bin/ausectl \
-  api project-content import-manifest \
-  --manifest /bundle/project-content.json \
-  --actor-username <admin-username> \
-  --workers 4
-```
-
-Apply:
-
-```sh
-docker compose -p ause-discovery --env-file .env.production \
-  run --rm --no-deps \
-  --volume /srv/ause-discovery/project-content:/bundle:ro \
-  --entrypoint /usr/local/bin/ausectl \
-  api project-content import-manifest \
-  --manifest /bundle/project-content.json \
-  --actor-username <admin-username> \
-  --workers 4 \
-  --apply
-```
-
-With `AUSE_ARTIFACT_STORAGE_BACKEND=b2`, final Project File and Logo bytes go
-to B2. The bind mount supplies source files only and can be removed after a
-successful import.
 
 ## Required order
 
