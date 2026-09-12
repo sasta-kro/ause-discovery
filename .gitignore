@@ -1,5 +1,5 @@
 .idea/
-**/**.env
+**/**.env.**
 !.env.example
 node_modules/
 **/node_modules/
@@ -14,5 +14,6 @@ backend/data/
 data/
 tmp/
 resources/
+**/.DS_Store
 
 tools/
