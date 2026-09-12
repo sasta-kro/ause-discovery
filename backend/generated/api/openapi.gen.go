@@ -461,19 +461,21 @@ type AdminProject struct {
 	DeletedAt         *time.Time              `json:"deleted_at"`
 	ExtensionMetadata *map[string]interface{} `json:"extension_metadata,omitempty"`
 	Id                Uuid                    `json:"id"`
-	LogoUrl           *string                 `json:"logo_url,omitempty"`
-	Major             *CatalogReference       `json:"major,omitempty"`
-	Participations    []Participation         `json:"participations"`
-	Program           *CatalogReference       `json:"program"`
-	PublishedAt       *time.Time              `json:"published_at,omitempty"`
-	ReferenceCode     *string                 `json:"reference_code,omitempty"`
-	Revision          Revision                `json:"revision"`
-	Semester          *Semester               `json:"semester"`
-	Status            ProjectStatus           `json:"status"`
-	Taxonomy          []TaxonomyValue         `json:"taxonomy"`
-	Title             *string                 `json:"title"`
-	TitleAliases      *[]string               `json:"title_aliases,omitempty"`
-	UpdatedAt         Timestamp               `json:"updated_at"`
+
+	// LogoUrl Authenticated administrator preview URL for the current logo
+	LogoUrl        *string           `json:"logo_url,omitempty"`
+	Major          *CatalogReference `json:"major,omitempty"`
+	Participations []Participation   `json:"participations"`
+	Program        *CatalogReference `json:"program"`
+	PublishedAt    *time.Time        `json:"published_at,omitempty"`
+	ReferenceCode  *string           `json:"reference_code,omitempty"`
+	Revision       Revision          `json:"revision"`
+	Semester       *Semester         `json:"semester"`
+	Status         ProjectStatus     `json:"status"`
+	Taxonomy       []TaxonomyValue   `json:"taxonomy"`
+	Title          *string           `json:"title"`
+	TitleAliases   *[]string         `json:"title_aliases,omitempty"`
+	UpdatedAt      Timestamp         `json:"updated_at"`
 }
 
 // AdminProjectPage defines model for AdminProjectPage.
@@ -1453,6 +1455,9 @@ type ServerInterface interface {
 
 	// (DELETE /admin/projects/{project_id}/logo)
 	RemoveProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params RemoveProjectLogoParams)
+	// GetAdminProjectLogo Authenticated administrator preview of the current Project Logo, including draft Projects. Never publicly cacheable.
+	// (GET /admin/projects/{project_id}/logo)
+	GetAdminProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId)
 
 	// (PUT /admin/projects/{project_id}/logo)
 	UploadProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params UploadProjectLogoParams)
@@ -1634,6 +1639,12 @@ func (_ Unimplemented) DeleteProject(w http.ResponseWriter, r *http.Request, pro
 
 // (DELETE /admin/projects/{project_id}/logo)
 func (_ Unimplemented) RemoveProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params RemoveProjectLogoParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetAdminProjectLogo Authenticated administrator preview of the current Project Logo, including draft Projects. Never publicly cacheable.
+// (GET /admin/projects/{project_id}/logo)
+func (_ Unimplemented) GetAdminProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2904,6 +2915,32 @@ func (siw *ServerInterfaceWrapper) RemoveProjectLogo(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// GetAdminProjectLogo operation middleware
+func (siw *ServerInterfaceWrapper) GetAdminProjectLogo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", chi.URLParam(r, "project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAdminProjectLogo(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UploadProjectLogo operation middleware
 func (siw *ServerInterfaceWrapper) UploadProjectLogo(w http.ResponseWriter, r *http.Request) {
 
@@ -3914,6 +3951,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/admin/projects/{project_id}/logo", wrapper.RemoveProjectLogo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/admin/projects/{project_id}/logo", wrapper.GetAdminProjectLogo)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/admin/projects/{project_id}/logo", wrapper.UploadProjectLogo)

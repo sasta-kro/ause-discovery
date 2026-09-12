@@ -36,6 +36,14 @@ func pngBytes(t *testing.T, width, height int) []byte {
 	return buffer.Bytes()
 }
 
+// corruptByte flips one byte of a PNG copy at the given offset so the file
+// keeps its valid header while the image data or terminal chunk breaks.
+func corruptByte(source []byte, offset int) []byte {
+	corrupted := append([]byte{}, source...)
+	corrupted[offset] ^= 0xff
+	return corrupted
+}
+
 // renamedLocalStorage serves a LocalStorage root under a different backend
 // name, standing in for a healthy alternate provider in tests.
 type renamedLocalStorage struct {
@@ -76,6 +84,21 @@ func TestValidateAcceptsAndRejectsImages(t *testing.T) {
 	}
 	if _, err := Validate(bytes.NewReader([]byte("not a png at all")), -1); !errors.Is(err, ErrInvalidContentType) {
 		t.Fatalf("wrong MIME returned %v", err)
+	}
+	// A decodable header proves nothing about the image data: fully formed
+	// headers with truncated, corrupt, or missing image data are rejected.
+	corruptions := map[string][]byte{
+		"truncated after the header":  append([]byte{}, valid[:33]...),
+		"truncated inside image data": append([]byte{}, valid[:len(valid)/2]...),
+		"missing terminal chunk":      append([]byte{}, valid[:len(valid)-12]...),
+		"missing all image data":      append([]byte{}, valid[:8+25+13]...),
+		"corrupt image checksum":      corruptByte(valid, len(valid)-40),
+		"corrupt terminal chunk data": corruptByte(valid, len(valid)-8),
+	}
+	for name, corrupted := range corruptions {
+		if _, err := Validate(bytes.NewReader(corrupted), -1); !errors.Is(err, ErrCorruptContent) {
+			t.Fatalf("%s was accepted or misclassified: %v", name, err)
+		}
 	}
 	truncated := append([]byte{}, valid[:16]...)
 	if _, err := Validate(bytes.NewReader(truncated), -1); err == nil {
@@ -119,7 +142,7 @@ func TestProjectLogoLifecycleMaintainsActiveRowAndAudit(t *testing.T) {
 	assertProjectState(t, ctx, pool, publishedID, 2, "upsert")
 	assertAuditEvent(t, ctx, pool, "project_logo.uploaded")
 
-	content, err := service.OpenActive(ctx, publishedID)
+	content, err := service.OpenActive(ctx, publishedID, logo.Revision)
 	if err != nil {
 		t.Fatalf("OpenActive returned an error: %v", err)
 	}
@@ -128,7 +151,7 @@ func TestProjectLogoLifecycleMaintainsActiveRowAndAudit(t *testing.T) {
 	if !bytes.Equal(opened, first) {
 		t.Fatal("opened logo bytes differ from the upload")
 	}
-	if _, err := service.OpenActive(ctx, draftID); !errors.Is(err, ErrNotFound) {
+	if _, err := service.OpenActive(ctx, draftID, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("draft Project logo open returned %v", err)
 	}
 
@@ -144,8 +167,11 @@ func TestProjectLogoLifecycleMaintainsActiveRowAndAudit(t *testing.T) {
 	if replacement.ID == logo.ID || replacement.StorageKey == logo.StorageKey {
 		t.Fatal("replacement reused the prior logo identity")
 	}
-	if replacement.Revision != logo.Revision+1 {
-		t.Fatalf("replacement revision was %d, expected %d so logo_url versions strictly increase", replacement.Revision, logo.Revision+1)
+	// The soft-deleted row consumed the next revision, so the replacement
+	// sits two steps past the replaced row and strictly above every earlier
+	// public version.
+	if replacement.Revision != logo.Revision+2 {
+		t.Fatalf("replacement revision was %d, expected %d so logo_url versions strictly increase", replacement.Revision, logo.Revision+2)
 	}
 	assertActiveLogoCount(t, ctx, pool, publishedID, 1)
 	assertAuditEvent(t, ctx, pool, "project_logo.replaced")
@@ -312,4 +338,108 @@ func seedLogoProjects(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (uu
 		}
 	}
 	return uuid.MustParse("018f0000-0000-7000-8000-000000000a20"), uuid.MustParse("018f0000-0000-7000-8000-000000000a21")
+}
+
+// countingOpenStorage records how often content is opened so tests can prove
+// a stale version request never reaches the storage provider.
+type countingOpenStorage struct {
+	artifacts.LocalStorage
+	opens int
+}
+
+func (storage *countingOpenStorage) Open(ctx context.Context, storageKey string) (io.ReadSeekCloser, int64, error) {
+	storage.opens++
+	return storage.LocalStorage.Open(ctx, storageKey)
+}
+
+func TestProjectLogoRevisionsNeverReuseVersions(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createLogoTestDatabase(t, ctx, databaseURL)
+	publishedID, draftID := seedLogoProjects(t, ctx, pool)
+	counting := &countingOpenStorage{LocalStorage: artifacts.LocalStorage{Root: t.TempDir(), MaxBytes: 1 << 20}}
+	service := Service{Pool: pool, Storage: artifacts.StorageSet{DefaultName: artifacts.BackendLocal, Backends: map[string]artifacts.Backend{
+		artifacts.BackendLocal: counting,
+	}}}
+	actorID := uuid.MustParse("018f0000-0000-7000-8000-000000000a01")
+
+	firstBytes, secondBytes, thirdBytes := pngBytes(t, 8, 8), pngBytes(t, 12, 12), pngBytes(t, 16, 16)
+	first, err := service.Upload(ctx, actorID, publishedID, 1, UploadInput{ExpectedSize: int64(len(firstBytes)), Content: bytes.NewReader(firstBytes)})
+	if err != nil {
+		t.Fatalf("first upload returned an error: %v", err)
+	}
+	second, err := service.Upload(ctx, actorID, publishedID, 2, UploadInput{ExpectedSize: int64(len(secondBytes)), Content: bytes.NewReader(secondBytes)})
+	if err != nil {
+		t.Fatalf("replacement upload returned an error: %v", err)
+	}
+	if err := service.Remove(ctx, actorID, publishedID, 3); err != nil {
+		t.Fatalf("remove returned an error: %v", err)
+	}
+	readded, err := service.Upload(ctx, actorID, publishedID, 4, UploadInput{ExpectedSize: int64(len(thirdBytes)), Content: bytes.NewReader(thirdBytes)})
+	if err != nil {
+		t.Fatalf("re-upload returned an error: %v", err)
+	}
+
+	// The re-added logo must sit strictly above every earlier version.
+	if readded.Revision <= second.Revision || readded.Revision <= first.Revision {
+		t.Fatalf("re-added revision %d did not exceed earlier versions %d and %d", readded.Revision, first.Revision, second.Revision)
+	}
+	var highestHistorical int64
+	if err := pool.QueryRow(ctx, "SELECT coalesce(max(revision), 0) FROM project_logos WHERE project_id=$1 AND status <> 'active'", publishedID).Scan(&highestHistorical); err != nil {
+		t.Fatalf("read historical revisions: %v", err)
+	}
+	if readded.Revision <= highestHistorical {
+		t.Fatalf("re-added revision %d did not exceed historical maximum %d", readded.Revision, highestHistorical)
+	}
+
+	// Every earlier public version stays stale, and none of those stale
+	// lookups may open stored content.
+	opensBefore := counting.opens
+	for version := int64(1); version <= highestHistorical; version++ {
+		if _, err := service.OpenActive(ctx, publishedID, version); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("stale version %d returned %v, expected not found", version, err)
+		}
+	}
+	if counting.opens != opensBefore {
+		t.Fatalf("stale version lookups opened storage %d times", counting.opens-opensBefore)
+	}
+
+	// The current version serves, and the administrative preview serves the
+	// same active revision.
+	current, err := service.OpenActive(ctx, publishedID, readded.Revision)
+	if err != nil {
+		t.Fatalf("current version open returned %v", err)
+	}
+	_ = current.File.Close()
+	administrative, err := service.OpenActiveForAdministration(ctx, publishedID)
+	if err != nil {
+		t.Fatalf("administrative open returned %v", err)
+	}
+	_ = administrative.File.Close()
+	if _, err := service.OpenActiveForAdministration(ctx, draftID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("draft Project without a logo returned %v, expected not found", err)
+	}
+
+	// A persisted draft logo previews through the administrative path while
+	// the public path keeps rejecting the draft Project.
+	draftBytes := pngBytes(t, 6, 6)
+	draftLogo, err := service.Upload(ctx, actorID, draftID, 1, UploadInput{ExpectedSize: int64(len(draftBytes)), Content: bytes.NewReader(draftBytes)})
+	if err != nil {
+		t.Fatalf("draft logo upload returned an error: %v", err)
+	}
+	if _, err := service.OpenActive(ctx, draftID, draftLogo.Revision); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("public open of a draft logo returned %v", err)
+	}
+	draftPreview, err := service.OpenActiveForAdministration(ctx, draftID)
+	if err != nil {
+		t.Fatalf("administrative draft preview returned %v", err)
+	}
+	previewBytes, _ := io.ReadAll(draftPreview.File)
+	_ = draftPreview.File.Close()
+	if !bytes.Equal(previewBytes, draftBytes) {
+		t.Fatal("administrative draft preview served different bytes")
+	}
 }

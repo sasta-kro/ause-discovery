@@ -29,7 +29,9 @@ func writeManifest(t *testing.T, contents string) string {
 }
 
 func TestLoadManifestAcceptsValidContract(t *testing.T) {
-	manifest, err := LoadManifest(writeManifest(t, validManifest))
+	// Whitespace-only trailing content remains valid: the document must end
+	// at EOF, and whitespace before EOF is not a second document.
+	manifest, err := LoadManifest(writeManifest(t, validManifest+"\n  \n"))
 	if err != nil {
 		t.Fatalf("LoadManifest returned an error: %v", err)
 	}
@@ -47,20 +49,24 @@ func TestLoadManifestAcceptsValidContract(t *testing.T) {
 
 func TestLoadManifestRejectsInvalidContracts(t *testing.T) {
 	cases := map[string]string{
-		"unsupported version":     `{"version": 2, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
-		"empty projects":          `{"version": 1, "projects": []}`,
-		"both identifiers":        `{"version": 1, "projects": [{"project_id": "018f0000-0000-7000-8000-000000000001", "project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
-		"neither identifier":      `{"version": 1, "projects": [{"files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
-		"duplicate projects":      `{"version": 1, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}, {"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`,
-		"duplicate by uuid":       `{"version": 1, "projects": [{"project_id": "018f0000-0000-7000-8000-000000000001", "logo": {"file_path": "l.png"}}, {"project_id": "018f0000-0000-7000-8000-000000000001", "logo": {"file_path": "m.png"}}]}`,
-		"no content":              `{"version": 1, "projects": [{"project_import_key": "sp-1"}]}`,
-		"blank logo path":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "  "}}]}`,
-		"blank file field":        `{"version": 1, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "", "file_path": "f.pdf"}]}]}`,
-		"unknown field":           `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png", "crop": true}}]}`,
-		"unknown top-level field": `{"version": 1, "source": "extractor", "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`,
-		"invalid project uuid":    `{"version": 1, "projects": [{"project_id": "not-a-uuid", "logo": {"file_path": "l.png"}}]}`,
-		"trailing data":           validManifest + "\n{}",
-		"malformed json":          `{"version": 1, "projects": [`,
+		"unsupported version":      `{"version": 2, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
+		"empty projects":           `{"version": 1, "projects": []}`,
+		"both identifiers":         `{"version": 1, "projects": [{"project_id": "018f0000-0000-7000-8000-000000000001", "project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
+		"neither identifier":       `{"version": 1, "projects": [{"files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}]}`,
+		"duplicate projects":       `{"version": 1, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "r", "file_path": "f.pdf"}]}, {"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`,
+		"duplicate by uuid":        `{"version": 1, "projects": [{"project_id": "018f0000-0000-7000-8000-000000000001", "logo": {"file_path": "l.png"}}, {"project_id": "018f0000-0000-7000-8000-000000000001", "logo": {"file_path": "m.png"}}]}`,
+		"no content":               `{"version": 1, "projects": [{"project_import_key": "sp-1"}]}`,
+		"blank logo path":          `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "  "}}]}`,
+		"blank file field":         `{"version": 1, "projects": [{"project_import_key": "sp-1", "files": [{"artifact_type": "report", "display_name": "", "file_path": "f.pdf"}]}]}`,
+		"unknown field":            `{"version": 1, "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png", "crop": true}}]}`,
+		"unknown top-level field":  `{"version": 1, "source": "extractor", "projects": [{"project_import_key": "sp-1", "logo": {"file_path": "l.png"}}]}`,
+		"invalid project uuid":     `{"version": 1, "projects": [{"project_id": "not-a-uuid", "logo": {"file_path": "l.png"}}]}`,
+		"second json document":     validManifest + "\n{}",
+		"trailing closing brace":   validManifest + "\n}",
+		"trailing closing bracket": validManifest + "\n]",
+		"trailing non-json text":   validManifest + "\nextraneous",
+		"trailing garbage byte":    validManifest + "\n\x00",
+		"malformed json":           `{"version": 1, "projects": [`,
 	}
 	for name, contents := range cases {
 		t.Run(name, func(t *testing.T) {

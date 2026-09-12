@@ -315,6 +315,9 @@ export type AdminProject = {
     extension_metadata?: {
         [key: string]: unknown;
     };
+    /**
+     * Authenticated administrator preview URL for the current logo
+     */
     logo_url?: string | null;
     revision: Revision;
     created_at: Timestamp;
@@ -1612,6 +1615,41 @@ export type RemoveProjectLogoResponses = {
 };
 
 export type RemoveProjectLogoResponse = RemoveProjectLogoResponses[keyof RemoveProjectLogoResponses];
+
+export type GetAdminProjectLogoData = {
+    body?: never;
+    path: {
+        project_id: Uuid;
+    };
+    query?: never;
+    url: '/admin/projects/{project_id}/logo';
+};
+
+export type GetAdminProjectLogoErrors = {
+    /**
+     * RFC 9457 problem details.
+     */
+    401: Problem;
+    /**
+     * RFC 9457 problem details.
+     */
+    404: Problem;
+    /**
+     * Project Logo storage is temporarily unavailable.
+     */
+    503: Problem;
+};
+
+export type GetAdminProjectLogoError = GetAdminProjectLogoErrors[keyof GetAdminProjectLogoErrors];
+
+export type GetAdminProjectLogoResponses = {
+    /**
+     * Current active Project Logo PNG content for administrator preview. Served with no-store because it reflects the current revision of possibly unpublished content.
+     */
+    200: Blob | File;
+};
+
+export type GetAdminProjectLogoResponse = GetAdminProjectLogoResponses[keyof GetAdminProjectLogoResponses];
 
 export type UploadProjectLogoData = {
     body: UploadProjectLogoRequest;

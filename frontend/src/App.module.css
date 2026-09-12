@@ -144,11 +144,16 @@
 .resultBody .tag { border-radius: var(--radius-small); color: var(--color-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem; padding: .25rem .42rem; }
 @media (max-width: 900px) { .searchLayout { grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr); gap: var(--space-4); } }
 @media (max-width: 720px) { .headerInner { align-items: flex-start; flex-direction: column; padding-block: var(--space-3); } .navigation { width: 100%; } .adminNavigationLink { margin-left: auto; } .searchBox { flex-direction: column; } .searchToolbar { grid-template-columns: 1fr 1fr; } .searchToolbar input { grid-column: 1 / -1; } .searchLayout, .detailGrid, .adminLayout, .assignmentGrid, .artifactUpload, .artifactControls { grid-template-columns: 1fr; } .filterPanel { border-right: 0; max-height: 18rem; overflow-y: auto; padding-right: .35rem; } .adminNav { border-bottom: 1px solid var(--color-line); border-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 0 var(--space-3); } }
+@media (max-width: 720px) { .pageHeaderWithIdentity { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 480px) { .navigation { gap: .8rem; } .navigation a { font-size: .9rem; } .adminNavigationLink { padding: .45rem .6rem; } .searchToolbar { grid-template-columns: 1fr; } .searchToolbar input { grid-column: auto; } .searchResult { grid-template-columns: 4rem minmax(0, 1fr); } .projectIdentity { font-size: 1.05rem; width: 4rem; } }
 
 .projectIdentityImage { background: var(--color-surface-raised, #f4f2f7); color: inherit; }
 .projectIdentityLogo { display: block; height: 100%; object-fit: contain; width: 100%; }
 .pageHeaderIdentity { align-items: center; aspect-ratio: 1; color: white; display: flex; font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; justify-content: center; width: 4.5rem; }
+.pageHeaderIdentityRed { background: var(--color-accent); }
+.pageHeaderIdentityPurple { background: var(--color-secondary); }
 .pageHeaderIdentityImage { background: var(--color-surface-raised, #f4f2f7); color: inherit; }
 .pageHeaderLogo { display: block; height: 100%; object-fit: contain; width: 100%; }
 .pageHeaderInitials { color: inherit; }
+.pageHeaderWithIdentity { align-items: center; display: flex; gap: var(--space-4); }
+.pageHeaderWithIdentity h1 { min-width: 0; }

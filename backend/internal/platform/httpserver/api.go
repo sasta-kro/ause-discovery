@@ -707,13 +707,10 @@ func (controller *Controller) RestoreProject(writer http.ResponseWriter, request
 func (controller *Controller) GetProjectLogo(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, params api.GetProjectLogoParams) {
 	// The version query is part of the contract: only a matching active
 	// revision is served immutably, so a stale URL can never deliver
-	// replacement bytes under long caching.
-	content, err := controller.Logos.OpenActive(request.Context(), uuid.UUID(projectID))
+	// replacement bytes under long caching. The expected revision travels
+	// into the lookup itself, so a stale request never opens storage.
+	content, err := controller.Logos.OpenActive(request.Context(), uuid.UUID(projectID), int64(params.V))
 	if controller.writeProjectLogoError(writer, request, err) {
-		return
-	}
-	if int64(params.V) != content.Logo.Revision {
-		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
 		return
 	}
 	defer content.File.Close()
@@ -724,6 +721,30 @@ func (controller *Controller) GetProjectLogo(writer http.ResponseWriter, request
 	writer.Header().Set("Content-Type", projectlogos.MIMEType)
 	writer.Header().Set("Content-Disposition", `inline; filename="logo.png"`)
 	writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeContent(writer, request, "logo.png", content.Logo.UpdatedAt, content.File)
+}
+
+// GetAdminProjectLogo serves the current active logo to an authenticated
+// administrator for preview, including on draft Projects. The response is
+// never publicly cacheable: it is private administrative content and it
+// always reflects the current active revision rather than an immutable
+// version.
+func (controller *Controller) GetAdminProjectLogo(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId) {
+	if _, ok := controller.requireActor(writer, request, false); !ok {
+		return
+	}
+	content, err := controller.Logos.OpenActiveForAdministration(request.Context(), uuid.UUID(projectID))
+	if controller.writeProjectLogoError(writer, request, err) {
+		return
+	}
+	defer content.File.Close()
+	if content.Size != content.Logo.ByteCount {
+		problem(writer, request, http.StatusNotFound, "project_logo_unavailable", "Project Logo unavailable", "The Project Logo metadata exists, but its content is unavailable.")
+		return
+	}
+	writer.Header().Set("Content-Type", projectlogos.MIMEType)
+	writer.Header().Set("Content-Disposition", `inline; filename="logo.png"`)
+	writer.Header().Set("Cache-Control", "no-store")
 	http.ServeContent(writer, request, "logo.png", content.Logo.UpdatedAt, content.File)
 }
 
@@ -803,7 +824,7 @@ func (controller *Controller) writeProjectLogoError(writer http.ResponseWriter, 
 		problem(writer, request, http.StatusServiceUnavailable, "project_logo_storage_unavailable", "Project Logo storage unavailable", "Project Logo storage is temporarily unavailable. Try again later.")
 	case errors.Is(err, projectlogos.ErrRevisionConflict):
 		problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
-	case errors.Is(err, projectlogos.ErrEmptyContent), errors.Is(err, projectlogos.ErrContentTooLarge), errors.Is(err, projectlogos.ErrSizeMismatch), errors.Is(err, projectlogos.ErrInvalidContentType), errors.Is(err, projectlogos.ErrInvalidDimensions), errors.Is(err, projectlogos.ErrInvalidState):
+	case errors.Is(err, projectlogos.ErrEmptyContent), errors.Is(err, projectlogos.ErrContentTooLarge), errors.Is(err, projectlogos.ErrSizeMismatch), errors.Is(err, projectlogos.ErrInvalidContentType), errors.Is(err, projectlogos.ErrInvalidDimensions), errors.Is(err, projectlogos.ErrCorruptContent), errors.Is(err, projectlogos.ErrInvalidState):
 		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
 	default:
 		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
@@ -1031,12 +1052,15 @@ func (controller *Controller) adminProjectResponse(ctx context.Context, value pr
 		return api.AdminProject{}, err
 	}
 	response := adminProjectResponse(value, program, major, course, participations, taxonomy, artifacts)
-	logoRevision, hasLogo, logoErr := controller.Logos.ActiveRevision(ctx, value.ID)
+	_, hasLogo, logoErr := controller.Logos.ActiveRevision(ctx, value.ID)
 	if logoErr != nil {
 		return api.AdminProject{}, logoErr
 	}
 	if hasLogo {
-		logoURL := projectLogoURL(controller.Config.PublicBasePath, value.ID, logoRevision)
+		// Administrator responses carry the authenticated preview URL so a
+		// persisted draft logo is previewable in administration; public
+		// responses keep the immutable versioned public URL.
+		logoURL := adminProjectLogoURL(controller.Config.PublicBasePath, value.ID)
 		response.LogoUrl = &logoURL
 	}
 	return response, nil
@@ -1280,6 +1304,10 @@ func searchQuery(params api.SearchProjectsParams) searchservice.Query {
 
 func projectLogoURL(publicBasePath string, projectID uuid.UUID, revision int64) string {
 	return strings.TrimSuffix(publicBasePath, "/") + "/api/v1/projects/" + projectID.String() + "/logo?v=" + strconv.FormatInt(revision, 10)
+}
+
+func adminProjectLogoURL(publicBasePath string, projectID uuid.UUID) string {
+	return strings.TrimSuffix(publicBasePath, "/") + "/api/v1/admin/projects/" + projectID.String() + "/logo"
 }
 
 func searchResponse(result searchservice.Result, publicBasePath string) api.SearchResponse {

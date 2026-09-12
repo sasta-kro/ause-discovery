@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -8,6 +8,10 @@ afterEach(cleanup)
 import i18n from '../../app/i18n'
 import { ProjectLogoManagement } from './project-logo'
 import type { AdminProject } from '../../api/generated/types.gen'
+
+function wrap(queryClient: QueryClient, project: AdminProject) {
+  return <QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ProjectLogoManagement csrfToken="csrf" project={project} /></I18nextProvider></QueryClientProvider>
+}
 
 const baseProject = {
   id: 'project-1', title: 'Logo Project', abstract: 'Abstract', academic_year: 2026, semester: 'first' as const,
@@ -19,7 +23,7 @@ const baseProject = {
 describe('Project logo management', () => {
   it('renders initials fallback and upload control without a logo', () => {
     const queryClient = new QueryClient()
-    render(<QueryClientProvider client={queryClient}><I18nextProvider i18n={i18n}><ProjectLogoManagement csrfToken="csrf" project={baseProject as AdminProject} /></I18nextProvider></QueryClientProvider>)
+    render(wrap(queryClient, baseProject as AdminProject))
     expect(screen.getByRole('button', { name: 'Upload Project Logo' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Remove Project Logo' })).toBeNull()
     expect(screen.getByText('LP')).toBeTruthy()
@@ -34,6 +38,20 @@ describe('Project logo management', () => {
     const image = document.querySelector('img') as HTMLImageElement
     expect(image.getAttribute('alt')).toBe('')
     expect(image.getAttribute('src')).toBe('/ause-discovery/api/v1/projects/project-1/logo?v=1')
+  })
+
+  it('falls back to initials when the preview image fails and retries on a new logo URL', async () => {
+    const queryClient = new QueryClient()
+    const { rerender } = render(wrap(queryClient, { ...baseProject, logo_url: '/admin-logo' } as AdminProject))
+    const image = document.querySelector('img') as HTMLImageElement
+    expect(image.getAttribute('src')).toBe('/admin-logo')
+    fireEvent.error(image)
+    expect(document.querySelector('img')).toBeNull()
+    expect(screen.getByText('LP')).toBeTruthy()
+    const refreshed = { ...baseProject, logo_url: '/admin-logo-2' } as AdminProject
+    rerender(wrap(queryClient, refreshed))
+    const retried = document.querySelector('img') as HTMLImageElement
+    expect(retried.getAttribute('src')).toBe('/admin-logo-2')
   })
 
   it('disables mutations on deleted Projects and hides actions', () => {

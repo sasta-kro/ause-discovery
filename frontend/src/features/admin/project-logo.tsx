@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +21,10 @@ export function ProjectLogoManagement({ project, csrfToken, disabled = false }: 
   const client = useQueryClient()
   const [conflict, setConflict] = useState(false)
   const [invalidFile, setInvalidFile] = useState<string | null>(null)
+  const [previewFailed, setPreviewFailed] = useState(false)
+  useEffect(() => { setPreviewFailed(false) }, [project.logo_url])
+  const previewUrl = project.logo_url
+  const showPreview = previewUrl && !previewFailed
   const form = useForm<LogoValues>()
   const refreshProject = async () => {
     await Promise.all([
@@ -60,8 +64,8 @@ export function ProjectLogoManagement({ project, csrfToken, disabled = false }: 
     <h2>{t('admin.projectLogo')}</h2>
     <p>{t('admin.projectLogoHelp')}</p>
     <div className={styles.logoManagement}>
-      <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${project.logo_url ? styles.pageHeaderIdentityImage : styles.projectIdentityPurple}`}>
-        {project.logo_url ? <img alt="" className={styles.pageHeaderLogo} src={project.logo_url} /> : <span className={styles.pageHeaderInitials}>{projectInitials(project.title ?? '')}</span>}
+      <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${showPreview ? styles.pageHeaderIdentityImage : styles.pageHeaderIdentityPurple}`}>
+        {showPreview ? <img alt="" className={styles.pageHeaderLogo} onError={() => setPreviewFailed(true)} src={previewUrl} /> : <span className={styles.pageHeaderInitials}>{projectInitials(project.title ?? '')}</span>}
       </div>
       {disabled ? <p className={styles.notice}>{t('admin.projectLogoDeleted')}</p> : <>
         <form className={styles.artifactUpload} onSubmit={form.handleSubmit((values) => {

@@ -41,4 +41,35 @@ describe('Project identity rendering', () => {
     expect(container.querySelector('img')).toBeNull()
     expect(container.textContent).toBe('GM')
   })
+
+  it('gives the detail initials fallback the identity background', () => {
+    const { container } = render(<ProjectDetailIdentity title="Greenhouse Monitor" />)
+    expect(container.firstElementChild?.className).toContain('pageHeaderIdentityPurple')
+  })
+
+  it('honors the red identity background variant on the detail identity', () => {
+    const { container } = render(<ProjectDetailIdentity title="Web Portal" variantClass="pageHeaderIdentityRed" />)
+    expect(container.firstElementChild?.className).toContain('pageHeaderIdentityRed')
+  })
+
+  it('retries the image when the versioned logo URL changes after a failure', () => {
+    const { container, rerender } = render(<ProjectDetailIdentity logoUrl="/logo?v=1" title="Web Portal" />)
+    const first = container.querySelector('img') as HTMLImageElement
+    fireEvent.error(first)
+    expect(container.querySelector('img')).toBeNull()
+    rerender(<ProjectDetailIdentity logoUrl="/logo?v=2" title="Web Portal" />)
+    const second = container.querySelector('img') as HTMLImageElement
+    expect(second).not.toBeNull()
+    expect(second.getAttribute('src')).toBe('/logo?v=2')
+  })
+
+  it('retries the search-result image when its versioned logo URL changes after a failure', () => {
+    const { container, rerender } = render(<ProjectIdentity logoUrl="/p/logo?v=1" title="Chatbot System" />)
+    fireEvent.error(container.querySelector('img') as HTMLImageElement)
+    expect(container.querySelector('img')).toBeNull()
+    rerender(<ProjectIdentity logoUrl="/p/logo?v=4" title="Chatbot System" />)
+    const retried = container.querySelector('img') as HTMLImageElement
+    expect(retried).not.toBeNull()
+    expect(retried.getAttribute('src')).toBe('/p/logo?v=4')
+  })
 })

@@ -204,12 +204,16 @@ func (service Service) plan(ctx context.Context, manifest Manifest, bundleRoot s
 		if err != nil {
 			return nil, result, fmt.Errorf("project entry %d: %w", index+1, err)
 		}
-		position, found := positions[projectID]
-		if !found {
-			position = len(groups)
-			positions[projectID] = position
-			groups = append(groups, projectContent{ID: projectID, Name: name})
+		// The loader deduplicates textual identities, but one database
+		// Project can still be reached through both identity forms. Reject
+		// the duplicate after resolution instead of silently merging the
+		// entries, which could overwrite the first logo.
+		if _, resolved := positions[projectID]; resolved {
+			return nil, result, fmt.Errorf("project entry %d resolves to Project %s, which an earlier entry already resolved", index+1, projectID)
 		}
+		position := len(groups)
+		positions[projectID] = position
+		groups = append(groups, projectContent{ID: projectID, Name: name})
 		if entry.Logo != nil {
 			sourcePath, err := artifactimport.ResolveSourcePath(bundleRoot, entry.Logo.FilePath)
 			if err != nil {

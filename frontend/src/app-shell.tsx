@@ -309,16 +309,18 @@ function SearchPage() {
   </section>
 }
 
-export function ProjectDetailIdentity({ title, logoUrl }: { title: string; logoUrl?: string | null }) {
+export function ProjectDetailIdentity({ title, logoUrl, variantClass }: { title: string; logoUrl?: string | null; variantClass?: string }) {
   const [failed, setFailed] = useState(false)
+  useEffect(() => { setFailed(false) }, [logoUrl])
   const showLogo = logoUrl && !failed
-  return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${showLogo ? styles.pageHeaderIdentityImage : ''}`}>
+  return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${showLogo ? styles.pageHeaderIdentityImage : variantClass ?? styles.pageHeaderIdentityPurple}`}>
     {showLogo ? <img alt="" className={styles.pageHeaderLogo} onError={() => setFailed(true)} src={logoUrl} /> : <span className={styles.pageHeaderInitials}>{projectInitials(title)}</span>}
   </div>
 }
 
 export function ProjectIdentity({ title, logoUrl, variantClass }: { title: string; logoUrl?: string | null; variantClass?: string }) {
   const [failed, setFailed] = useState(false)
+  useEffect(() => { setFailed(false) }, [logoUrl])
   const showLogo = logoUrl && !failed
   return <div aria-hidden="true" className={`${styles.projectIdentity} ${variantClass ?? ''} ${showLogo ? styles.projectIdentityImage : ''}`}>
     {showLogo ? <img alt="" className={styles.projectIdentityLogo} onError={() => setFailed(true)} src={logoUrl} /> : projectInitials(title)}
@@ -337,7 +339,7 @@ function ProjectPage() {
   if (projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
   if (projectQuery.isError || !projectQuery.data) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
   const project = projectQuery.data
-  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><ProjectDetailIdentity logoUrl={project.logo_url} title={project.title} /><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
+  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><div className={styles.pageHeaderWithIdentity}><ProjectDetailIdentity logoUrl={project.logo_url} title={project.title} /><h1>{project.title}</h1></div></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
 }
 
 function PersonPage() {

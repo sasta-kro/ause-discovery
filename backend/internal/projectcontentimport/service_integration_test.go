@@ -391,3 +391,17 @@ func createContentTestDatabase(t *testing.T, ctx context.Context, databaseURL st
 	})
 	return pool
 }
+
+func TestProjectContentImportRejectsDuplicateResolvedProjects(t *testing.T) {
+	fixture := newContentFixture(t)
+	ctx := context.Background()
+
+	// The same database Project reached once by import key and once by UUID:
+	// the loader cannot see the collision, so planning must reject it after
+	// resolution and before any write.
+	manifest := fixture.manifest(t, `{"project_import_key": "sp-first", "logo": {"file_path": "logos/first.png"}}, {"project_id": "`+fixture.firstID.String()+`", "logo": {"file_path": "logos/second.png"}}`)
+	if _, err := fixture.service.Run(ctx, manifest, fixture.bundle, Options{ActorUsername: fixture.adminUser, Apply: true}); err == nil || !strings.Contains(err.Error(), "already resolved") {
+		t.Fatalf("duplicate resolution returned %v, expected a duplicate rejection", err)
+	}
+	assertContentCounts(t, ctx, fixture.pool, 0, 0)
+}

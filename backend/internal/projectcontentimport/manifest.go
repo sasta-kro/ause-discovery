@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +62,12 @@ func LoadManifest(path string) (Manifest, error) {
 	if err := decoder.Decode(&manifest); err != nil {
 		return Manifest{}, fmt.Errorf("decode manifest: %w", err)
 	}
-	if decoder.More() {
+	// The document must end at EOF: a second decode must report io.EOF, so a
+	// second JSON document, a stray closing brace or bracket, trailing
+	// non-JSON text, and whitespace-only trailing content are distinguished
+	// exactly (whitespace remains valid).
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return Manifest{}, errors.New("manifest contains trailing JSON data")
 	}
 	if err := validateManifest(&manifest); err != nil {

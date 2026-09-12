@@ -36,6 +36,18 @@ func (storage *unavailableLogoStorage) Open(ctx context.Context, storageKey stri
 	return nil, 0, artifacts.ErrStorageUnavailable
 }
 
+// countingLogoStorage records how often content is opened so the handler
+// tests can prove stale version requests never reach the storage provider.
+type countingLogoStorage struct {
+	artifacts.LocalStorage
+	opens int
+}
+
+func (storage *countingLogoStorage) Open(ctx context.Context, storageKey string) (io.ReadSeekCloser, int64, error) {
+	storage.opens++
+	return storage.LocalStorage.Open(ctx, storageKey)
+}
+
 func logoTestPNG(t *testing.T, shade uint8) []byte {
 	t.Helper()
 	picture := image.NewRGBA(image.Rect(0, 0, 10, 10))
@@ -103,10 +115,10 @@ func TestProjectLogoEndpointsServePublishAndAuthorize(t *testing.T) {
 	removedID := seedLogoHTTPProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000c04", "published")
 	otherID := seedLogoHTTPProject(t, ctx, pool, "018f0000-0000-7000-8000-000000000c05", "published")
 
-	storageSet, storageSetErr := artifacts.NewStorageSet(artifacts.StorageOptions{DefaultName: artifacts.BackendLocal, LocalRoot: t.TempDir(), MaxArtifactBytes: 1 << 20})
-	if storageSetErr != nil {
-		t.Fatalf("build artifact storage set: %v", storageSetErr)
-	}
+	counting := &countingLogoStorage{LocalStorage: artifacts.LocalStorage{Root: t.TempDir(), MaxBytes: 1 << 20}}
+	storageSet := artifacts.StorageSet{DefaultName: artifacts.BackendLocal, Backends: map[string]artifacts.Backend{
+		artifacts.BackendLocal: counting,
+	}}
 	configuration := config.Config{PublicBasePath: "/ause-discovery/", SessionIdleTTL: 30 * time.Minute, SessionAbsoluteTTL: 12 * time.Hour}
 	handler := NewAPIHandler(pool, configuration, storageSet)
 	authService := auth.Service{Pool: pool, SessionIdleTTL: configuration.SessionIdleTTL, SessionAbsoluteTTL: configuration.SessionAbsoluteTTL}
@@ -175,6 +187,12 @@ func TestProjectLogoEndpointsServePublishAndAuthorize(t *testing.T) {
 			t.Fatalf("%s returned %d with body %s", name, response.Code, response.Body.String())
 		}
 	}
+	// None of the missing or stale lookups above may reach the storage
+	// provider: the expected revision is part of the metadata lookup.
+	if counting.opens != 1 {
+		t.Fatalf("missing and stale lookups opened storage %d times, expected only the one successful serve", counting.opens)
+	}
+
 	// The version query is required, so a request without it is a controlled
 	// validation failure rather than a cacheable miss.
 	if response := get(logoPath(publishedID, "")); response.Code != 400 || !strings.Contains(response.Body.String(), "validation_error") {
@@ -242,28 +260,39 @@ func TestProjectLogoEndpointsServePublishAndAuthorize(t *testing.T) {
 		t.Fatalf("stale revision logo upload returned %d with body %s", conflict.Code, conflict.Body.String())
 	}
 
-	// Authenticated upload succeeds and returns the versioned logo URL.
+	// Authenticated upload succeeds. Administrator responses carry the
+	// authenticated preview URL, never the public versioned URL.
 	uploaded := put("1", logoTestPNG(t, 200), csrfToken)
 	if uploaded.Code != 200 {
 		t.Fatalf("authenticated logo upload returned %d with body %s", uploaded.Code, uploaded.Body.String())
 	}
-	if !strings.Contains(uploaded.Body.String(), "/ause-discovery/api/v1/projects/"+otherID.String()+"/logo?v=1") {
-		t.Fatalf("upload response omitted the versioned logo URL: %s", uploaded.Body.String())
+	if !strings.Contains(uploaded.Body.String(), "/ause-discovery/api/v1/admin/projects/"+otherID.String()+"/logo") {
+		t.Fatalf("upload response omitted the administrator preview logo URL: %s", uploaded.Body.String())
+	}
+	if strings.Contains(uploaded.Body.String(), "logo?v=") {
+		t.Fatalf("administrator response leaked the public versioned logo URL: %s", uploaded.Body.String())
+	}
+	if response := get(logoPath(otherID, "1")); response.Code != 200 {
+		t.Fatalf("fresh public version returned %d", response.Code)
 	}
 
-	// A replacement strictly increases the URL version and stale versions
-	// stop serving.
+	// A replacement strictly increases the public version: the soft-deleted
+	// row consumes one revision, so the replacement serves v3 and both
+	// earlier versions stop serving without opening storage.
 	replacement := put("2", logoTestPNG(t, 220), csrfToken)
 	if replacement.Code != 200 {
 		t.Fatalf("logo replacement returned %d with body %s", replacement.Code, replacement.Body.String())
 	}
-	if !strings.Contains(replacement.Body.String(), "logo?v=2") {
-		t.Fatalf("replacement response omitted the increased version: %s", replacement.Body.String())
+	opensBeforeStale := counting.opens
+	for _, version := range []string{"1", "2"} {
+		if response := get(logoPath(otherID, version)); response.Code != 404 {
+			t.Fatalf("stale logo version %s returned %d after replacement", version, response.Code)
+		}
 	}
-	if response := get(logoPath(otherID, "1")); response.Code != 404 {
-		t.Fatalf("stale logo version returned %d after replacement", response.Code)
+	if counting.opens != opensBeforeStale {
+		t.Fatalf("stale version requests opened storage %d times", counting.opens-opensBeforeStale)
 	}
-	if response := get(logoPath(otherID, "2")); response.Code != 200 {
+	if response := get(logoPath(otherID, "3")); response.Code != 200 {
 		t.Fatalf("current logo version returned %d after replacement", response.Code)
 	}
 
@@ -277,12 +306,54 @@ func TestProjectLogoEndpointsServePublishAndAuthorize(t *testing.T) {
 	if removeResponse.Code != 200 {
 		t.Fatalf("authenticated logo removal returned %d with body %s", removeResponse.Code, removeResponse.Body.String())
 	}
-	if strings.Contains(removeResponse.Body.String(), "logo?v=") {
+	if strings.Contains(removeResponse.Body.String(), "admin/projects/"+otherID.String()+"/logo") {
 		t.Fatalf("removal response still carried a logo URL: %s", removeResponse.Body.String())
 	}
-	if response := get(logoPath(otherID, "3")); response.Code != 404 {
-		t.Fatalf("removed logo returned %d", response.Code)
+
+	// A later re-upload never reuses an earlier public version: the removed
+	// row consumed v4, so the re-added logo serves v5.
+	readded := put("4", logoTestPNG(t, 240), csrfToken)
+	if readded.Code != 200 {
+		t.Fatalf("re-upload returned %d with body %s", readded.Code, readded.Body.String())
 	}
+	for _, version := range []string{"1", "2", "3", "4"} {
+		if response := get(logoPath(otherID, version)); response.Code != 404 {
+			t.Fatalf("earlier logo version %s returned %d after re-upload", version, response.Code)
+		}
+	}
+	if response := get(logoPath(otherID, "5")); response.Code != 200 {
+		t.Fatalf("re-added logo version returned %d, expected 5", response.Code)
+	}
+
+	// The authenticated preview endpoint serves the current logo, including
+	// on draft Projects, and is never publicly cacheable. Anonymous access
+	// is rejected and the public draft URL stays hidden.
+	anonymousPreview := get(adminLogoPath(otherID))
+	if anonymousPreview.Code != 401 {
+		t.Fatalf("anonymous administrator preview returned %d", anonymousPreview.Code)
+	}
+	preview := httptest.NewRequest("GET", adminLogoPath(otherID), nil)
+	preview.Header.Set("Cookie", sessionCookie)
+	previewResponse := httptest.NewRecorder()
+	handler.ServeHTTP(previewResponse, preview)
+	if previewResponse.Code != 200 || previewResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("administrator preview returned %d with cache control %q", previewResponse.Code, previewResponse.Header().Get("Cache-Control"))
+	}
+	draftLogo, draftErr := logoService.Upload(ctx, seedActor, draftID, 1, projectlogos.UploadInput{ExpectedSize: int64(len(logoBytes)), Content: bytes.NewReader(logoBytes)})
+	if draftErr != nil {
+		t.Fatalf("seed draft logo: %v", draftErr)
+	}
+	if response := get(logoPath(draftID, "1")); response.Code != 404 {
+		t.Fatalf("public draft logo returned %d, expected 404", response.Code)
+	}
+	draftPreview := httptest.NewRequest("GET", adminLogoPath(draftID), nil)
+	draftPreview.Header.Set("Cookie", sessionCookie)
+	draftPreviewResponse := httptest.NewRecorder()
+	handler.ServeHTTP(draftPreviewResponse, draftPreview)
+	if draftPreviewResponse.Code != 200 || draftPreviewResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("draft administrator preview returned %d with cache control %q", draftPreviewResponse.Code, draftPreviewResponse.Header().Get("Cache-Control"))
+	}
+	_ = draftLogo
 }
 
 func seedLogoHTTPSharedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

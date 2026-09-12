@@ -32,6 +32,7 @@ var (
 	ErrSizeMismatch       = errors.New("project logo content size does not match the declared size")
 	ErrInvalidContentType = errors.New("project logo content is not a valid PNG image")
 	ErrInvalidDimensions  = errors.New("project logo dimensions are invalid or exceed the configured limit")
+	ErrCorruptContent     = errors.New("project logo content is corrupt or truncated")
 )
 
 const (
@@ -99,12 +100,20 @@ func Validate(reader io.Reader, expectedSize int64) (ValidatedContent, error) {
 	if http.DetectContentType(content) != MIMEType {
 		return ValidatedContent{}, ErrInvalidContentType
 	}
+	// The configuration decode runs first so dimensions are bounded before
+	// the full decode allocates image memory.
 	configuration, err := png.DecodeConfig(bytes.NewReader(content))
 	if err != nil || configuration.Width <= 0 || configuration.Height <= 0 {
 		return ValidatedContent{}, ErrInvalidDimensions
 	}
 	if configuration.Width > MaxDimension || configuration.Height > MaxDimension {
 		return ValidatedContent{}, ErrInvalidDimensions
+	}
+	// A decodable header proves nothing about the image data: fully decode
+	// the buffered PNG so truncated IDAT streams, corrupt checksums, missing
+	// image data, and missing terminal chunks are rejected before storage.
+	if _, err := png.Decode(bytes.NewReader(content)); err != nil {
+		return ValidatedContent{}, ErrCorruptContent
 	}
 	return ValidatedContent{
 		Content:   content,
@@ -154,18 +163,23 @@ func (service Service) Upload(ctx context.Context, actorID, projectID uuid.UUID,
 		}
 		eventType := "project_logo.uploaded"
 		metadata := map[string]any{"project_revision": projectRevision}
-		// The active-row revision continues across replacement rows, so the
-		// public logo URL version strictly increases on every change and an
-		// immutable URL can never serve different bytes.
-		logoRevision := int64(1)
 		if previous != nil {
 			if _, err := transaction.Exec(ctx, `UPDATE project_logos SET status='deleted', revision=revision+1, actor_id=$2, updated_at=now(), deleted_at=now() WHERE id=$1`, previous.ID, actorID); err != nil {
 				return err
 			}
-			logoRevision = previous.Revision + 1
 			eventType = "project_logo.replaced"
 			metadata["replaced_logo_id"] = previous.ID.String()
 		}
+		// The revision is derived from every historical row for the Project,
+		// not only the active row, so upload, replacement, removal, and
+		// re-upload can never reuse an earlier public logo version and an
+		// immutable URL can never serve different bytes. The Project row lock
+		// serializes this read against every other logo mutation.
+		var highestRevision int64
+		if err := transaction.QueryRow(ctx, `SELECT coalesce(max(revision), 0) FROM project_logos WHERE project_id=$1`, projectID).Scan(&highestRevision); err != nil {
+			return err
+		}
+		logoRevision := highestRevision + 1
 		row := transaction.QueryRow(ctx, `
 			INSERT INTO project_logos (id, project_id, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision, actor_id)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, $10)
@@ -252,8 +266,11 @@ type PublicContent struct {
 }
 
 // OpenActive returns the published Project's active logo content from the
-// row-selected storage provider.
-func (service Service) OpenActive(ctx context.Context, projectID uuid.UUID) (PublicContent, error) {
+// row-selected storage provider. The expected revision is part of the
+// lookup: a missing or stale version resolves to ErrNotFound before any
+// storage provider is opened, so stale public URLs can never trigger
+// provider reads or serve replacement bytes.
+func (service Service) OpenActive(ctx context.Context, projectID uuid.UUID, expectedRevision int64) (PublicContent, error) {
 	logo, err := scanLogo(service.Pool.QueryRow(ctx, `
 		SELECT project_logos.id, project_logos.project_id, project_logos.storage_key, project_logos.storage_backend, project_logos.mime_type, project_logos.extension, project_logos.byte_count, project_logos.sha256, project_logos.status, project_logos.revision, project_logos.actor_id, project_logos.created_at, project_logos.updated_at, project_logos.deleted_at
 		FROM project_logos JOIN projects ON projects.id=project_logos.project_id
@@ -261,7 +278,29 @@ func (service Service) OpenActive(ctx context.Context, projectID uuid.UUID) (Pub
 	if err != nil {
 		return PublicContent{}, err
 	}
-	backend, lookupErr := service.Storage.Lookup(logo.StorageBackend)
+	if logo.Revision != expectedRevision {
+		return PublicContent{}, ErrNotFound
+	}
+	return openLogoContent(ctx, service.Storage, logo)
+}
+
+// OpenActiveForAdministration returns the current active logo content for
+// administrator preview. Unlike the public path it accepts draft Projects,
+// because the administrator already owns the record. Deleted Projects are
+// excluded.
+func (service Service) OpenActiveForAdministration(ctx context.Context, projectID uuid.UUID) (PublicContent, error) {
+	logo, err := scanLogo(service.Pool.QueryRow(ctx, `
+		SELECT project_logos.id, project_logos.project_id, project_logos.storage_key, project_logos.storage_backend, project_logos.mime_type, project_logos.extension, project_logos.byte_count, project_logos.sha256, project_logos.status, project_logos.revision, project_logos.actor_id, project_logos.created_at, project_logos.updated_at, project_logos.deleted_at
+		FROM project_logos JOIN projects ON projects.id=project_logos.project_id
+		WHERE project_logos.project_id=$1 AND project_logos.status='active' AND projects.status <> 'deleted'`, projectID))
+	if err != nil {
+		return PublicContent{}, err
+	}
+	return openLogoContent(ctx, service.Storage, logo)
+}
+
+func openLogoContent(ctx context.Context, set artifacts.StorageSet, logo Logo) (PublicContent, error) {
+	backend, lookupErr := set.Lookup(logo.StorageBackend)
 	if lookupErr != nil {
 		return PublicContent{}, ErrContentUnavailable
 	}
