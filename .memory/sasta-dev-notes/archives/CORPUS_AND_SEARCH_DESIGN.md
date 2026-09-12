@@ -1,4 +1,4 @@
-# Senior Project Corpus Analysis and Search Design
+# Archived: Senior Project Corpus Analysis and Search Design
 
 ## Corpus processed
 

@@ -1,4 +1,10 @@
-# Artifact hosting rehearsal
+# Archived: Artifact hosting rehearsal
+
+This note records the original local-storage rehearsal from 2026-09-09. It is
+outdated after the B2 storage-provider, bulk seeding, concurrent import, and
+unified Project Content increments. Current commands live in
+`../project-content-import.md` and
+`../project-deploying-commands-and-explanations.md`.
 
 How artifacts work end to end, and a seeded mock project for clicking through
 the same flow you will run on the target VM. Verified on the local test stack

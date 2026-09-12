@@ -20,13 +20,10 @@ web:8080
   | API and health requests
   v
 api:8080
-  |                  |
-  | PostgreSQL       | HTTP
-  v                  v
-postgres:5432    meilisearch:7700
-  |
-  v
-artifact-data volume
+  |                  |                       |
+  | PostgreSQL       | HTTP                  | storage API or filesystem
+  v                  v                       v
+postgres:5432    meilisearch:7700      B2 or artifact-data volume
 ```
 
 Internal DNS names are the Compose service names:
@@ -113,7 +110,7 @@ These sit outside the versioned API prefix:
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/ause-discovery/health/live` | Confirms that the API HTTP server is running |
-| `GET` | `/ause-discovery/health/ready` | Checks database schema and writable storage |
+| `GET` | `/ause-discovery/health/ready` | Checks database schema, import temporary storage, and the configured storage provider |
 
 The API also exposes versioned equivalents:
 
@@ -241,7 +238,7 @@ Browser
   -> VM Nginx
   -> web-container Nginx
   -> Go API
-  -> PostgreSQL, Meilisearch, or Artifact storage
+  -> PostgreSQL, Meilisearch, or the configured storage provider
 ```
 
 The `migrate` container and `ausectl` commands expose no HTTP endpoints. They are temporary command-line jobs using the same internal PostgreSQL and Meilisearch connections.

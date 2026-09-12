@@ -1,4 +1,4 @@
-## Test dev deploy steps (brief)
+## Archived test deployment steps, version 1
 
 Port `8088` is currently occupied by the verification stack, so use `8090` for a clean isolated deployment.
 
