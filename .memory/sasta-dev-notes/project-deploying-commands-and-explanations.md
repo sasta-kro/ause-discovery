@@ -4,6 +4,11 @@ This note is the current operator reference for local Docker testing, publishing
 Linux images to Docker Hub, and deploying the Compose stack on the VM. The
 commands assume the repository base path `/ause-discovery/`.
 
+The dated record
+`vm-deployment-2026-09-13.md` captures the exact local rehearsal, VM commands,
+errors, fixes, image digests, and cleanup from the latest deployment. This file
+keeps the reusable command flow.
+
 Project metadata and Project Content remain external source-of-truth files
 during development. A completely fresh stack is expected and does not require
 preserving the current PostgreSQL, Meilisearch, local storage, or B2 contents.
@@ -61,8 +66,11 @@ docker compose -p ause-local-test --env-file .env.local-test \
   up -d --no-build --wait
 
 docker compose -p ause-local-test --env-file .env.local-test ps
-curl -fsS http://localhost:8090/ause-discovery/health/live
-curl -fsS http://localhost:8090/ause-discovery/health/ready
+curl -fsS http://localhost:8088/ause-discovery/health/live
+curl -fsS http://localhost:8088/ause-discovery/health/ready
+
+docker compose -p ause-local-test --env-file .env.local-test \
+  exec -T api printenv AUSE_ARTIFACT_STORAGE_BACKEND
 ```
 
 Use these local administrator credentials when the prompt appears:
@@ -75,7 +83,7 @@ Password: Test1234567890
 Before running the block, edit `.env.local-test` to include:
 
 ```dotenv
-AUSE_WEB_PORT=8090
+AUSE_WEB_PORT=8088
 AUSE_API_IMAGE=ause-discovery-local-api:test
 AUSE_WEB_IMAGE=ause-discovery-local-web:test
 
@@ -89,12 +97,15 @@ AUSE_ARTIFACT_B2_APPLICATION_KEY=<application-key-secret>
 The local credentials above are disposable. Production requires unique secrets.
 The B2 application key needs bucket access with `listFiles`, `writeFiles`, and
 `deleteFiles`. Readiness directly verifies `listFiles`; uploads and cleanup use
-the other capabilities.
+the other capabilities. The live storage-provider command above must print
+`b2` before a Project Content import intended for B2. An environment file does
+not change containers that already exist, so a stale `local` result requires a
+container recreation after the Compose environment is corrected.
 
 After startup, import Project metadata through the administrator Imports page:
 
 ```text
-http://localhost:8090/ause-discovery/admin/imports
+http://localhost:8088/ause-discovery/admin/imports
 tools/ausesp-data-extractor/output/ause-discovery-projects-metadata-import.csv
 ```
 
@@ -104,7 +115,7 @@ can resolve `project_import_key` values.
 
 ## Quick copy: publish Linux amd64 images to Docker Hub
 
-Replace `<release>` with the selected release, for example `0.3`. Run from the
+Replace `<release>` with the selected release, for example `0.4`. Run from the
 repository root after the intended commit has been accepted.
 
 ```sh
@@ -130,8 +141,20 @@ docker buildx imagetools inspect sastakro/ause-discovery-web:<release>
 ```
 
 Record both published digests. A tag is convenient for publication; an
-immutable digest is safer in `.env.production` because it identifies the exact
+immutable digest is safer in `.env` because it identifies the exact
 image that was reviewed.
+
+The 2026-09-13 deployment published API and web `0.4`, then published web
+`0.4.1` as a focused reverse-proxy correction. The deployed image index
+digests were:
+
+```text
+sastakro/ause-discovery-api:0.4
+sha256:9251b8c09d938c17a78ba2651db8fca1cad416921f0c5be5f891703432436ad4
+
+sastakro/ause-discovery-web:0.4.1
+sha256:1be451f6b0e5d9c93113f0778a3aea72aa69e5ffd14d5fb95c38b6d372623f9e
+```
 
 The repository's tagged release workflow currently publishes to GHCR. The
 commands above are the separate manual Docker Hub publication path used by the
@@ -139,20 +162,22 @@ current VM release.
 
 ## Quick copy: deploy or refresh the VM
 
-The VM must contain the current `compose.yaml` and a private `.env.production`.
-Run from that deployment directory. Replace the image placeholders with the
-digests reported after publication.
+The current VM deployment directory is
+`/home/saiaike/apps/ause-discover`. It contains the current `compose.yaml`,
+`compose.override.yaml`, and a private `.env`. Run all VM commands from that
+directory. The reusable configuration below uses the tags deployed on
+2026-09-13. Immutable digests remain preferable for later releases.
 
 ```dotenv
 AUSE_ENV=production
 AUSE_COOKIE_SECURE=true
 MEILI_ENV=production
 
-AUSE_API_IMAGE=sastakro/ause-discovery-api@sha256:<api-digest>
-AUSE_WEB_IMAGE=sastakro/ause-discovery-web@sha256:<web-digest>
+AUSE_API_IMAGE=sastakro/ause-discovery-api:0.4
+AUSE_WEB_IMAGE=sastakro/ause-discovery-web:0.4.1
 
 AUSE_PUBLIC_BASE_PATH=/ause-discovery/
-AUSE_WEB_PORT=8090
+AUSE_WEB_PORT=8088
 
 AUSE_ARTIFACT_STORAGE_BACKEND=b2
 AUSE_ARTIFACT_B2_ENDPOINT=s3.<region>.backblazeb2.com
@@ -162,60 +187,115 @@ AUSE_ARTIFACT_B2_APPLICATION_KEY=<application-key-secret>
 ```
 
 This snippet shows the release and storage values that usually change during
-this cycle. The remaining `.env.production` values must also replace every
+this cycle. The remaining `.env` values must also replace every
 development secret: `POSTGRES_PASSWORD` and the matching password inside
 `AUSE_DATABASE_URL`, both matching Meilisearch keys, `AUSE_SESSION_SECRET`,
 and `AUSE_TRUSTED_PROXY_CIDRS`.
 
+`AUSE_MEILISEARCH_API_KEY` and `MEILI_MASTER_KEY` must contain the same value.
+A mismatch was found during the latest deployment and prevented normal search
+integration until the services were recreated with matching keys.
+
+The VM override prevents direct public access to the web-container port:
+
+```yaml
+services:
+  web:
+    ports: !override
+      - "127.0.0.1:8088:8080"
+```
+
+The current `compose.yaml` must pass these values into the API service:
+
+```yaml
+AUSE_ARTIFACT_STORAGE_BACKEND: ${AUSE_ARTIFACT_STORAGE_BACKEND:-local}
+AUSE_ARTIFACT_B2_ENDPOINT: ${AUSE_ARTIFACT_B2_ENDPOINT:-}
+AUSE_ARTIFACT_B2_BUCKET: ${AUSE_ARTIFACT_B2_BUCKET:-}
+AUSE_ARTIFACT_B2_KEY_ID: ${AUSE_ARTIFACT_B2_KEY_ID:-}
+AUSE_ARTIFACT_B2_APPLICATION_KEY: ${AUSE_ARTIFACT_B2_APPLICATION_KEY:-}
+```
+
 ```sh
-chmod 600 .env.production
+chmod 600 .env
 
-docker compose -p ause-discovery --env-file .env.production config --quiet
-docker compose -p ause-discovery --env-file .env.production pull
+docker compose -p ause-discovery --env-file .env config --quiet
+docker compose -p ause-discovery --env-file .env pull
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   up -d --wait postgres meilisearch
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm migrate
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api migrations status
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api catalog validate
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api catalog sync
 
-docker compose -p ause-discovery --env-file .env.production \
-  up -d --no-build --wait
-
-docker compose -p ause-discovery --env-file .env.production ps
-curl -fsS http://127.0.0.1:8090/ause-discovery/health/live
-curl -fsS http://127.0.0.1:8090/ause-discovery/health/ready
-```
-
-For a brand-new database, create the first administrator after `catalog sync`:
-
-```sh
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api admin create
+
+docker compose -p ause-discovery --env-file .env \
+  up -d --no-build --wait
+
+docker compose -p ause-discovery --env-file .env ps
+curl -fsS http://127.0.0.1:8088/ause-discovery/health/live
+curl -fsS http://127.0.0.1:8088/ause-discovery/health/ready
+
+docker compose -p ause-discovery --env-file .env \
+  exec -T api printenv AUSE_ARTIFACT_STORAGE_BACKEND
 ```
 
-The VM reverse proxy continues to forward the public `/ause-discovery/` path
-to `127.0.0.1:8090`. DNS and TLS remain outside this Compose stack.
+The `admin create` command is required only for a brand-new database. Omit it
+for an upgrade that preserves the existing PostgreSQL volume.
+
+The VM host Nginx includes this application snippet inside the TLS server:
+
+```nginx
+location /ause-discovery/ {
+    proxy_pass http://127.0.0.1:8088;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+The web image must preserve the incoming `X-Forwarded-Proto` value when it
+proxies to the API. Web `0.4` overwrote `https` with the internal HTTP scheme,
+causing authenticated writes through the public HTTPS route to fail same-origin
+or CSRF validation. Web `0.4.1` contains the correction. DNS and TLS remain
+outside the Compose stack.
+
+After startup, import and commit Project metadata through:
+
+```text
+https://life.au.edu/ause-discovery/admin/imports
+```
+
+The current metadata source is:
+
+```text
+tools/ausesp-data-extractor/output/ause-discovery-projects-metadata-import.csv
+```
+
+Copy, dry-run, apply, verify, and remove the real Project Content staging
+bundle using `project-content-import.md`.
 
 ## What runs in the stack
 
 ```text
 Browser
   -> VM reverse proxy, production only
-  -> web container, Nginx on host port 8090
+  -> web container, Nginx on host port 8088
   -> api container, Go Backend API
        -> PostgreSQL, canonical metadata
        -> Meilisearch, rebuildable search index
@@ -264,9 +344,9 @@ same-project services that are no longer declared. The `-p ause-local-test`
 scope prevents this command from targeting the `ause-discovery` stack.
 
 This command does not touch B2. When a completely fresh import is required,
-the selected B2 bucket must also be emptied through the Backblaze console.
-Otherwise old objects remain orphaned because the new PostgreSQL database no
-longer contains their storage keys.
+the selected B2 bucket must also be emptied with the version-aware B2 CLI flow
+in `project-content-import.md`. Otherwise old objects remain orphaned because
+the new PostgreSQL database no longer contains their storage keys.
 
 ### Validate Compose
 
@@ -366,8 +446,8 @@ waits for service health instead of returning while startup is still underway.
 
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test ps
-curl -fsS http://localhost:8090/ause-discovery/health/live
-curl -fsS http://localhost:8090/ause-discovery/health/ready
+curl -fsS http://localhost:8088/ause-discovery/health/live
+curl -fsS http://localhost:8088/ause-discovery/health/ready
 ```
 
 `ps` shows container state, health, and port mappings. `curl -f` returns a
@@ -416,14 +496,21 @@ store.
 The VM deployment sequence performs these operations:
 
 1. `config --quiet` catches missing or malformed environment substitutions.
-2. `pull` downloads the exact API and web images named in `.env.production`.
+2. `pull` downloads the exact API and web images named in `.env`.
 3. PostgreSQL and Meilisearch start before schema work.
 4. `migrate` advances PostgreSQL to the schema supported by the new API.
 5. `migrations status` confirms the applied version.
 6. Catalog validation and synchronization load the catalog bundled with the
    new API image.
-7. `up -d --no-build --wait` replaces changed containers and waits for health.
-8. Local health calls verify the VM stack before public reverse-proxy testing.
+7. `admin create` creates the initial operator only for a fresh database.
+8. `up -d --no-build --wait` replaces changed containers and waits for health.
+9. Local health calls verify the VM stack before public reverse-proxy testing.
+10. The live API environment confirms that `b2` is the selected storage
+    provider.
+11. The administrator Imports page commits Project metadata from the reviewed
+    CSV.
+12. The Project Content bundle is dry-run, applied, rerun for idempotence, and
+    removed from VM staging after verification.
 
 For an upgrade, the existing administrator remains in PostgreSQL and
 `admin create` is omitted. For the current development reset workflow, the VM
@@ -433,14 +520,14 @@ and Project Content imported from its bundle.
 ## Routine commands
 
 ```sh
-docker compose -p ause-discovery --env-file .env.production ps
-docker compose -p ause-discovery --env-file .env.production logs --tail 100 api web
+docker compose -p ause-discovery --env-file .env ps
+docker compose -p ause-discovery --env-file .env logs --tail 100 api web
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api search rebuild
 
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
   api admin reset-password --username <username>
 ```
@@ -474,11 +561,17 @@ Meilisearch, and local application volumes. B2 remains unchanged.
 For the current development source-of-truth workflow, a fully clean reset is:
 
 1. Delete the disposable Compose volumes.
-2. Empty the selected B2 bucket through the Backblaze console.
+2. Empty every version and unfinished multipart upload in the selected B2
+   bucket with the commands in `project-content-import.md`.
 3. Rebuild or pull the desired images.
-4. Migrate and synchronize catalogs.
-5. Import `ause-discovery-projects-metadata-import.csv` through the administrator Imports page.
-6. Dry-run and apply the Project Content bundle.
+4. Start PostgreSQL and Meilisearch.
+5. Migrate, validate the migration status, and synchronize catalogs.
+6. Create the administrator and start the complete stack.
+7. Confirm local readiness and the live `b2` storage-provider value.
+8. Import `ause-discovery-projects-metadata-import.csv` through the
+   administrator Imports page.
+9. Dry-run, apply, and rerun the Project Content bundle.
+10. Remove only the VM staging bundle after all checks pass.
 
 If PostgreSQL is reset without emptying B2, the existing objects become
 unreferenced. If B2 is emptied without resetting PostgreSQL, Project File and
@@ -499,7 +592,7 @@ sides of the mapping:
 A PostgreSQL logical dump uses:
 
 ```sh
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   exec -T postgres pg_dump -U <postgres-user> <postgres-database> \
   > <backup-directory>/ause-discovery-<date>.sql
 ```
@@ -507,6 +600,18 @@ docker compose -p ause-discovery --env-file .env.production \
 B2 backup or replication policy must preserve the bucket objects referenced by
 that database snapshot. A database dump without matching storage objects, or
 storage objects without the matching database, is not a complete restore set.
+
+## Troubleshooting from the 2026-09-13 deployment
+
+| Symptom | Cause | Correction |
+|---|---|---|
+| B2 remained empty after a local apply | The running API still had `AUSE_ARTIFACT_STORAGE_BACKEND=local` | Confirm Compose passes all B2 variables, recreate the API, and verify the live environment prints `b2` before importing |
+| Metadata import could not complete normally | `AUSE_MEILISEARCH_API_KEY` and `MEILI_MASTER_KEY` differed | Set the same secret for both values and recreate Meilisearch and API |
+| Authenticated writes failed only through public HTTPS | Web `0.4` replaced the host proxy's `X-Forwarded-Proto: https` with internal `http` | Deploy web `0.4.1`, which preserves a valid incoming forwarded protocol |
+| `couldn't find env file: .../.env.local-test` on the VM | A local Compose command was copied unchanged | Use `-p ause-discovery --env-file .env` on the VM |
+| `open /bundle/project-content-manifest.json: no such file or directory` | The local bundle mount path was used on the VM | Run from the VM deployment directory and mount `$PWD/project-content:/bundle:ro` |
+| An `ause-local-test` network and volumes appeared on the VM | A wrong-project `docker compose run` created isolated resources | Run `docker compose -p ause-local-test --env-file .env down -v --remove-orphans` after confirming the project name |
+| SSH disconnected after stack startup | The remote shell connection reset while containers continued running | Reconnect and inspect `docker ps` and Compose health before treating it as an application failure |
 
 ## Recovery notes
 

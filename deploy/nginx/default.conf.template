@@ -1,3 +1,9 @@
+map $http_x_forwarded_proto $ause_forwarded_proto {
+    default $scheme;
+    http http;
+    https https;
+}
+
 server {
     listen 8080;
     server_name _;
@@ -16,7 +22,7 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Request-ID $request_id;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $ause_forwarded_proto;
     }
 
     location ${AUSE_PUBLIC_BASE_PATH}health/ {
@@ -25,7 +31,7 @@ server {
         proxy_set_header Host $http_host;
         proxy_set_header X-Request-ID $request_id;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $ause_forwarded_proto;
     }
 
     location ${AUSE_PUBLIC_BASE_PATH}assets/ {

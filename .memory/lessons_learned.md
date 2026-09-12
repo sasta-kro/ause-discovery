@@ -16,6 +16,14 @@ Optional audit UUIDs require nullable PostgreSQL conversion. A zero UUID is a re
 
 The original Host header, including a non-default port, must reach same-origin validation. Forwarded client addresses must be evaluated from the immediate trusted peer toward the client, selecting the first untrusted address. Forwarded protocol is trusted only when the immediate peer is configured as trusted.
 
+Every proxy hop must preserve a valid protocol supplied by the preceding trusted hop. An inner HTTP Nginx proxy that unconditionally replaces `X-Forwarded-Proto: https` with its local `$scheme` converts a valid public HTTPS origin into an apparent cross-origin request and causes authenticated writes to fail CSRF validation.
+
+## Live Compose configuration
+
+`docker compose --env-file` supplies interpolation when containers are created; it does not mutate an existing container's environment. Before a destructive or large external-storage operation, inspect the live container value with `docker compose exec ... printenv`. If the live value differs from the intended file, confirm that Compose passes the variable and recreate the affected service before continuing.
+
+Copying a local `docker compose run` command to another host can create networks and volumes under the wrong project name even when the one-off command later fails. Deployment commands must confirm the target project, environment filename, working directory, and bind-mount source before execution.
+
 ## Filesystem and metadata transactions
 
 Filesystem finalization and PostgreSQL metadata cannot share one atomic transaction. Artifact uploads therefore require an opaque new storage identity, atomic same-filesystem rename, serialized metadata and quota checks, and compensating removal only for newly finalized bytes when validation or metadata persistence fails. Reversible business deletion must retain previously committed bytes.

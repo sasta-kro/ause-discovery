@@ -12,6 +12,63 @@ Project metadata must therefore be imported first from
 `tools/ausesp-data-extractor/output/ause-discovery-projects-metadata-import.csv` through the
 administrator Imports page.
 
+## Quick copy: reset and verify B2
+
+For a deliberate fresh-data rehearsal, empty B2 together with the disposable
+PostgreSQL volumes. Load the application environment into the B2 CLI without
+placing secret values directly in shell history:
+
+```sh
+set -a
+source .env.local-test
+set +a
+
+export B2_APPLICATION_KEY_ID="$AUSE_ARTIFACT_B2_KEY_ID"
+export B2_APPLICATION_KEY="$AUSE_ARTIFACT_B2_APPLICATION_KEY"
+```
+
+Preview the removal, remove every object version, cancel unfinished multipart
+uploads, and prove that the bucket is empty:
+
+```sh
+b2 rm \
+  --versions \
+  --recursive \
+  --dry-run \
+  "b2://$AUSE_ARTIFACT_B2_BUCKET"
+
+b2 rm \
+  --versions \
+  --recursive \
+  "b2://$AUSE_ARTIFACT_B2_BUCKET"
+
+b2 file large unfinished cancel \
+  "b2://$AUSE_ARTIFACT_B2_BUCKET"
+
+b2 ls \
+  --versions \
+  --recursive \
+  --long \
+  "b2://$AUSE_ARTIFACT_B2_BUCKET"
+```
+
+An empty final listing confirms that no current or hidden object versions
+remain. Bucket deletion must always be coordinated with PostgreSQL reset. The
+relationship is described under Current reset model.
+
+Before a bulk import, verify the storage provider in the running API rather
+than relying only on the environment file:
+
+```sh
+docker compose -p ause-local-test --env-file .env.local-test \
+  exec -T api printenv AUSE_ARTIFACT_STORAGE_BACKEND
+```
+
+Expected output for the B2 rehearsal is `b2`. An unexpected `local` value means
+the API container was created with stale configuration or the Compose API
+service is not passing the B2 variables. Correct the Compose environment and
+recreate the stack before importing.
+
 ## Quick copy: mock Project Files on the local stack
 
 Run the dry-run first from the main repository root:
@@ -49,12 +106,13 @@ published Project.
 ## Quick copy: mock Project Files on the VM
 
 Copy `resources/mock-artifacts/` to
-`/srv/ause-discovery/mock-artifacts/` on the VM, then run:
+`/home/saiaike/apps/ause-discover/mock-artifacts/` on the current VM, then run
+from `/home/saiaike/apps/ause-discover`:
 
 ```sh
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps \
-  --volume /srv/ause-discovery/mock-artifacts:/bulk:ro \
+  --volume "$PWD/mock-artifacts:/bulk:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api artifacts seed-demo \
   --source-directory /bulk \
@@ -143,15 +201,26 @@ docker compose -p ause-local-test --env-file .env.local-test \
 
 ### VM with B2 storage
 
-Copy the complete bundle to `/srv/ause-discovery/project-content/` on the VM.
-The directory must contain the manifest and every relative path it references.
+The current VM deployment directory is
+`/home/saiaike/apps/ause-discover`. Copy the complete bundle into its
+`project-content/` staging directory from the local repository root:
+
+```sh
+rsync -avh --progress \
+  resources/REAL_IMPORT_BUNDLE/ \
+  saiaike@life.au.edu:/home/saiaike/apps/ause-discover/project-content/
+```
+
+The destination must contain `project-content-manifest.json`, `logos/`, and
+`projects/` directly. Run the import commands from
+`/home/saiaike/apps/ause-discover` on the VM.
 
 Dry-run:
 
 ```sh
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps \
-  --volume /srv/ause-discovery/project-content:/bundle:ro \
+  --volume "$PWD/project-content:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
   --manifest /bundle/project-content-manifest.json \
@@ -162,9 +231,9 @@ docker compose -p ause-discovery --env-file .env.production \
 Apply:
 
 ```sh
-docker compose -p ause-discovery --env-file .env.production \
+docker compose -p ause-discovery --env-file .env \
   run --rm --no-deps \
-  --volume /srv/ause-discovery/project-content:/bundle:ro \
+  --volume "$PWD/project-content:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
   --manifest /bundle/project-content-manifest.json \
@@ -175,7 +244,42 @@ docker compose -p ause-discovery --env-file .env.production \
 
 With `AUSE_ARTIFACT_STORAGE_BACKEND=b2`, Project File and Logo bytes go to B2
 and their associations go to the VM PostgreSQL database. The mounted bundle is
-only the import source and can be removed after a successful import.
+only the import source.
+
+The verified 2026-09-13 dry-run reported `205` Projects, `68` Logo uploads,
+`332` Project File uploads, `15` declared Repository Links, and `13` replaced
+link sets. Apply reported `1965.9 MiB` planned bytes.
+
+Wait for all `205` progress lines, the final `mode: apply` summary, no failed
+Projects, and a zero exit status. Before deleting the source, rerun the dry-run
+and confirm that matching byte-backed items and link sets are unchanged. Then
+remove the staging copy without touching B2 or production volumes:
+
+```sh
+realpath /home/saiaike/apps/ause-discover/project-content
+du -sh /home/saiaike/apps/ause-discover/project-content
+rm -rf /home/saiaike/apps/ause-discover/project-content
+```
+
+The local `resources/REAL_IMPORT_BUNDLE/` remains the development source of
+truth.
+
+### Common VM command mistakes
+
+- `-p ause-local-test --env-file .env.local-test` is the local command. The VM
+  uses `-p ause-discovery --env-file .env`.
+- `$PWD/resources/REAL_IMPORT_BUNDLE` is the local bundle path. The current VM
+  mount is `$PWD/project-content`.
+- A missing bind-mount source can still create an empty directory, after which
+  the container reports `open /bundle/project-content-manifest.json: no such
+  file or directory`.
+- An accidental VM command using `-p ause-local-test` can leave an isolated
+  network and named volumes. Remove only that accidental project with:
+
+```sh
+docker compose -p ause-local-test --env-file .env \
+  down -v --remove-orphans
+```
 
 ## Quick copy: extracted logos on the local stack
 
@@ -216,16 +320,22 @@ docker compose -p ause-local-test --env-file .env.local-test \
 
 The complete fresh-data sequence is:
 
-1. Apply database migrations.
-2. Synchronize catalogs.
-3. Create the administrator.
-4. Start the complete stack.
-5. Import and commit `ause-discovery-projects-metadata-import.csv` through the administrator Imports
-   page.
-6. Run a Project Content or demonstration dry-run.
-7. Apply the same content command.
-8. Check public Project pages, logos, PDF views, and downloads.
-9. Rerun the same command and confirm that matching content is skipped.
+1. Empty B2 only when PostgreSQL and local volumes will also be reset.
+2. Remove the disposable Compose stack and volumes.
+3. Build or pull the selected images.
+4. Start PostgreSQL and Meilisearch.
+5. Apply and inspect database migrations.
+6. Validate and synchronize catalogs.
+7. Create the administrator on a fresh database.
+8. Start the complete stack and verify API readiness.
+9. Confirm that the live API reports `AUSE_ARTIFACT_STORAGE_BACKEND=b2`.
+10. Import and commit `ause-discovery-projects-metadata-import.csv` through the
+    administrator Imports page.
+11. Run the Project Content dry-run and compare its counts with the bundle.
+12. Apply the same Project Content command.
+13. Rerun the dry-run and confirm that matching content is skipped.
+14. Check public Project pages, Logos, PDF views, and downloads.
+15. Remove the VM staging bundle only after verification.
 
 The metadata import creates Projects and stores each source `import_key` in
 Project metadata. The content manifest then uses that key to locate the correct
