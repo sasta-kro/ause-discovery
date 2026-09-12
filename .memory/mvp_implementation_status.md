@@ -184,7 +184,7 @@ Status ledger:
 - **Partially implemented:** the select-all-valid-rows action is implemented (2026-09-08) as one persisted row update that walks every preview page and selects only rows whose server state is valid. An acknowledge-all-warnings action remains open; error rows still require correction and ambiguous duplicates still require explicit decisions.
 - **Open:** import preview rows wrap text permanently; browser zoom does not restore layout. Long values need bounded truncation or normal wrapping inside a horizontally scrollable table region.
 - **Implemented:** the SP metadata extractor moved to its own repository, `tools/ausesp-data-extractor` (remote `git@github.com:sasta-kro/ausesp-data-extractor.git`, nested and gitignored by the main repository). The main repository consumes generated deliverables rather than the extraction pipeline.
-- **Implemented:** the extractor reached agent-reviewed corpus quality. `reviewed-import.csv`, built from ground-truth records, is the metadata source of truth; the superseded regex pipeline output is not used.
+- **Implemented:** the extractor reached agent-reviewed corpus quality. `ause-discovery-projects-metadata-import.csv`, built from ground-truth records, is the metadata source of truth; the superseded regex pipeline output is not used.
 
 ## Corpus extraction status (2026-09-09, full corpus)
 

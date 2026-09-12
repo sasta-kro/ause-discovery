@@ -9,7 +9,7 @@ This note covers both bulk Project Content paths:
 
 Both commands attach content to Projects that already exist in PostgreSQL.
 Project metadata must therefore be imported first from
-`tools/ausesp-data-extractor/output/reviewed-import.csv` through the
+`tools/ausesp-data-extractor/output/ause-discovery-projects-metadata-import.csv` through the
 administrator Imports page.
 
 ## Quick copy: mock Project Files on the local stack
@@ -75,8 +75,9 @@ mock seeder.
 
 The current source material is not yet an import-ready bundle. At present:
 
-- `tools/ausesp-data-extractor/output/enrichment/logo-manifest.json` contains
-  Logo entries but no Project Files.
+- a logo-only Project Content manifest can be generated on demand (see the
+  "Building the logo manifest" section below); it carries Logo entries but
+  no Project Files yet.
 - `resources/all-sp-projects/` contains the raw Project material. Some reports
   and posters are inside ZIP containers, and no combined
   `project-content.json` maps those files to Project import keys and Project
@@ -95,7 +96,7 @@ project-content/
 ```
 
 The manifest must use the same `sp-<identifier>` import keys as
-`reviewed-import.csv`, classify every file with a supported Project File type,
+`ause-discovery-projects-metadata-import.csv`, classify every file with a supported Project File type,
 and reference extracted files rather than a ZIP that merely contains a report
 or poster. The manifest can contain a Logo, Project Files, or both for each
 Project.
@@ -174,16 +175,18 @@ only the import source and can be removed after a successful import.
 
 ## Quick copy: extracted logos on the local stack
 
-The extractor currently provides a logo-only manifest beside its `logos/`
-directory. Run from the main repository root after Project metadata import:
+A logo-only Project Content manifest is generated on demand (see the next
+section) into `resources/REAL_IMPORT_BUNDLE/`, beside a copy of the
+extractor's `output/logos/` directory. Run from the main repository root
+after Project metadata import:
 
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/tools/ausesp-data-extractor/output/enrichment:/bundle:ro" \
+  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/logo-manifest.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username Test1234567890 \
   --workers 4
 ```
@@ -193,10 +196,10 @@ Apply after the complete bundle plans successfully:
 ```sh
 docker compose -p ause-local-test --env-file .env.local-test \
   run --rm --no-deps \
-  --volume "$PWD/tools/ausesp-data-extractor/output/enrichment:/bundle:ro" \
+  --volume "$PWD/resources/REAL_IMPORT_BUNDLE:/bundle:ro" \
   --entrypoint /usr/local/bin/ausectl \
   api project-content import-manifest \
-  --manifest /bundle/logo-manifest.json \
+  --manifest /bundle/project-content-manifest.json \
   --actor-username Test1234567890 \
   --workers 4 \
   --apply
@@ -210,7 +213,7 @@ The complete fresh-data sequence is:
 2. Synchronize catalogs.
 3. Create the administrator.
 4. Start the complete stack.
-5. Import and commit `reviewed-import.csv` through the administrator Imports
+5. Import and commit `ause-discovery-projects-metadata-import.csv` through the administrator Imports
    page.
 6. Run a Project Content or demonstration dry-run.
 7. Apply the same content command.
@@ -376,12 +379,11 @@ separate resume file.
 
 ## Building the logo manifest from extractor output
 
-The extractor's `steps/apply_sp_pass.py` regenerates
-`output/enrichment/logo-manifest.json` on every CSV rebuild, filtered to the
-projects that actually appear in `reviewed-import.csv`. Prefer that script;
-the jq below is the manual equivalent (membership filter instead of any
-hardcoded project exclusion, so it can never reference a Project without a
-database row):
+The logo-only manifest is generated on demand from the extractor's combined
+record and the metadata CSV, filtered to the projects that actually appear
+in the CSV (membership filter instead of any hardcoded project exclusion, so
+it can never reference a Project without a database row). Run from the
+extractor repository root:
 
 ```sh
 jq -R -s 'split("\n") | map(select(startswith("sp-"))) | .[0:-1] as $keys
@@ -392,18 +394,24 @@ jq -R -s 'split("\n") | map(select(startswith("sp-"))) | .[0:-1] as $keys
       | {project_import_key: ("sp-" + .key),
          logo: {file_path: .value.logo.output},
          files: []}]}' \
-  <(cut -d, -f1 output/reviewed-import.csv) output/enrichment/manifest.json \
-  > output/enrichment/logo-manifest.json
+  <(cut -d, -f1 output/ause-discovery-projects-metadata-import.csv) \
+  output/extraction-evidence/manifest.json \
+  > ../../resources/REAL_IMPORT_BUNDLE/project-content-manifest.json
 ```
+
+Copy `output/logos/` into `resources/REAL_IMPORT_BUNDLE/logos/` so the
+manifest's relative paths resolve. A planned bundle-builder script will
+assemble the full bundle (logos, repository links, and extracted Project
+Files with types and display names) in one command; until then the jq plus
+the copy is the manual path.
 
 Historical note: an earlier revision hardcoded `select(.key != "2021")`
 because the slide-only project sp-2021 had metadata missing at the time. The
 2026-09-12 SP1/SP2 pass gave all three slide-only projects full metadata, so
 that exclusion is gone and sp-2021 now carries both metadata and its Logo.
 
-The generated manifest belongs beside the referenced `logos/` directory. Data
-corrections belong in the extractor ground-truth files and generation pipeline,
-rather than in a generated manifest.
+Data corrections belong in the extractor ground-truth files and generation
+pipeline, rather than in a generated manifest.
 
 ## Repository links in the manifest
 
@@ -437,8 +445,8 @@ references never reach the manifest, and projects missing from the metadata
 CSV are filtered out the same way as the logo export):
 
 ```sh
-jq -n --rawfile csv output/reviewed-import.csv \
-  --slurpfile m output/enrichment/manifest.json '
+jq -n --rawfile csv output/ause-discovery-projects-metadata-import.csv \
+  --slurpfile m output/extraction-evidence/manifest.json '
   ($csv | split("\n") | map(select(length > 0 and (startswith("import_key") | not))) | map(split(",")[0])) as $keys
   | [$m[0] | to_entries[]
      | select((("sp-" + .key)) as $k | ($keys | index($k)))
@@ -452,7 +460,7 @@ jq -n --rawfile csv output/reviewed-import.csv \
                             else "unverified" end),
              checked_at: (.liveness.checked_at // "")}]}]
   | {version: 1, projects: .}
-' > output/enrichment/link-manifest.json
+' > ../../resources/REAL_IMPORT_BUNDLE/project-content-manifest.json
 ```
 
 Verified 2026-09-12: the export produced exactly 13 Project entries and 15

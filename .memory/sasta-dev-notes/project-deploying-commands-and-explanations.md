@@ -95,7 +95,7 @@ After startup, import Project metadata through the administrator Imports page:
 
 ```text
 http://localhost:8090/ause-discovery/admin/imports
-tools/ausesp-data-extractor/output/reviewed-import.csv
+tools/ausesp-data-extractor/output/ause-discovery-projects-metadata-import.csv
 ```
 
 Project Logo and Project File commands are in
@@ -477,7 +477,7 @@ For the current development source-of-truth workflow, a fully clean reset is:
 2. Empty the selected B2 bucket through the Backblaze console.
 3. Rebuild or pull the desired images.
 4. Migrate and synchronize catalogs.
-5. Import `reviewed-import.csv` through the administrator Imports page.
+5. Import `ause-discovery-projects-metadata-import.csv` through the administrator Imports page.
 6. Dry-run and apply the Project Content bundle.
 
 If PostgreSQL is reset without emptying B2, the existing objects become
