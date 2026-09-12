@@ -274,15 +274,19 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work p
 }
 
 // dispatchProjects runs a fixed worker pool over Project groups. The single
-// coordinator goroutine owns assignment: it primes the pool, replaces each
-// completed assignment with the next group, and never assigns another group
-// after a fatal outcome reaches it or the context is canceled, so no new
-// Project can start behind a fatal failure. Workers process one Project at
-// a time through process and deliver outcomes through a channel buffered
-// for every group, so they can always deliver and exit. The coordinator
-// assigns completion positions and folds results through apply, which
-// therefore never runs concurrently. It returns the first failure text and
-// whether the run stopped early.
+// coordinator goroutine owns assignment: it primes the pool and replaces
+// each completed assignment with the next group, re-checking run-context
+// cancellation before every assignment, so neither a pre-canceled context
+// nor a parent canceled mid-run can start further Projects, and no
+// assignment follows a fatal outcome reaching the coordinator. Cancellation
+// and fatal outcomes stop assignment but keep collecting outcomes from
+// already-running Projects, which observe the canceled context per file.
+// Workers process one Project at a time through process and deliver
+// outcomes through a channel buffered for every group, so they can always
+// deliver and exit without leaking. The coordinator assigns completion
+// positions and folds results through apply, which therefore never runs
+// concurrently. It returns the first failure text and whether the run
+// stopped early.
 func dispatchProjects(ctx context.Context, groups []projectWork, workers int, process func(context.Context, projectWork) projectOutcome, apply func(projectOutcome)) (string, bool) {
 	if len(groups) == 0 {
 		return "", false
@@ -320,11 +324,19 @@ func dispatchProjects(ctx context.Context, groups []projectWork, workers int, pr
 	coordinatorDone := make(chan struct{})
 	go func() {
 		defer close(coordinatorDone)
-		for nextGroup < len(groups) && nextGroup < workers {
+		// Prime the pool only while the run context is live, and replace
+		// each completed assignment only after re-checking cancellation,
+		// so neither a pre-canceled context nor a parent canceled mid-run
+		// can start further Projects. Fatal outcomes keep their separate
+		// guarantee: no assignment follows the fatal outcome itself.
+		for nextGroup < len(groups) && nextGroup < workers && runContext.Err() == nil {
 			jobs <- groups[nextGroup]
 			nextGroup++
 		}
-		if nextGroup == len(groups) {
+		if nextGroup == len(groups) || runContext.Err() != nil {
+			if runContext.Err() != nil {
+				canceled = true
+			}
 			stopAssigning()
 		}
 		for outcome := range outcomes {
@@ -338,6 +350,11 @@ func dispatchProjects(ctx context.Context, groups []projectWork, workers int, pr
 			if outcome.Fatal {
 				canceled = true
 				cancel()
+				stopAssigning()
+				continue
+			}
+			if runContext.Err() != nil {
+				canceled = true
 				stopAssigning()
 				continue
 			}

@@ -142,6 +142,52 @@ func TestDispatchFatalOutcomeStopsFurtherAssignments(t *testing.T) {
 	}
 }
 
+func TestDispatchParentCancellationStopsReplacementAssignment(t *testing.T) {
+	groups := testProjectGroups(12)
+	parentContext, cancelParent := context.WithCancel(context.Background())
+	defer cancelParent()
+	runs := 0
+	// With one worker the interleaving is exact: the single primed Project
+	// cancels the parent context and completes normally, so the
+	// coordinator must stop before issuing the first replacement.
+	process := func(ctx context.Context, work projectWork) projectOutcome {
+		runs++
+		cancelParent()
+		return projectOutcome{Progress: ProjectProgress{ProjectID: work.ID}}
+	}
+	completed := 0
+	_, canceled := dispatchProjects(parentContext, groups, 1, process, func(outcome projectOutcome) {
+		completed++
+	})
+	if !canceled {
+		t.Fatal("parent cancellation did not mark the run canceled")
+	}
+	if runs != 1 || completed != 1 {
+		t.Fatalf("dispatch ran %d and completed %d Projects, expected exactly the 1 primed assignment", runs, completed)
+	}
+}
+
+func TestDispatchPreflightCanceledContextRunsNothing(t *testing.T) {
+	groups := testProjectGroups(6)
+	parentContext, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+	runs := 0
+	process := func(ctx context.Context, work projectWork) projectOutcome {
+		runs++
+		return projectOutcome{Progress: ProjectProgress{ProjectID: work.ID}}
+	}
+	completed := 0
+	_, canceled := dispatchProjects(parentContext, groups, 4, process, func(outcome projectOutcome) {
+		completed++
+	})
+	if !canceled {
+		t.Fatal("pre-canceled context did not mark the run canceled")
+	}
+	if runs != 0 || completed != 0 {
+		t.Fatalf("dispatch ran %d and completed %d Projects on a pre-canceled context", runs, completed)
+	}
+}
+
 func TestDispatchContextCancellationStopsWithoutLeakingGoroutines(t *testing.T) {
 	before := runtime.NumGoroutine()
 	contextContext, cancel := context.WithCancel(context.Background())
