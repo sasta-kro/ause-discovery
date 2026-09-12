@@ -192,28 +192,37 @@ func (config Config) EnsureStorageDirectories() error {
 		if err := os.MkdirAll(directory, 0750); err != nil {
 			return fmt.Errorf("create required storage directory %q: %w", directory, err)
 		}
-	}
-	return config.CheckStorageDirectories()
-}
-
-func (config Config) CheckStorageDirectories() error {
-	directories := []string{config.ImportTemporaryRoot}
-	if config.ArtifactStorageDirectoriesActive() {
-		directories = append(directories, config.ArtifactRoot)
-	}
-	for _, directory := range directories {
 		probe, err := os.CreateTemp(directory, ".write-check-")
 		if err != nil {
 			return fmt.Errorf("verify required storage directory %q: %w", directory, err)
 		}
-
 		probeName := probe.Name()
-		if err := probe.Close(); err != nil {
-			return fmt.Errorf("close storage probe %q: %w", probeName, err)
+		closeErr := probe.Close()
+		if closeErr == nil {
+			closeErr = os.Remove(probeName)
 		}
-		if err := os.Remove(probeName); err != nil {
-			return fmt.Errorf("remove storage probe %q: %w", probeName, err)
+		if closeErr != nil {
+			return fmt.Errorf("verify required storage directory %q: %w", directory, closeErr)
 		}
+	}
+	return nil
+}
+
+// CheckImportTemporaryDirectory probes only the metadata-import temporary
+// directory. Artifact storage readiness belongs to the configured storage
+// provider, whose own check covers the local root or the remote bucket.
+func (config Config) CheckImportTemporaryDirectory() error {
+	probe, err := os.CreateTemp(config.ImportTemporaryRoot, ".write-check-")
+	if err != nil {
+		return fmt.Errorf("verify required storage directory %q: %w", config.ImportTemporaryRoot, err)
+	}
+
+	probeName := probe.Name()
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close storage probe %q: %w", probeName, err)
+	}
+	if err := os.Remove(probeName); err != nil {
+		return fmt.Errorf("remove storage probe %q: %w", probeName, err)
 	}
 
 	return nil

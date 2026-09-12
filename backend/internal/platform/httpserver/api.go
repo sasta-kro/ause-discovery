@@ -68,7 +68,7 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config, artifactStor
 		Projects:  projects.Service{Pool: pool},
 		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
 		Config:    configuration,
-		Readiness: func(ctx context.Context) error { return CheckReadiness(ctx, pool, configuration) },
+		Readiness: func(ctx context.Context) error { return CheckReadiness(ctx, pool, configuration, artifactStorage) },
 	}
 	router := chi.NewRouter()
 	router.Use(requestID, securityHeaders)

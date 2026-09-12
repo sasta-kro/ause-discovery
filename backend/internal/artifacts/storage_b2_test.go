@@ -22,6 +22,8 @@ type s3Stub struct {
 	objects       map[string][]byte
 	forcedStatus  int
 	rangeRequests []string
+	listRequests  []string
+	listDelay     chan struct{}
 }
 
 func newS3Stub() *s3Stub {
@@ -29,6 +31,10 @@ func newS3Stub() *s3Stub {
 }
 
 func (stub *s3Stub) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	if request.URL.Query().Get("list-type") == "2" {
+		stub.serveList(writer, request)
+		return
+	}
 	stub.mutex.Lock()
 	defer stub.mutex.Unlock()
 	if stub.forcedStatus != 0 {
@@ -86,10 +92,49 @@ func (stub *s3Stub) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 	}
 }
 
+// serveList answers one S3 ListObjectsV2 request. The delayed variant holds
+// the response until released so tests can exercise leaders, waiters, and
+// cancellation deterministically.
+func (stub *s3Stub) serveList(writer http.ResponseWriter, request *http.Request) {
+	stub.mutex.Lock()
+	if stub.listDelay != nil {
+		stub.mutex.Unlock()
+		select {
+		case <-stub.listDelay:
+		case <-request.Context().Done():
+			return
+		}
+		stub.mutex.Lock()
+	}
+	stub.listRequests = append(stub.listRequests, request.URL.RawQuery)
+	forced := stub.forcedStatus
+	stub.mutex.Unlock()
+	if forced != 0 {
+		writer.WriteHeader(forced)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/xml")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>test-bucket</Name><IsTruncated>false</IsTruncated><MaxKeys>1</MaxKeys><Prefix>v1/</Prefix></ListBucketResult>`))
+}
+
 func (stub *s3Stub) forceStatus(status int) {
 	stub.mutex.Lock()
 	defer stub.mutex.Unlock()
 	stub.forcedStatus = status
+}
+
+func (stub *s3Stub) recordedListRequests() []string {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	return append([]string(nil), stub.listRequests...)
+}
+
+func (stub *s3Stub) delayLists(release chan struct{}) {
+	stub.mutex.Lock()
+	defer stub.mutex.Unlock()
+	stub.listDelay = release
 }
 
 func (stub *s3Stub) storedContent(key string) ([]byte, bool) {

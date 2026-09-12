@@ -77,6 +77,8 @@ func (backend *memoryBackend) RemoveNew(ctx context.Context, storageKey string) 
 	return nil
 }
 
+func (backend *memoryBackend) CheckReady(ctx context.Context) error { return nil }
+
 type nopClosingReader struct{ reader *bytes.Reader }
 
 func (reader nopClosingReader) Read(buffer []byte) (int, error) { return reader.reader.Read(buffer) }

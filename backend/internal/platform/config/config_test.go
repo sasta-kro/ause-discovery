@@ -6,23 +6,50 @@ import (
 	"testing"
 )
 
-func TestStorageReadinessDoesNotRecreateMissingDirectories(t *testing.T) {
+func TestEnsureStorageDirectoriesDoesNotRecreateMissingDirectories(t *testing.T) {
 	root := t.TempDir()
 	configuration := Config{ArtifactRoot: filepath.Join(root, "artifacts"), ImportTemporaryRoot: filepath.Join(root, "imports")}
 	if err := configuration.EnsureStorageDirectories(); err != nil {
 		t.Fatal(err)
 	}
-	if err := configuration.CheckStorageDirectories(); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.Remove(configuration.ArtifactRoot); err != nil {
 		t.Fatal(err)
 	}
-	if err := configuration.CheckStorageDirectories(); err == nil {
-		t.Fatal("missing storage reported ready")
+	// Startup initialization may create required directories; only the
+	// readiness probes must never recreate them.
+	if err := configuration.EnsureStorageDirectories(); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(configuration.ArtifactRoot); !os.IsNotExist(err) {
-		t.Fatal("readiness recreated missing storage")
+	if _, err := os.Stat(configuration.ArtifactRoot); err != nil {
+		t.Fatalf("startup did not recreate missing storage: %v", err)
+	}
+}
+
+func TestImportTemporaryDirectoryProbeStaysIndependentOfArtifactStorage(t *testing.T) {
+	root := t.TempDir()
+	configuration := Config{ArtifactRoot: filepath.Join(root, "artifacts"), ImportTemporaryRoot: filepath.Join(root, "imports")}
+	if err := configuration.EnsureStorageDirectories(); err != nil {
+		t.Fatal(err)
+	}
+	if err := configuration.CheckImportTemporaryDirectory(); err != nil {
+		t.Fatal(err)
+	}
+	// The artifact root is provider-owned now: removing it must not fail the
+	// configuration-level probe.
+	if err := os.Remove(configuration.ArtifactRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := configuration.CheckImportTemporaryDirectory(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(configuration.ImportTemporaryRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := configuration.CheckImportTemporaryDirectory(); err == nil {
+		t.Fatal("missing import directory reported ready")
+	}
+	if _, err := os.Stat(configuration.ImportTemporaryRoot); !os.IsNotExist(err) {
+		t.Fatal("probe recreated missing import directory")
 	}
 }
 

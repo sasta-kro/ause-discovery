@@ -31,7 +31,10 @@ var (
 // Backend stores Artifact bytes under opaque storage keys. Implementations
 // must be safe for concurrent use. Put generates a fresh key; PutAt writes
 // under an explicit key, which migration uses to keep a record's key stable
-// across backends.
+// across backends. CheckReady reports whether the provider is sufficiently
+// reachable for the readiness boundary: it must honor cancellation and
+// deadlines, return an error matching ErrStorageUnavailable on any failure,
+// and never leave persisted content behind.
 type Backend interface {
 	Name() string
 	Put(ctx context.Context, reader io.Reader, expectedSize int64) (StoredContent, error)
@@ -39,6 +42,7 @@ type Backend interface {
 	Open(ctx context.Context, storageKey string) (io.ReadSeekCloser, int64, error)
 	Exists(ctx context.Context, storageKey string) bool
 	RemoveNew(ctx context.Context, storageKey string) error
+	CheckReady(ctx context.Context) error
 }
 
 // StorageOptions carries every configured backend's construction values.
@@ -89,6 +93,17 @@ func NewStorageSet(options StorageOptions) (StorageSet, error) {
 
 func (set StorageSet) Default() Backend {
 	return set.Backends[set.DefaultName]
+}
+
+// CheckReady probes only the configured default provider. A secondary
+// provider registered for migration or historical reads must not make the
+// application unready while it is not the active write provider.
+func (set StorageSet) CheckReady(ctx context.Context) error {
+	provider, err := set.Lookup(set.DefaultName)
+	if err != nil {
+		return fmt.Errorf("%w: readiness default provider: %v", ErrStorageUnavailable, err)
+	}
+	return provider.CheckReady(ctx)
 }
 
 func (set StorageSet) Lookup(name string) (Backend, error) {
@@ -238,6 +253,40 @@ func (storage LocalStorage) RemoveNew(ctx context.Context, storageKey string) er
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	return nil
+}
+
+// CheckReady proves the local Artifact root exists as a usable directory by
+// creating, closing, and removing one bounded empty probe file directly
+// inside it. A root that disappeared after startup fails readiness; the
+// check never recreates the root and never requires the write path's
+// on-demand temporary directory.
+func (storage LocalStorage) CheckReady(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: local readiness canceled before probing: %v", ErrStorageUnavailable, err)
+	}
+	if !filepath.IsAbs(storage.Root) {
+		return fmt.Errorf("%w: local readiness requires an absolute root", ErrStorageUnavailable)
+	}
+	root, err := os.Stat(storage.Root)
+	if err != nil {
+		return fmt.Errorf("%w: local readiness root: %v", ErrStorageUnavailable, err)
+	}
+	if !root.IsDir() {
+		return fmt.Errorf("%w: local readiness root is not a directory", ErrStorageUnavailable)
+	}
+	probe, err := os.CreateTemp(storage.Root, ".ready-probe-")
+	if err != nil {
+		return fmt.Errorf("%w: local readiness probe create: %v", ErrStorageUnavailable, err)
+	}
+	probeName := probe.Name()
+	if err := probe.Close(); err != nil {
+		_ = os.Remove(probeName)
+		return fmt.Errorf("%w: local readiness probe close: %v", ErrStorageUnavailable, err)
+	}
+	if err := os.Remove(probeName); err != nil {
+		return fmt.Errorf("%w: local readiness probe remove: %v", ErrStorageUnavailable, err)
 	}
 	return nil
 }

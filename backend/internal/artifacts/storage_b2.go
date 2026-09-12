@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
@@ -20,11 +22,14 @@ import (
 
 // B2Storage stores Artifact bytes in a private Backblaze B2 bucket through
 // its S3-compatible API (AD-011). Visitors never contact the bucket: the
-// API proxies every read.
+// API proxies every read. The shared readiness probe coalesces and caches
+// bucket checks so unauthenticated readiness traffic cannot open one B2
+// request per call.
 type B2Storage struct {
-	Bucket   string
-	Client   *s3.Client
-	MaxBytes int64
+	Bucket    string
+	Client    *s3.Client
+	MaxBytes  int64
+	readiness *readinessProbe
 }
 
 func NewB2Storage(endpoint, bucket, keyID, applicationKey string, maxBytes int64) (*B2Storage, error) {
@@ -46,7 +51,9 @@ func NewB2Storage(endpoint, bucket, keyID, applicationKey string, maxBytes int64
 		options.BaseEndpoint = aws.String(endpoint)
 		options.UsePathStyle = true
 	})
-	return &B2Storage{Bucket: bucket, Client: client, MaxBytes: maxBytes}, nil
+	storage := &B2Storage{Bucket: bucket, Client: client, MaxBytes: maxBytes}
+	storage.readiness = newReadinessProbe(storage.listReady)
+	return storage, nil
 }
 
 // b2RegionFromEndpoint derives the SigV4 signing region from a B2 S3
@@ -171,6 +178,144 @@ func (storage B2Storage) Exists(ctx context.Context, storageKey string) bool {
 		Key:    aws.String(storageKey),
 	})
 	return err == nil
+}
+
+// CheckReady proves the configured endpoint, credentials, bucket access, and
+// bucket-scoped list capability with one read-only ListObjectsV2 request
+// bounded to the application-owned v1/ key namespace. An empty bucket is
+// healthy; response contents are irrelevant. The probe is coalesced and
+// briefly cached by the shared readiness controller.
+func (storage *B2Storage) CheckReady(ctx context.Context) error {
+	probe := storage.readiness
+	if probe == nil {
+		// A literal without the constructor gets a fresh controller: still
+		// correct, only without cross-call caching.
+		probe = newReadinessProbe(nil)
+	}
+	return probe.check(ctx)
+}
+
+// listReady issues the single readiness list request against the bucket.
+func (storage B2Storage) listReady(ctx context.Context) error {
+	_, err := storage.Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket:  aws.String(storage.Bucket),
+		MaxKeys: aws.Int32(1),
+		Prefix:  aws.String("v1/"),
+	})
+	if err != nil {
+		return classifyB2ReadinessError(err)
+	}
+	return nil
+}
+
+// classifyB2ReadinessError maps every readiness request failure to the
+// storage-unavailable sentinel. Unlike content reads, a missing bucket or
+// missing-object response is an availability failure here, never a healthy
+// or content-absent signal.
+func classifyB2ReadinessError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var responseError *awshttp.ResponseError
+	if errors.As(err, &responseError) {
+		var apiError smithy.APIError
+		code := ""
+		if errors.As(err, &apiError) {
+			code = apiError.ErrorCode()
+		}
+		return fmt.Errorf("%w: b2 readiness: %s: status %d", ErrStorageUnavailable, code, responseError.HTTPStatusCode())
+	}
+	return fmt.Errorf("%w: b2 readiness: %v", ErrStorageUnavailable, err)
+}
+
+// readinessProbe bounds readiness traffic to the remote provider: at most
+// one request in flight for the sharing instance, concurrent callers reuse
+// the in-flight result, and results are cached briefly. Successful results
+// cache for readinessSuccessTTL and failures for readinessFailureTTL so B2
+// recovery is observed promptly. The controller holds no credentials,
+// object names, or response bodies.
+type readinessProbe struct {
+	mu         sync.Mutex
+	leader     *readinessCall
+	cachedErr  error
+	cachedAt   time.Time
+	now        func() time.Time
+	successTTL time.Duration
+	failureTTL time.Duration
+	request    func(context.Context) error
+}
+
+type readinessCall struct {
+	done chan struct{}
+	err  error
+}
+
+const (
+	readinessSuccessTTL = 30 * time.Second
+	readinessFailureTTL = 5 * time.Second
+)
+
+// newReadinessProbe builds a controller around one request function. A nil
+// request reports unavailable so an unwired controller can never look
+// healthy.
+func newReadinessProbe(request func(context.Context) error) *readinessProbe {
+	return &readinessProbe{
+		now:        time.Now,
+		successTTL: readinessSuccessTTL,
+		failureTTL: readinessFailureTTL,
+		request:    request,
+	}
+}
+
+// check returns the current provider verdict, starting or joining at most
+// one underlying request. Waiters honor their own context cancellation
+// without disturbing the leader.
+func (probe *readinessProbe) check(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%w: readiness canceled: %v", ErrStorageUnavailable, err)
+	}
+	probe.mu.Lock()
+	if !probe.cachedAt.IsZero() {
+		ttl := probe.failureTTL
+		if probe.cachedErr == nil {
+			ttl = probe.successTTL
+		}
+		if probe.now().Sub(probe.cachedAt) < ttl {
+			cached := probe.cachedErr
+			probe.mu.Unlock()
+			return cached
+		}
+	}
+	if call := probe.leader; call != nil {
+		probe.mu.Unlock()
+		select {
+		case <-call.done:
+			return call.err
+		case <-ctx.Done():
+			return fmt.Errorf("%w: readiness waiter canceled: %v", ErrStorageUnavailable, ctx.Err())
+		}
+	}
+	call := &readinessCall{done: make(chan struct{})}
+	probe.leader = call
+	probe.mu.Unlock()
+
+	// The leader's own context bounds the underlying request; the caller of
+	// CheckReady supplies the readiness deadline.
+	err := error(nil)
+	if probe.request == nil {
+		err = fmt.Errorf("%w: readiness request is not wired", ErrStorageUnavailable)
+	} else {
+		err = probe.request(ctx)
+	}
+
+	probe.mu.Lock()
+	call.err = err
+	probe.leader = nil
+	probe.cachedErr = err
+	probe.cachedAt = probe.now()
+	probe.mu.Unlock()
+	close(call.done)
+	return err
 }
 
 func (storage B2Storage) RemoveNew(ctx context.Context, storageKey string) error {

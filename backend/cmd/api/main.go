@@ -94,9 +94,12 @@ func runAPI(configuration config.Config, logger *slog.Logger) error {
 	go newImportCleaner(databasePool, configuration, logger).Run(applicationContext)
 
 	mux := http.NewServeMux()
-	httpserver.HealthHandler{CheckReadiness: func(ctx context.Context) error {
-		return httpserver.CheckReadiness(ctx, databasePool, configuration)
-	}}.Register(mux, configuration.PublicBasePath)
+	// The same storage set instance serves both readiness endpoint forms so
+	// provider-level request coalescing and caching are shared.
+	checkReadiness := func(ctx context.Context) error {
+		return httpserver.CheckReadiness(ctx, databasePool, configuration, artifactStorage)
+	}
+	httpserver.HealthHandler{CheckReadiness: checkReadiness}.Register(mux, configuration.PublicBasePath)
 	apiPath := configuration.PublicBasePath + "api/v1/"
 	mux.Handle(apiPath, httpserver.NewAPIHandler(databasePool, configuration, artifactStorage))
 

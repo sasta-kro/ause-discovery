@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -40,11 +41,19 @@ func (handler HealthHandler) ready(responseWriter http.ResponseWriter, request *
 	writeHealthResponse(responseWriter, http.StatusOK, "ready")
 }
 
-func CheckReadiness(ctx context.Context, pool *pgxpool.Pool, configuration config.Config) error {
+// CheckReadiness composes the readiness boundary: the supported PostgreSQL
+// schema, the metadata-import temporary directory, and the configured
+// default storage provider. The storage set must be the same shared
+// instance the API handler uses so provider-level request coalescing and
+// caching cover every readiness caller.
+func CheckReadiness(ctx context.Context, pool *pgxpool.Pool, configuration config.Config, storage artifacts.StorageSet) error {
 	if err := database.CheckSchema(ctx, pool); err != nil {
 		return err
 	}
-	return configuration.CheckStorageDirectories()
+	if err := configuration.CheckImportTemporaryDirectory(); err != nil {
+		return err
+	}
+	return storage.CheckReady(ctx)
 }
 
 func (controller *Controller) GetLiveHealth(responseWriter http.ResponseWriter, _ *http.Request) {
