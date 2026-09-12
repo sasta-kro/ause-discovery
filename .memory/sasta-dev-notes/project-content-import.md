@@ -410,7 +410,7 @@ because the slide-only project sp-2021 had metadata missing at the time. The
 2026-09-12 SP1/SP2 pass gave all three slide-only projects full metadata, so
 that exclusion is gone and sp-2021 now carries both metadata and its Logo.
 
-Data corrections belong in the extractor ground-truth files and generation
+Data corrections belong in the extractor dataset records and generation
 pipeline, rather than in a generated manifest.
 
 ## Repository links in the manifest
