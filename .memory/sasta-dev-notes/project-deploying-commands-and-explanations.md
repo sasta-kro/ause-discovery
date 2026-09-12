@@ -16,13 +16,22 @@ this block. Run the remaining commands from the repository root.
 ```sh
 cp .env.example .env.local-test
 chmod 600 .env.local-test
+```
 
+Deleting:
+```
 docker compose -p ause-local-test --env-file .env.local-test \
   down -v --remove-orphans
+```
 
+Testing config:
+```
 docker compose -p ause-local-test --env-file .env.local-test \
   config --quiet
+```
 
+Deploying:
+```
 docker compose -p ause-local-test --env-file .env.local-test \
   build api web
 
