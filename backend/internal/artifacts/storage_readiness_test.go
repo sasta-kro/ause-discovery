@@ -72,6 +72,31 @@ func TestLocalStorageCheckReadyRejectsUnusableRoots(t *testing.T) {
 	}
 }
 
+func TestLocalStorageCheckReadyRejectsSymlinkedRoot(t *testing.T) {
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(target, "sentinel"), []byte("untouched"), 0o600); err != nil {
+		t.Fatalf("write sentinel: %v", err)
+	}
+	parent := t.TempDir()
+	linked := filepath.Join(parent, "linked-root")
+	if err := os.Symlink(target, linked); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+	storage := LocalStorage{Root: linked, MaxBytes: 1024}
+	if err := storage.CheckReady(context.Background()); !errors.Is(err, ErrStorageUnavailable) {
+		t.Fatalf("symlinked root returned %v, expected unavailable", err)
+	}
+	// The real target directory stays untouched: no probe file was created
+	// through the link.
+	entries, readErr := os.ReadDir(target)
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if len(entries) != 1 || entries[0].Name() != "sentinel" {
+		t.Fatalf("symlinked probe disturbed the target directory: %v", entries)
+	}
+}
+
 func TestLocalStorageCheckReadyHonorsCanceledContext(t *testing.T) {
 	root := t.TempDir()
 	storage := LocalStorage{Root: root, MaxBytes: 1024}
