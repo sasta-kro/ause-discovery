@@ -310,9 +310,15 @@ separate resume file.
 
 From the extractor repository root:
 
+Slide-only Projects without an abstract do not enter the reviewed metadata
+CSV and therefore do not exist in PostgreSQL. The current enrichment source
+contains one such Logo, `sp-2021`. The export excludes it so whole-bundle
+planning can resolve every entry.
+
 ```sh
 jq '{version: 1, projects: [to_entries[]
   | select(.value.logo.output != null)
+  | select(.key != "2021")
   | {project_import_key: ("sp-" + .key),
      logo: {file_path: .value.logo.output},
      files: []}]}' \
