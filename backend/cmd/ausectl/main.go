@@ -17,6 +17,8 @@ import (
 	"ause-discovery.local/backend/internal/catalog"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/database"
+	"ause-discovery.local/backend/internal/projectcontentimport"
+	"ause-discovery.local/backend/internal/projectlogos"
 	searchservice "ause-discovery.local/backend/internal/search"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +41,9 @@ func run(arguments []string) error {
 	}
 	if len(arguments) >= 2 && arguments[0] == "artifacts" {
 		return runArtifacts(arguments[1:])
+	}
+	if len(arguments) >= 2 && arguments[0] == "project-content" {
+		return runProjectContent(arguments[1:])
 	}
 	if len(arguments) != 2 {
 		return usageError()
@@ -84,7 +89,6 @@ type artifactCommand struct {
 	Kind            string
 	ActorUsername   string
 	SourceDirectory string
-	ManifestPath    string
 	AllPublished    bool
 	ProjectID       *uuid.UUID
 	Apply           bool
@@ -174,17 +178,8 @@ func parseArtifactCommand(arguments []string) (artifactCommand, error) {
 			}
 			command.ProjectID = &parsed
 		}
-	case "import-manifest":
-		flags.StringVar(&command.ManifestPath, "manifest", "", "Project-file manifest path")
-		registerWorkers()
-		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) == "" || strings.TrimSpace(command.ManifestPath) == "" {
-			return artifactCommand{}, usageError()
-		}
-		if command.Workers < 1 || command.Workers > artifactimport.MaxWorkers {
-			return artifactCommand{}, usageError()
-		}
 	case "migrate":
-		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) != "" || strings.TrimSpace(command.ManifestPath) != "" {
+		if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ActorUsername) != "" {
 			return artifactCommand{}, usageError()
 		}
 		command.ActorUsername = ""
@@ -236,12 +231,7 @@ func runArtifacts(arguments []string) error {
 		},
 		MaxArtifactBytes: configuration.MaxArtifactBytes,
 	}
-	var entries []artifactimport.Entry
-	if command.Kind == "seed-demo" {
-		entries, err = service.DemoEntries(operationContext, command.SourceDirectory, command.ProjectID)
-	} else {
-		entries, err = artifactimport.LoadManifest(command.ManifestPath)
-	}
+	entries, err := service.DemoEntries(operationContext, command.SourceDirectory, command.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -480,5 +470,143 @@ func runMigrationStatus() error {
 }
 
 func usageError() error {
-	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--workers <1-8>] [--apply] | artifacts import-manifest --manifest <path> --actor-username <username> [--workers <1-8>] [--apply] | artifacts migrate [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
+	return errors.New("usage: ausectl admin create | admin reset-password --username <value> | admin disable --username <value> | artifacts seed-demo --source-directory <path> --actor-username <username> (--all-published | --project-id <uuid>) [--workers <1-8>] [--apply] | artifacts migrate [--apply] | project-content import-manifest --manifest <path> --actor-username <username> [--workers <1-8>] [--apply] | catalog validate|sync | search reindex-project --project-id <uuid> | search rebuild | migrations status")
+}
+
+type projectContentCommand struct {
+	Kind          string
+	ManifestPath  string
+	ActorUsername string
+	Apply         bool
+	Workers       int
+}
+
+func parseProjectContentCommand(arguments []string) (projectContentCommand, error) {
+	if len(arguments) == 0 || arguments[0] != "import-manifest" {
+		return projectContentCommand{}, usageError()
+	}
+	command := projectContentCommand{Kind: "import-manifest"}
+	flags := flag.NewFlagSet("project-content import-manifest", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.StringVar(&command.ManifestPath, "manifest", "", "Project Content JSON manifest path")
+	flags.StringVar(&command.ActorUsername, "actor-username", "", "active administrator username")
+	flags.BoolVar(&command.Apply, "apply", false, "write validated content")
+	command.Workers = projectcontentimport.DefaultWorkers
+	flags.Var(&onceWorkersFlag{target: &command.Workers}, "workers", "concurrent Projects, 1 through 8")
+	if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 || strings.TrimSpace(command.ManifestPath) == "" || strings.TrimSpace(command.ActorUsername) == "" {
+		return projectContentCommand{}, usageError()
+	}
+	if command.Workers < 1 || command.Workers > projectcontentimport.MaxWorkers {
+		return projectContentCommand{}, usageError()
+	}
+	return command, nil
+}
+
+func runProjectContent(arguments []string) error {
+	command, err := parseProjectContentCommand(arguments)
+	if err != nil {
+		return err
+	}
+	manifest, err := projectcontentimport.LoadManifest(command.ManifestPath)
+	if err != nil {
+		return err
+	}
+	bundleRoot, err := projectcontentimport.BundleRoot(command.ManifestPath)
+	if err != nil {
+		return err
+	}
+	configuration, err := config.Load(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+	operationContext := context.Background()
+	databasePool, err := pgxpool.New(operationContext, configuration.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+	defer databasePool.Close()
+	if err := databasePool.Ping(operationContext); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+	storageSet, err := artifacts.NewStorageSet(artifacts.StorageOptions{
+		DefaultName:      configuration.ArtifactStorageBackend,
+		LocalRoot:        configuration.ArtifactRoot,
+		MaxArtifactBytes: configuration.MaxArtifactBytes,
+		B2Endpoint:       configuration.ArtifactB2Endpoint,
+		B2Bucket:         configuration.ArtifactB2Bucket,
+		B2KeyID:          configuration.ArtifactB2KeyID,
+		B2ApplicationKey: configuration.ArtifactB2ApplicationKey,
+	})
+	if err != nil {
+		return fmt.Errorf("configure artifact storage: %w", err)
+	}
+	service := projectcontentimport.Service{
+		Pool:  databasePool,
+		Logos: projectlogos.Service{Pool: databasePool, Storage: storageSet},
+		Files: artifactimport.Service{
+			Pool:             databasePool,
+			Artifacts:        artifacts.Service{Pool: databasePool, Storage: storageSet, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
+			MaxArtifactBytes: configuration.MaxArtifactBytes,
+		},
+	}
+	result, runErr := service.Run(operationContext, manifest, bundleRoot, projectcontentimport.Options{
+		ActorUsername: command.ActorUsername,
+		Apply:         command.Apply,
+		Workers:       command.Workers,
+		OnApplyStart: func(start projectcontentimport.ApplyStart) {
+			fmt.Fprintf(os.Stdout, "Starting Project content import: %d Projects, %d logo uploads, %d logo replacements, %d planned file uploads, %d unchanged, %.1f MiB, %d workers\n",
+				start.ProjectCount, start.LogoUploads, start.LogoReplacements, start.FileUploads, start.UnchangedSkips, float64(start.TotalBytes)/1024/1024, start.Workers)
+		},
+		OnProjectDone: func(progress projectcontentimport.ProjectProgress) {
+			fmt.Fprintln(os.Stdout, formatProjectContentProgress(progress))
+		},
+	})
+	mode := "dry-run"
+	if command.Apply {
+		mode = "apply"
+	}
+	fmt.Fprintf(os.Stdout, "mode: %s\nProjects: %d\nlogo uploads: %d\nlogo replacements: %d\nfile uploads: %d\nunchanged skips: %d\n", mode, result.ProjectCount, result.LogoUploads, result.LogoReplacements, result.FileUploads, result.UnchangedSkips)
+	if command.Apply {
+		fmt.Fprintf(os.Stdout, "planned bytes: %.1f MiB\n", float64(result.TotalBytes)/1024/1024)
+	}
+	if result.FailedProjects > 0 {
+		fmt.Fprintf(os.Stdout, "failed Projects: %d\nfailed items: %d\n", result.FailedProjects, result.FailedItems)
+	}
+	return runErr
+}
+
+// formatProjectContentProgress renders one completed Project as a single
+// physical line with the same sanitization guarantees as the Project File
+// importer.
+func formatProjectContentProgress(progress projectcontentimport.ProjectProgress) string {
+	var uploaded, skipped, failed []string
+	for _, item := range progress.Items {
+		descriptor := sanitizeProgressText(item.ArtifactType, 40)
+		if item.Kind == projectcontentimport.KindFile {
+			descriptor = fmt.Sprintf("%s (%s)", sanitizeProgressText(item.ArtifactType, 40), sanitizeProgressText(item.OriginalFilename, 120))
+		}
+		switch item.State {
+		case projectcontentimport.StateUploaded:
+			uploaded = append(uploaded, descriptor)
+		case projectcontentimport.StateSkipped:
+			skipped = append(skipped, fmt.Sprintf("%s (%s)", descriptor, sanitizeProgressText(item.SkipReason, 80)))
+		case projectcontentimport.StateFailed:
+			failed = append(failed, fmt.Sprintf("%s (%s)", descriptor, sanitizeProgressText(item.Error, 160)))
+		}
+	}
+	segments := []string{}
+	if len(uploaded) > 0 {
+		segments = append(segments, "uploaded "+strings.Join(uploaded, ", "))
+	}
+	if len(skipped) > 0 {
+		segments = append(segments, "unchanged "+strings.Join(skipped, ", "))
+	}
+	if len(failed) > 0 {
+		segments = append(segments, "failed "+strings.Join(failed, ", "))
+	}
+	if len(segments) == 0 {
+		segments = append(segments, "no content processed")
+	}
+	identity := sanitizeProgressText(progress.Title, 80) + " (" + sanitizeProgressText(progress.ProjectID.String(), 0) + ")"
+	return fmt.Sprintf("[%d/%d] %s: %s; %.1fs", progress.Completed, progress.Total, identity, strings.Join(segments, "; "), progress.Duration.Seconds())
 }

@@ -19,6 +19,7 @@ import { AdminImportReview, AdminImportUpload } from './features/admin/import-ma
 import { AdminAuditLog } from './features/admin/audit-log'
 import { AdminProjectList } from './features/admin/project-list'
 import { AdminPersonForm } from './features/admin/person-form'
+import { ProjectLogoManagement } from './features/admin/project-logo'
 import { AdminPeopleList } from './features/admin/people-list'
 import styles from './App.module.css'
 
@@ -293,7 +294,7 @@ function SearchPage() {
     <div className={styles.searchResults}><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isPending ? <p role="status">{t('search.loading')}</p> : pending ? <p role="status">{t('search.updating')}</p> : null}</div></div>
       {searchQuery.isError ? <p className={styles.error} role="alert">{t('search.unavailable')}</p> : null}
       {!searchQuery.isPending && searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result, index) => <article className={styles.searchResult} key={result.id}>
-        <div aria-hidden="true" className={`${styles.projectIdentity} ${projectIdentityVariant(index) === 'purple' ? styles.projectIdentityPurple : styles.projectIdentityRed}`}>{projectInitials(result.title)}</div>
+        <ProjectIdentity logoUrl={result.logo_url} title={result.title} variantClass={projectIdentityVariant(index) === 'purple' ? styles.projectIdentityPurple : styles.projectIdentityRed} />
         <div className={styles.resultBody}><h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2>
           <div className={styles.metadata}><span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span>{result.people.length ? <span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span> : null}</div>
           {excerptOf(result.highlights, queryTerms)}
@@ -308,6 +309,22 @@ function SearchPage() {
   </section>
 }
 
+export function ProjectDetailIdentity({ title, logoUrl }: { title: string; logoUrl?: string | null }) {
+  const [failed, setFailed] = useState(false)
+  const showLogo = logoUrl && !failed
+  return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${showLogo ? styles.pageHeaderIdentityImage : ''}`}>
+    {showLogo ? <img alt="" className={styles.pageHeaderLogo} onError={() => setFailed(true)} src={logoUrl} /> : <span className={styles.pageHeaderInitials}>{projectInitials(title)}</span>}
+  </div>
+}
+
+export function ProjectIdentity({ title, logoUrl, variantClass }: { title: string; logoUrl?: string | null; variantClass?: string }) {
+  const [failed, setFailed] = useState(false)
+  const showLogo = logoUrl && !failed
+  return <div aria-hidden="true" className={`${styles.projectIdentity} ${variantClass ?? ''} ${showLogo ? styles.projectIdentityImage : ''}`}>
+    {showLogo ? <img alt="" className={styles.projectIdentityLogo} onError={() => setFailed(true)} src={logoUrl} /> : projectInitials(title)}
+  </div>
+}
+
 function excerptOf(highlights: Array<{ field: string; value: string }>, queryTerms: string[]) {
   const excerpt = highlights.find((highlight) => highlight.field === 'abstract')
   if (!excerpt) return null
@@ -320,7 +337,7 @@ function ProjectPage() {
   if (projectQuery.isPending) return <p role="status">{t('feedback.loading')}</p>
   if (projectQuery.isError || !projectQuery.data) return isNotFoundFailure(projectQuery.error) ? <NotFound /> : <RequestFailure />
   const project = projectQuery.data
-  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
+  return <article><PageTitle title={project.title} /><Link to="/search">{t('action.backToResults')}</Link><div className={styles.pageHeader}><ProjectDetailIdentity logoUrl={project.logo_url} title={project.title} /><h1>{project.title}</h1></div><div className={styles.detailGrid}><div><p className={styles.lede}>{project.abstract}</p><section className={styles.detailSection}><h2>{t('project.people')}</h2><People participations={project.participations} /></section><section className={styles.detailSection}><h2>{t('project.classifications')}</h2><ClassificationGroups values={project.taxonomy} /></section><section className={styles.detailSection}><h2>{t('project.artifactList')}</h2>{project.artifacts.length ? <div className={styles.projectList}>{project.artifacts.map((artifact) => <div className={styles.panel} key={artifact.id}><strong>{artifact.display_name}</strong><div className={styles.metadata}><span>{t(`artifact.type.${artifact.artifact_type}`)}</span><span>{formatBytes(artifact.byte_count, t)}</span></div><p className={styles.formActions}>{artifact.view_url ? <a className={styles.secondaryButton} href={artifact.view_url} rel="noopener noreferrer" target="_blank">{t('action.view')}</a> : null}{artifact.download_url ? <a className={styles.button} href={artifact.download_url}>{t('action.download')}</a> : null}</p></div>)}</div> : <p>{t('project.noArtifacts')}</p>}</section></div><aside><section className={styles.detailSection}><h2>{t('project.academic')}</h2><dl className={styles.definitionList}><Definition label={t('fields.year')} value={String(project.academic_year)} /><Definition label={t('fields.semester')} value={t(`fields.${project.semester}`)} /><Definition label={t('fields.program')} value={project.program.label} /><Definition label={t('fields.major')} value={project.major?.label} /><Definition label={t('fields.course')} value={project.course.label} /></dl></section></aside></div></article>
 }
 
 function PersonPage() {
@@ -444,7 +461,7 @@ function ProjectFormPage({ isNew }: { isNew: boolean }) {
     {generalFailure ? <p className={styles.error} role="alert">{t('admin.projectSaveFailed')}</p> : null}
     {saveMutation.isSuccess && !saveMutation.isPending ? <p role="status">{t('feedback.saved')}</p> : null}
     {publishMutation.isSuccess && !publishMutation.isPending ? <p role="status">{t('admin.publishedStatus')}</p> : null}
-    <form className={styles.form} onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}><ProjectFields form={form} catalogs={catalogsQuery.data} people={peopleQuery.data?.items ?? []} /><div className={styles.formActions}><button className={styles.button} disabled={saveMutation.isPending || !csrfToken} type="submit">{t('action.saveDraft')}</button>{!isNew ? <button className={styles.secondaryButton} disabled={publishMutation.isPending || !csrfToken} type="button" onClick={() => publishMutation.mutate()}>{t('action.publish')}</button> : null}</div>{!isNew && projectQuery.data ? <DeleteRestoreControls project={projectQuery.data} /> : null}</form>{!isNew && projectQuery.data ? <ArtifactManagement projectId={projectQuery.data.id} projectRevision={projectQuery.data.revision} artifacts={projectQuery.data.artifacts} csrfToken={csrfToken} disabled={projectQuery.data.status === 'deleted'} /> : null}</div>
+    <form className={styles.form} onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}><ProjectFields form={form} catalogs={catalogsQuery.data} people={peopleQuery.data?.items ?? []} /><div className={styles.formActions}><button className={styles.button} disabled={saveMutation.isPending || !csrfToken} type="submit">{t('action.saveDraft')}</button>{!isNew ? <button className={styles.secondaryButton} disabled={publishMutation.isPending || !csrfToken} type="button" onClick={() => publishMutation.mutate()}>{t('action.publish')}</button> : null}</div>{!isNew && projectQuery.data ? <DeleteRestoreControls project={projectQuery.data} /> : null}</form>{!isNew && projectQuery.data ? <ProjectLogoManagement csrfToken={csrfToken} disabled={projectQuery.data.status === 'deleted'} project={projectQuery.data} /> : null}{!isNew && projectQuery.data ? <ArtifactManagement projectId={projectQuery.data.id} projectRevision={projectQuery.data.revision} artifacts={projectQuery.data.artifacts} csrfToken={csrfToken} disabled={projectQuery.data.status === 'deleted'} /> : null}</div>
 }
 
 function ProjectFields({ form, catalogs, people }: { form: UseFormReturn<ProjectFormValues>; catalogs?: CatalogsResponse; people: AdminPerson[] }) {

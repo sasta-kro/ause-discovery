@@ -138,3 +138,43 @@ func seedSearchProject(t *testing.T, ctx context.Context, pool *pgxpool.Pool) uu
 	}
 	return projectID
 }
+
+func TestBuildProjectDocumentProjectsActiveLogoRevision(t *testing.T) {
+	databaseURL := os.Getenv("AUSE_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("AUSE_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	ctx := context.Background()
+	pool := createSearchTestDatabase(t, ctx, databaseURL)
+	projectID := seedSearchProject(t, ctx, pool)
+
+	withoutLogo, err := BuildProjectDocument(ctx, pool, projectID)
+	if err != nil {
+		t.Fatalf("BuildProjectDocument without a logo returned an error: %v", err)
+	}
+	if withoutLogo.LogoRevision != nil {
+		t.Fatalf("document carried logo revision %d without any logo row", *withoutLogo.LogoRevision)
+	}
+
+	if _, err := pool.Exec(ctx, "INSERT INTO project_logos (id, project_id, storage_key, storage_backend, mime_type, extension, byte_count, sha256, status, revision) VALUES ('018f0000-0000-7000-8000-000000000620', $1, 'search-logo/v1', 'local', 'image/png', 'png', 10, decode(repeat('22',32),'hex'), 'active', 4)", projectID); err != nil {
+		t.Fatalf("seed active logo: %v", err)
+	}
+	withLogo, err := BuildProjectDocument(ctx, pool, projectID)
+	if err != nil {
+		t.Fatalf("BuildProjectDocument with a logo returned an error: %v", err)
+	}
+	if withLogo.LogoRevision == nil || *withLogo.LogoRevision != 4 {
+		t.Fatalf("document carried logo revision %v, expected 4", withLogo.LogoRevision)
+	}
+
+	if _, err := pool.Exec(ctx, "UPDATE project_logos SET status='deleted', revision=5, deleted_at=now()"); err != nil {
+		t.Fatalf("soft-delete logo: %v", err)
+	}
+	afterRemoval, err := BuildProjectDocument(ctx, pool, projectID)
+	if err != nil {
+		t.Fatalf("BuildProjectDocument after logo removal returned an error: %v", err)
+	}
+	if afterRemoval.LogoRevision != nil {
+		t.Fatalf("document carried logo revision %d after removal", *afterRemoval.LogoRevision)
+	}
+}

@@ -182,6 +182,23 @@ type Project struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+type ProjectLogo struct {
+	ID             pgtype.UUID
+	ProjectID      pgtype.UUID
+	StorageKey     string
+	StorageBackend string
+	MimeType       string
+	Extension      string
+	ByteCount      int64
+	Sha256         []byte
+	Status         string
+	Revision       int64
+	ActorID        pgtype.UUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
 type ProjectParticipation struct {
 	ProjectID pgtype.UUID
 	PersonID  pgtype.UUID

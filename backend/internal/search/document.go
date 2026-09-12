@@ -86,6 +86,7 @@ type Document struct {
 	HasSlides        bool              `json:"has_slides"`
 	HasSourceCode    bool              `json:"has_source_code"`
 	HasDataset       bool              `json:"has_dataset"`
+	LogoRevision     *int64            `json:"logo_revision,omitempty"`
 	PublishedAt      time.Time         `json:"published_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
 }
@@ -139,6 +140,9 @@ func BuildProjectDocument(ctx context.Context, pool *pgxpool.Pool, projectID uui
 		return Document{}, err
 	}
 	if err := loadDocumentArtifacts(ctx, pool, &document); err != nil {
+		return Document{}, err
+	}
+	if err := loadDocumentLogo(ctx, pool, &document); err != nil {
 		return Document{}, err
 	}
 	return document, nil
@@ -290,6 +294,19 @@ func loadDocumentArtifacts(ctx context.Context, pool *pgxpool.Pool, document *Do
 		return err
 	}
 	document.HasArtifacts = document.ArtifactCount > 0
+	return nil
+}
+
+func loadDocumentLogo(ctx context.Context, pool *pgxpool.Pool, document *Document) error {
+	var logoRevision int64
+	err := pool.QueryRow(ctx, "SELECT revision FROM project_logos WHERE project_id=$1 AND status='active'", document.ID).Scan(&logoRevision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	document.LogoRevision = &logoRevision
 	return nil
 }
 

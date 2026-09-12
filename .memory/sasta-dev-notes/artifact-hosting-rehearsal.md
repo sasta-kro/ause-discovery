@@ -95,11 +95,12 @@ have no View action by design, since inline view is PDF only.
 ## Bulk rehearsal and later corpus import
 
 The `ausectl artifacts seed-demo` command attaches these same four files to
-every published Project with realistic public display names. The
-`ausectl artifacts import-manifest` command maps later corpus files by Project
-UUID or metadata `import_key`. Both commands provide a read-only dry-run and
-safe rerun behavior. Complete local and VM commands are documented in
-`docs/dev-notes/project-file-import.md`.
+every published Project with realistic public display names. Corpus logos and
+Project Files import through `ausectl project-content import-manifest`
+(the former CSV `artifacts import-manifest` command was removed). Both
+commands provide a read-only dry-run and safe rerun behavior. Complete local
+and VM commands are documented in `project-file-import.md` and
+`project-content-import.md` in this directory.
 
 ## API flow used (for scripting the VM seed)
 

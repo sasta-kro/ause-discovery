@@ -128,6 +128,7 @@ export type ProjectSummary = {
     categories: Array<TaxonomyValue>;
     platforms: Array<TaxonomyValue>;
     people: Array<Participation>;
+    logo_url?: string | null;
     artifact_count: number;
     published_at: Timestamp;
 };
@@ -187,6 +188,7 @@ export type PublicProject = {
     extension_metadata?: {
         [key: string]: unknown;
     };
+    logo_url?: string | null;
     created_at: Timestamp;
     updated_at: Timestamp;
     published_at: Timestamp;
@@ -313,6 +315,7 @@ export type AdminProject = {
     extension_metadata?: {
         [key: string]: unknown;
     };
+    logo_url?: string | null;
     revision: Revision;
     created_at: Timestamp;
     updated_at: Timestamp;
@@ -357,6 +360,11 @@ export type UploadArtifactRequest = {
     expected_project_revision: Revision;
     artifact_type: ArtifactType;
     display_name: string;
+    file: Blob | File;
+};
+
+export type UploadProjectLogoRequest = {
+    expected_project_revision: Revision;
     file: Blob | File;
 };
 
@@ -536,6 +544,11 @@ export type HasDataset = boolean;
 
 export type SearchSort = 'relevance' | 'newest' | 'oldest' | 'title';
 
+/**
+ * Active Project Logo revision. The response is immutable and cached long only when this matches the active revision.
+ */
+export type LogoVersion = number;
+
 export type Cursor = string;
 
 export type Limit = number;
@@ -691,6 +704,42 @@ export type GetPublicPersonResponses = {
 };
 
 export type GetPublicPersonResponse = GetPublicPersonResponses[keyof GetPublicPersonResponses];
+
+export type GetProjectLogoData = {
+    body?: never;
+    path: {
+        project_id: Uuid;
+    };
+    query: {
+        /**
+         * Active Project Logo revision. The response is immutable and cached long only when this matches the active revision.
+         */
+        v: number;
+    };
+    url: '/projects/{project_id}/logo';
+};
+
+export type GetProjectLogoErrors = {
+    /**
+     * RFC 9457 problem details.
+     */
+    404: Problem;
+    /**
+     * Project Logo storage is temporarily unavailable.
+     */
+    503: Problem;
+};
+
+export type GetProjectLogoError = GetProjectLogoErrors[keyof GetProjectLogoErrors];
+
+export type GetProjectLogoResponses = {
+    /**
+     * Active Project Logo PNG content. The URL carries the logo revision as a cache-busting query value.
+     */
+    200: Blob | File;
+};
+
+export type GetProjectLogoResponse = GetProjectLogoResponses[keyof GetProjectLogoResponses];
 
 export type GetCatalogsData = {
     body?: never;
@@ -1517,6 +1566,102 @@ export type ReplaceArtifactResponses = {
 };
 
 export type ReplaceArtifactResponse = ReplaceArtifactResponses[keyof ReplaceArtifactResponses];
+
+export type RemoveProjectLogoData = {
+    body: ExpectedRevision;
+    headers: {
+        'X-CSRF-Token': string;
+    };
+    path: {
+        project_id: Uuid;
+    };
+    query?: never;
+    url: '/admin/projects/{project_id}/logo';
+};
+
+export type RemoveProjectLogoErrors = {
+    /**
+     * Validation failed.
+     */
+    400: ValidationProblem;
+    /**
+     * RFC 9457 problem details.
+     */
+    401: Problem;
+    /**
+     * RFC 9457 problem details.
+     */
+    403: Problem;
+    /**
+     * RFC 9457 problem details.
+     */
+    404: Problem;
+    /**
+     * Submitted revision is stale.
+     */
+    409: RevisionConflictProblem;
+};
+
+export type RemoveProjectLogoError = RemoveProjectLogoErrors[keyof RemoveProjectLogoErrors];
+
+export type RemoveProjectLogoResponses = {
+    /**
+     * Administrator project.
+     */
+    200: AdminProject;
+};
+
+export type RemoveProjectLogoResponse = RemoveProjectLogoResponses[keyof RemoveProjectLogoResponses];
+
+export type UploadProjectLogoData = {
+    body: UploadProjectLogoRequest;
+    headers: {
+        'X-CSRF-Token': string;
+    };
+    path: {
+        project_id: Uuid;
+    };
+    query?: never;
+    url: '/admin/projects/{project_id}/logo';
+};
+
+export type UploadProjectLogoErrors = {
+    /**
+     * Validation failed.
+     */
+    400: ValidationProblem;
+    /**
+     * RFC 9457 problem details.
+     */
+    401: Problem;
+    /**
+     * RFC 9457 problem details.
+     */
+    403: Problem;
+    /**
+     * RFC 9457 problem details.
+     */
+    404: Problem;
+    /**
+     * Submitted revision is stale.
+     */
+    409: RevisionConflictProblem;
+    /**
+     * Project Logo storage is temporarily unavailable.
+     */
+    503: Problem;
+};
+
+export type UploadProjectLogoError = UploadProjectLogoErrors[keyof UploadProjectLogoErrors];
+
+export type UploadProjectLogoResponses = {
+    /**
+     * Administrator project.
+     */
+    200: AdminProject;
+};
+
+export type UploadProjectLogoResponse = UploadProjectLogoResponses[keyof UploadProjectLogoResponses];
 
 export type CreateImportData = {
     body: CreateImportRequest;

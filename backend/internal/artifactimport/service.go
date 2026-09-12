@@ -8,11 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"ause-discovery.local/backend/internal/artifacts"
 	"ause-discovery.local/backend/internal/auth"
+	"ause-discovery.local/backend/internal/projectpool"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -106,16 +106,9 @@ func (service Service) DemoEntries(ctx context.Context, sourceDirectory string, 
 	return entries, nil
 }
 
-// normalizeWorkers maps an unset or out-of-range worker count onto the
-// bounded default.
-func normalizeWorkers(count int) int {
-	if count < 1 {
-		return DefaultWorkers
-	}
-	if count > MaxWorkers {
-		return MaxWorkers
-	}
-	return count
+// ResolveActor resolves and validates the audit actor username.
+func (service Service) ResolveActor(ctx context.Context, username string) (uuid.UUID, error) {
+	return service.activeActorID(ctx, username)
 }
 
 func (service Service) Run(ctx context.Context, entries []Entry, options Options) (Result, error) {
@@ -130,24 +123,30 @@ func (service Service) Run(ctx context.Context, entries []Entry, options Options
 	if err != nil || !options.Apply {
 		return result, err
 	}
-	workers := normalizeWorkers(options.Workers)
+	workers := projectpool.Normalize(options.Workers)
 	groups := groupByProject(plan)
 	if options.OnApplyStart != nil {
 		options.OnApplyStart(ApplyStart{ProjectCount: len(groups), PlannedUploads: result.PlannedUploads, Workers: workers})
 	}
-	firstError, canceled := dispatchProjects(ctx, groups, workers, func(ctx context.Context, work projectWork) projectOutcome {
-		return service.runProject(ctx, actorID, work)
-	}, func(outcome projectOutcome) {
-		result.Uploaded += outcome.Uploaded
-		result.Skipped += outcome.Skipped
-		result.FailedFiles += outcome.FailedFiles
-		if outcome.Failed {
-			result.FailedProjects++
-		}
-		if options.OnProjectDone != nil {
-			options.OnProjectDone(outcome.Progress)
-		}
-	})
+	firstError, canceled := projectpool.Dispatch(ctx, projectpoolWork(groups), workers,
+		func(ctx context.Context, work projectpool.Work[projectWork]) projectpool.Outcome[projectFiles] {
+			return service.runProject(ctx, actorID, work.Body)
+		},
+		func(outcome projectpool.Outcome[projectFiles]) {
+			result.Uploaded += outcome.Body.Uploaded
+			result.Skipped += outcome.Body.Skipped
+			result.FailedFiles += outcome.Body.FailedFiles
+			if outcome.Failed {
+				result.FailedProjects++
+			}
+			if options.OnProjectDone != nil {
+				options.OnProjectDone(ProjectProgress{
+					Completed: outcome.Completed, Total: outcome.Total,
+					ProjectID: outcome.ID, Title: outcome.Title,
+					Files: outcome.Body.Files, Duration: outcome.Duration,
+				})
+			}
+		})
 	if canceled && result.FailedProjects == 0 {
 		return result, fmt.Errorf("Project file import was canceled: %w", ctx.Err())
 	}
@@ -161,10 +160,18 @@ func (service Service) Run(ctx context.Context, entries []Entry, options Options
 	return result, nil
 }
 
+func projectpoolWork(groups []projectWork) []projectpool.Work[projectWork] {
+	works := make([]projectpool.Work[projectWork], len(groups))
+	for index, group := range groups {
+		works[index] = projectpool.Work[projectWork]{ID: group.ID, Title: group.Name, Body: group}
+	}
+	return works
+}
+
 // groupByProject splits the validated plan into Project groups, preserving
 // first-appearance Project order for dispatch and file order within each
 // Project.
-func groupByProject(plan []plannedUpload) []projectWork {
+func groupByProject(plan []PreparedUpload) []projectWork {
 	index := map[uuid.UUID]int{}
 	groups := []projectWork{}
 	for _, upload := range plan {
@@ -179,18 +186,57 @@ func groupByProject(plan []plannedUpload) []projectWork {
 	return groups
 }
 
+// UploadOne performs the final skip check, revision read, and upload for
+// one prepared file. It returns whether the file was skipped.
+func (service Service) UploadOne(ctx context.Context, actorID uuid.UUID, upload PreparedUpload) (bool, error) {
+	skip, err := service.shouldSkip(ctx, upload)
+	if err != nil {
+		return false, fmt.Errorf("check existing Artifacts: %w", err)
+	}
+	if skip {
+		return true, nil
+	}
+	var revision int64
+	var status string
+	if err := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", upload.ProjectID).Scan(&revision, &status); err != nil {
+		return false, fmt.Errorf("read Project %s: %w", upload.ProjectName, err)
+	}
+	if status == "deleted" {
+		return false, fmt.Errorf("Project %s is deleted", upload.ProjectName)
+	}
+	file, err := os.Open(upload.Entry.SourcePath)
+	if err != nil {
+		return false, fmt.Errorf("open source file %s: %w", filepath.Base(upload.Entry.SourcePath), err)
+	}
+	_, uploadErr := service.Artifacts.Upload(ctx, actorID, upload.ProjectID, revision, artifacts.UploadInput{
+		ArtifactType:     upload.Entry.ArtifactType,
+		DisplayName:      upload.Entry.DisplayName,
+		OriginalFilename: originalFilename(upload.Entry),
+		ExpectedSize:     upload.ByteCount,
+		Content:          file,
+	})
+	closeErr := file.Close()
+	if uploadErr != nil {
+		return false, fmt.Errorf("upload %s: %w", filepath.Base(upload.Entry.SourcePath), uploadErr)
+	}
+	if closeErr != nil {
+		return false, fmt.Errorf("close source file %s: %w", filepath.Base(upload.Entry.SourcePath), closeErr)
+	}
+	return false, nil
+}
+
 // runProject uploads one Project's planned files sequentially, preserving
 // the final skip check and the fresh revision read before every upload. The
 // first failure stops that Project's remaining files without discarding
 // committed work.
-func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work projectWork) projectOutcome {
-	outcome := projectOutcome{Progress: ProjectProgress{ProjectID: work.ID, Title: work.Name}}
+func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work projectWork) projectpool.Outcome[projectFiles] {
+	outcome := projectpool.Outcome[projectFiles]{ID: work.ID, Title: work.Name}
 	started := time.Now()
-	fail := func(upload plannedUpload, err error) {
+	fail := func(upload PreparedUpload, err error) {
 		outcome.Failed = true
-		outcome.FailedFiles++
+		outcome.Body.FailedFiles++
 		outcome.FirstError = err.Error()
-		outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+		outcome.Body.Files = append(outcome.Body.Files, FileOutcome{
 			ArtifactType:     upload.Entry.ArtifactType,
 			OriginalFilename: originalFilename(upload.Entry),
 			State:            FileFailed,
@@ -208,7 +254,7 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work p
 		if upload.SkipReason != "" {
 			// Planned skips are already counted by plan(); report them on
 			// the progress line without counting them again.
-			outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+			outcome.Body.Files = append(outcome.Body.Files, FileOutcome{
 				ArtifactType:     upload.Entry.ArtifactType,
 				OriginalFilename: originalFilename(upload.Entry),
 				State:            FileSkipped,
@@ -216,14 +262,14 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work p
 			})
 			continue
 		}
-		skip, err := service.shouldSkip(ctx, upload)
+		skipped, err := service.UploadOne(ctx, actorID, upload)
 		if err != nil {
-			fail(upload, fmt.Errorf("check existing Artifacts: %w", err))
+			fail(upload, err)
 			break
 		}
-		if skip {
-			outcome.Skipped++
-			outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+		if skipped {
+			outcome.Body.Skipped++
+			outcome.Body.Files = append(outcome.Body.Files, FileOutcome{
 				ArtifactType:     upload.Entry.ArtifactType,
 				OriginalFilename: originalFilename(upload.Entry),
 				State:            FileSkipped,
@@ -231,159 +277,36 @@ func (service Service) runProject(ctx context.Context, actorID uuid.UUID, work p
 			})
 			continue
 		}
-		var revision int64
-		var status string
-		if err := service.Pool.QueryRow(ctx, "SELECT revision,status FROM projects WHERE id=$1", upload.ProjectID).Scan(&revision, &status); err != nil {
-			fail(upload, fmt.Errorf("read Project %s: %w", upload.ProjectName, err))
-			break
-		}
-		if status == "deleted" {
-			fail(upload, fmt.Errorf("Project %s is deleted", upload.ProjectName))
-			break
-		}
-		file, err := os.Open(upload.Entry.SourcePath)
-		if err != nil {
-			fail(upload, fmt.Errorf("open source file %s: %w", filepath.Base(upload.Entry.SourcePath), err))
-			break
-		}
-		_, uploadErr := service.Artifacts.Upload(ctx, actorID, upload.ProjectID, revision, artifacts.UploadInput{
-			ArtifactType:     upload.Entry.ArtifactType,
-			DisplayName:      upload.Entry.DisplayName,
-			OriginalFilename: originalFilename(upload.Entry),
-			ExpectedSize:     upload.ByteCount,
-			Content:          file,
-		})
-		closeErr := file.Close()
-		if uploadErr != nil {
-			fail(upload, fmt.Errorf("upload %s: %w", filepath.Base(upload.Entry.SourcePath), uploadErr))
-			break
-		}
-		if closeErr != nil {
-			fail(upload, fmt.Errorf("close source file %s: %w", filepath.Base(upload.Entry.SourcePath), closeErr))
-			break
-		}
-		outcome.Uploaded++
-		outcome.Progress.Files = append(outcome.Progress.Files, FileOutcome{
+		outcome.Body.Uploaded++
+		outcome.Body.Files = append(outcome.Body.Files, FileOutcome{
 			ArtifactType:     upload.Entry.ArtifactType,
 			OriginalFilename: originalFilename(upload.Entry),
 			State:            FileUploaded,
 		})
 	}
-	outcome.Progress.Duration = time.Since(started)
+	outcome.Duration = time.Since(started)
 	return outcome
 }
 
-// dispatchProjects runs a fixed worker pool over Project groups. The single
-// coordinator goroutine owns assignment: it primes the pool and replaces
-// each completed assignment with the next group, re-checking run-context
-// cancellation before every assignment, so neither a pre-canceled context
-// nor a parent canceled mid-run can start further Projects, and no
-// assignment follows a fatal outcome reaching the coordinator. Cancellation
-// and fatal outcomes stop assignment but keep collecting outcomes from
-// already-running Projects, which observe the canceled context per file.
-// Workers process one Project at a time through process and deliver
-// outcomes through a channel buffered for every group, so they can always
-// deliver and exit without leaking. The coordinator assigns completion
-// positions and folds results through apply, which therefore never runs
-// concurrently. It returns the first failure text and whether the run
-// stopped early.
-func dispatchProjects(ctx context.Context, groups []projectWork, workers int, process func(context.Context, projectWork) projectOutcome, apply func(projectOutcome)) (string, bool) {
-	if len(groups) == 0 {
-		return "", false
-	}
-	if workers < 1 {
-		workers = 1
-	}
-	runContext, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	jobs := make(chan projectWork)
-	outcomes := make(chan projectOutcome, len(groups))
-	var workersDone sync.WaitGroup
-	for worker := 0; worker < workers && worker < len(groups); worker++ {
-		workersDone.Add(1)
-		go func() {
-			defer workersDone.Done()
-			for work := range jobs {
-				outcomes <- process(runContext, work)
-			}
-		}()
-	}
-
-	firstError := ""
-	canceled := false
-	completed := 0
-	nextGroup := 0
-	jobsClosed := false
-	stopAssigning := func() {
-		if !jobsClosed {
-			jobsClosed = true
-			close(jobs)
-		}
-	}
-	coordinatorDone := make(chan struct{})
-	go func() {
-		defer close(coordinatorDone)
-		// Prime the pool only while the run context is live, and replace
-		// each completed assignment only after re-checking cancellation,
-		// so neither a pre-canceled context nor a parent canceled mid-run
-		// can start further Projects. Fatal outcomes keep their separate
-		// guarantee: no assignment follows the fatal outcome itself.
-		for nextGroup < len(groups) && nextGroup < workers && runContext.Err() == nil {
-			jobs <- groups[nextGroup]
-			nextGroup++
-		}
-		if nextGroup == len(groups) || runContext.Err() != nil {
-			if runContext.Err() != nil {
-				canceled = true
-			}
-			stopAssigning()
-		}
-		for outcome := range outcomes {
-			completed++
-			outcome.Progress.Completed = completed
-			outcome.Progress.Total = len(groups)
-			if outcome.Failed && firstError == "" {
-				firstError = outcome.FirstError
-			}
-			apply(outcome)
-			if outcome.Fatal {
-				canceled = true
-				cancel()
-				stopAssigning()
-				continue
-			}
-			if runContext.Err() != nil {
-				canceled = true
-				stopAssigning()
-				continue
-			}
-			if nextGroup < len(groups) && !jobsClosed {
-				jobs <- groups[nextGroup]
-				nextGroup++
-				if nextGroup == len(groups) {
-					stopAssigning()
-				}
-			}
-		}
-	}()
-
-	workersDone.Wait()
-	close(outcomes)
-	<-coordinatorDone
-	if ctx.Err() != nil {
-		canceled = true
-	}
-	return firstError, canceled
+// PlanUploads validates every entry, resolves its Project, and classifies
+// planned skips. It performs the whole-operation quota validation.
+func (service Service) PlanUploads(ctx context.Context, entries []Entry) ([]PreparedUpload, Result, error) {
+	return service.plan(ctx, entries)
 }
 
-func (service Service) plan(ctx context.Context, entries []Entry) ([]plannedUpload, Result, error) {
+// ShouldSkip performs the final pre-upload duplicate check for one prepared
+// file.
+func (service Service) ShouldSkip(ctx context.Context, upload PreparedUpload) (bool, error) {
+	return service.shouldSkip(ctx, upload)
+}
+
+func (service Service) plan(ctx context.Context, entries []Entry) ([]PreparedUpload, Result, error) {
 	if len(entries) == 0 {
 		return nil, Result{}, errors.New("no Project files were supplied")
 	}
 	projects := map[uuid.UUID]*projectState{}
 	inspections := map[string]artifacts.UploadInspection{}
-	plan := make([]plannedUpload, 0, len(entries))
+	plan := make([]PreparedUpload, 0, len(entries))
 	result := Result{}
 	for index, entry := range entries {
 		project, err := service.resolveProject(ctx, entry, projects)
@@ -418,7 +341,7 @@ func (service Service) plan(ctx context.Context, entries []Entry) ([]plannedUplo
 			}
 			inspections[cacheKey] = inspection
 		}
-		upload := plannedUpload{Entry: entry, ProjectID: project.ID, ProjectName: project.Name, ByteCount: inspection.ByteCount, SHA256: inspection.SHA256}
+		upload := PreparedUpload{Entry: entry, ProjectID: project.ID, ProjectName: project.Name, ByteCount: inspection.ByteCount, SHA256: inspection.SHA256}
 		digestKey := artifactDigestKey(entry.ArtifactType, inspection.SHA256[:])
 		if entry.SkipIfArtifactTypeSet && project.ArtifactTypes[entry.ArtifactType] {
 			upload.SkipReason = "Project already has an active file of this type"
@@ -511,7 +434,7 @@ func (service Service) resolveProject(ctx context.Context, entry Entry, cache ma
 	return project, nil
 }
 
-func (service Service) shouldSkip(ctx context.Context, upload plannedUpload) (bool, error) {
+func (service Service) shouldSkip(ctx context.Context, upload PreparedUpload) (bool, error) {
 	if upload.Entry.SkipIfArtifactTypeSet {
 		var exists bool
 		err := service.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM artifacts WHERE project_id=$1 AND type=$2 AND status='active')`, upload.ProjectID, upload.Entry.ArtifactType).Scan(&exists)
@@ -540,9 +463,50 @@ func artifactDigestKey(artifactType string, digest []byte) string {
 	return artifactType + ":" + hex.EncodeToString(digest)
 }
 
+// OriginalFilename returns the entry's explicit filename or the source
+// basename.
+func OriginalFilename(entry Entry) string {
+	return originalFilename(entry)
+}
+
 func originalFilename(entry Entry) string {
 	if filename := strings.TrimSpace(entry.OriginalFilename); filename != "" {
 		return filename
 	}
 	return filepath.Base(entry.SourcePath)
+}
+
+// ResolveSourcePath resolves one manifest-relative path against the bundle
+// root with symlink and path-escape protection.
+func ResolveSourcePath(root, relativePath string) (string, error) {
+	return resolveSourcePath(root, relativePath)
+}
+
+func resolveSourcePath(root, relativePath string) (string, error) {
+	if relativePath == "" {
+		return "", errors.New("path is required")
+	}
+	if filepath.IsAbs(relativePath) {
+		return "", errors.New("path must be relative")
+	}
+	rootPath, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory: %w", err)
+	}
+	filePath, err := filepath.EvalSymlinks(filepath.Join(rootPath, filepath.Clean(relativePath)))
+	if err != nil {
+		return "", fmt.Errorf("resolve source file: %w", err)
+	}
+	relative, err := filepath.Rel(rootPath, filePath)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errors.New("path escapes the source directory")
+	}
+	information, err := os.Stat(filePath)
+	if err != nil {
+		return "", fmt.Errorf("inspect source file: %w", err)
+	}
+	if !information.Mode().IsRegular() {
+		return "", errors.New("path must identify a regular file")
+	}
+	return filePath, nil
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"time"
 
+	"ause-discovery.local/backend/internal/projectpool"
 	"github.com/google/uuid"
 )
 
@@ -14,11 +15,10 @@ const (
 	FileFailed   = "failed"
 )
 
-// DefaultWorkers is the bounded worker-pool size when Options.Workers is
-// unset. Worker counts are additionally clamped to MaxWorkers.
+// Worker bounds are shared with the other bulk importers.
 const (
-	DefaultWorkers = 4
-	MaxWorkers     = 8
+	DefaultWorkers = projectpool.DefaultWorkers
+	MaxWorkers     = projectpool.MaxWorkers
 )
 
 type Entry struct {
@@ -37,8 +37,8 @@ type Options struct {
 	// Workers bounds concurrent Project processing. Values below 1 select
 	// DefaultWorkers; values above MaxWorkers are clamped.
 	Workers int
-	// OnApplyStart is invoked after planning succeeds and immediately
-	// before worker dispatch, on apply runs only.
+	// OnApplyStart is invoked synchronously after planning succeeds and
+	// immediately before worker dispatch, on apply runs only.
 	OnApplyStart func(ApplyStart)
 	// OnProjectDone is invoked exactly once per dispatched Project through
 	// the single coordinator goroutine, so calls never overlap. The CLI
@@ -82,7 +82,9 @@ type Result struct {
 	FailedFiles    int
 }
 
-type plannedUpload struct {
+// PreparedUpload is one validated Project File with its resolved Project,
+// digest, and planned skip reason.
+type PreparedUpload struct {
 	Entry       Entry
 	ProjectID   uuid.UUID
 	ProjectName string
@@ -95,19 +97,14 @@ type plannedUpload struct {
 type projectWork struct {
 	ID      uuid.UUID
 	Name    string
-	Uploads []plannedUpload
+	Uploads []PreparedUpload
 }
 
-// projectOutcome is the internal worker result for one Project group. Only
-// the coordinator reads it, so it carries plain unsynchronized fields.
-type projectOutcome struct {
-	Progress    ProjectProgress
+// projectFiles carries the per-Project fold of file outcomes through the
+// shared dispatch pool.
+type projectFiles struct {
 	Uploaded    int
 	Skipped     int
 	FailedFiles int
-	Failed      bool
-	// Fatal marks cancellation or storage unavailability and stops the
-	// dispatch of further Projects.
-	Fatal      bool
-	FirstError string
+	Files       []FileOutcome
 }

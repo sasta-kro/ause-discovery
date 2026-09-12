@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ause-discovery.local/backend/internal/artifactimport"
+	"ause-discovery.local/backend/internal/projectcontentimport"
 	"github.com/google/uuid"
 )
 
@@ -61,38 +62,65 @@ func TestParseArtifactCommand(t *testing.T) {
 			valid:     true,
 		},
 		{
-			name:      "manifest dry run",
-			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin"},
-			want:      artifactCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.csv", ActorUsername: "admin", Workers: artifactimport.DefaultWorkers},
-			valid:     true,
-		},
-		{
 			name:      "demo accepts minimum workers",
 			arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "1"},
 			want:      artifactCommand{Kind: "seed-demo", SourceDirectory: "/bulk", ActorUsername: "admin", AllPublished: true, Workers: 1},
 			valid:     true,
 		},
-		{
-			name:      "manifest accepts maximum workers",
-			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "8"},
-			want:      artifactCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.csv", ActorUsername: "admin", Workers: 8},
-			valid:     true,
-		},
 		{name: "demo rejects zero workers", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "0"}},
 		{name: "demo rejects workers above eight", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--workers", "9"}},
-		{name: "manifest rejects negative workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "-1"}},
-		{name: "manifest rejects malformed workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "many"}},
-		{name: "manifest rejects repeated workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin", "--workers", "2", "--workers", "4"}},
 		{name: "migrate rejects workers flag", arguments: []string{"migrate", "--workers", "4"}},
+		{name: "artifacts import-manifest was removed", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv", "--actor-username", "admin"}},
 		{name: "demo requires explicit scope", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin"}},
 		{name: "demo rejects overlapping scopes", arguments: []string{"seed-demo", "--source-directory", "/bulk", "--actor-username", "admin", "--all-published", "--project-id", projectID}},
-		{name: "manifest requires actor", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.csv"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			command, err := parseArtifactCommand(test.arguments)
 			if test.valid && err != nil {
 				t.Fatalf("parse Artifact command: %v", err)
+			}
+			if !test.valid && err == nil {
+				t.Fatal("expected command validation error")
+			}
+			if test.valid && !reflect.DeepEqual(command, test.want) {
+				t.Fatalf("unexpected command: %+v", command)
+			}
+		})
+	}
+}
+
+func TestParseProjectContentCommand(t *testing.T) {
+	tests := []struct {
+		name      string
+		arguments []string
+		want      projectContentCommand
+		valid     bool
+	}{
+		{
+			name:      "content dry run defaults workers",
+			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json", "--actor-username", "admin"},
+			want:      projectContentCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.json", ActorUsername: "admin", Workers: projectcontentimport.DefaultWorkers},
+			valid:     true,
+		},
+		{
+			name:      "content apply with minimum workers",
+			arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json", "--actor-username", "admin", "--workers", "1", "--apply"},
+			want:      projectContentCommand{Kind: "import-manifest", ManifestPath: "/bulk/manifest.json", ActorUsername: "admin", Apply: true, Workers: 1},
+			valid:     true,
+		},
+		{name: "content rejects zero workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json", "--actor-username", "admin", "--workers", "0"}},
+		{name: "content rejects workers above eight", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json", "--actor-username", "admin", "--workers", "9"}},
+		{name: "content rejects repeated workers", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json", "--actor-username", "admin", "--workers", "2", "--workers", "4"}},
+		{name: "content rejects missing manifest", arguments: []string{"import-manifest", "--actor-username", "admin"}},
+		{name: "content rejects missing actor", arguments: []string{"import-manifest", "--manifest", "/bulk/manifest.json"}},
+		{name: "content rejects unknown kind", arguments: []string{"export", "--manifest", "/bulk/manifest.json"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			command, err := parseProjectContentCommand(test.arguments)
+			if test.valid && err != nil {
+				t.Fatalf("parse project content command: %v", err)
 			}
 			if !test.valid && err == nil {
 				t.Fatal("expected command validation error")

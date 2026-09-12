@@ -25,6 +25,7 @@ import (
 	"ause-discovery.local/backend/internal/people"
 	"ause-discovery.local/backend/internal/platform/config"
 	"ause-discovery.local/backend/internal/platform/pagecursor"
+	"ause-discovery.local/backend/internal/projectlogos"
 	"ause-discovery.local/backend/internal/projects"
 	searchservice "ause-discovery.local/backend/internal/search"
 	"github.com/go-chi/chi/v5"
@@ -46,6 +47,7 @@ type Controller struct {
 	Imports   importservice.Service
 	People    people.Service
 	Projects  projects.Service
+	Logos     projectlogos.Service
 	Search    searchservice.Service
 	Config    config.Config
 	Readiness func(context.Context) error
@@ -62,6 +64,7 @@ func NewAPIHandler(pool *pgxpool.Pool, configuration config.Config, artifactStor
 		Artifacts: artifacts.Service{Pool: pool, Storage: artifactStorage, MaxProjectBytes: configuration.MaxProjectArtifactBytes},
 		Imports:   importservice.Service{Pool: pool, TemporaryRoot: configuration.ImportTemporaryRoot},
 		People:    people.Service{Pool: pool},
+		Logos:     projectlogos.Service{Pool: pool, Storage: artifactStorage},
 		Projects:  projects.Service{Pool: pool},
 		Search:    searchservice.Service{Pool: pool, Index: searchservice.MeilisearchClient{BaseURL: configuration.MeilisearchURL, APIKey: configuration.MeilisearchAPIKey, TaskTimeout: 10 * time.Second}, IndexUID: configuration.MeilisearchIndex},
 		Config:    configuration,
@@ -489,7 +492,7 @@ func (controller *Controller) SearchProjects(writer http.ResponseWriter, request
 		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
 		return
 	}
-	writeJSON(writer, http.StatusOK, searchResponse(result))
+	writeJSON(writer, http.StatusOK, searchResponse(result, controller.Config.PublicBasePath))
 }
 
 func (controller *Controller) GetSearchStatus(writer http.ResponseWriter, request *http.Request) {
@@ -701,6 +704,113 @@ func (controller *Controller) RestoreProject(writer http.ResponseWriter, request
 	project, err := controller.Projects.Restore(request.Context(), actor.UserID, uuid.UUID(projectID), int64(body.ExpectedRevision))
 	controller.writeProjectResult(writer, request, project, err, 200)
 }
+func (controller *Controller) GetProjectLogo(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, params api.GetProjectLogoParams) {
+	// The version query is part of the contract: only a matching active
+	// revision is served immutably, so a stale URL can never deliver
+	// replacement bytes under long caching.
+	content, err := controller.Logos.OpenActive(request.Context(), uuid.UUID(projectID))
+	if controller.writeProjectLogoError(writer, request, err) {
+		return
+	}
+	if int64(params.V) != content.Logo.Revision {
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+		return
+	}
+	defer content.File.Close()
+	if content.Size != content.Logo.ByteCount {
+		problem(writer, request, http.StatusNotFound, "project_logo_unavailable", "Project Logo unavailable", "The Project Logo metadata exists, but its content is unavailable.")
+		return
+	}
+	writer.Header().Set("Content-Type", projectlogos.MIMEType)
+	writer.Header().Set("Content-Disposition", `inline; filename="logo.png"`)
+	writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	http.ServeContent(writer, request, "logo.png", content.Logo.UpdatedAt, content.File)
+}
+
+func (controller *Controller) UploadProjectLogo(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, _ api.UploadProjectLogoParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	form, file, fileHeader, cleanup, ok := controller.readArtifactMultipart(writer, request, "expected_project_revision")
+	if !ok {
+		return
+	}
+	defer cleanup()
+	defer file.Close()
+	expectedRevision, err := parseRevision(form["expected_project_revision"])
+	if err != nil {
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+		return
+	}
+	_, err = controller.Logos.Upload(request.Context(), actor.UserID, uuid.UUID(projectID), expectedRevision, projectlogos.UploadInput{
+		ExpectedSize: fileHeader.Size, Content: file,
+	})
+	if errors.Is(err, projectlogos.ErrRevisionConflict) {
+		project, projectErr := controller.Projects.Get(request.Context(), uuid.UUID(projectID), false)
+		if projectErr == nil {
+			revisionConflict(writer, request, project.Revision)
+		} else {
+			problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+		}
+		return
+	}
+	if controller.writeProjectLogoError(writer, request, err) {
+		return
+	}
+	controller.writeCurrentProject(writer, request, uuid.UUID(projectID))
+}
+
+func (controller *Controller) RemoveProjectLogo(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId, params api.RemoveProjectLogoParams) {
+	actor, ok := controller.requireActor(writer, request, true)
+	if !ok {
+		return
+	}
+	var body api.ExpectedRevisionRequest
+	if !decodeJSON(writer, request, &body) {
+		return
+	}
+	err := controller.Logos.Remove(request.Context(), actor.UserID, uuid.UUID(projectID), int64(body.ExpectedRevision))
+	if errors.Is(err, projectlogos.ErrRevisionConflict) {
+		if project, projectErr := controller.Projects.Get(request.Context(), uuid.UUID(projectID), false); projectErr == nil {
+			revisionConflict(writer, request, project.Revision)
+			return
+		}
+		problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+		return
+	}
+	if controller.writeProjectLogoError(writer, request, err) {
+		return
+	}
+	controller.writeCurrentProject(writer, request, uuid.UUID(projectID))
+}
+
+func (controller *Controller) writeCurrentProject(writer http.ResponseWriter, request *http.Request, projectID uuid.UUID) {
+	project, err := controller.Projects.Get(request.Context(), projectID, false)
+	controller.writeProjectResult(writer, request, project, err, 200)
+}
+
+func (controller *Controller) writeProjectLogoError(writer http.ResponseWriter, request *http.Request, err error) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, projectlogos.ErrNotFound):
+		problem(writer, request, http.StatusNotFound, "not_found", "Not found", "")
+	case errors.Is(err, projectlogos.ErrContentUnavailable):
+		problem(writer, request, http.StatusNotFound, "project_logo_unavailable", "Project Logo unavailable", "The Project Logo metadata exists, but its content is unavailable.")
+	case errors.Is(err, projectlogos.ErrStorageUnavailable):
+		problem(writer, request, http.StatusServiceUnavailable, "project_logo_storage_unavailable", "Project Logo storage unavailable", "Project Logo storage is temporarily unavailable. Try again later.")
+	case errors.Is(err, projectlogos.ErrRevisionConflict):
+		problem(writer, request, http.StatusConflict, "revision_conflict", "Revision conflict", "")
+	case errors.Is(err, projectlogos.ErrEmptyContent), errors.Is(err, projectlogos.ErrContentTooLarge), errors.Is(err, projectlogos.ErrSizeMismatch), errors.Is(err, projectlogos.ErrInvalidContentType), errors.Is(err, projectlogos.ErrInvalidDimensions), errors.Is(err, projectlogos.ErrInvalidState):
+		problem(writer, request, http.StatusBadRequest, "validation_error", "Validation error", err.Error())
+	default:
+		problem(writer, request, http.StatusInternalServerError, "internal_error", "Internal server error", "")
+	}
+	return true
+}
+
 func (controller *Controller) GetPublicProject(writer http.ResponseWriter, request *http.Request, projectID api.ProjectId) {
 	project, err := controller.Projects.Get(request.Context(), uuid.UUID(projectID), true)
 	if errors.Is(err, projects.ErrNotFound) {
@@ -752,7 +862,7 @@ func (controller *Controller) GetPublicPerson(writer http.ResponseWriter, reques
 			problem(writer, request, 500, "internal_error", "Internal server error", "")
 			return
 		}
-		response.Projects = append(response.Projects, api.PublicPersonProject{Id: projectResponse.Id, Title: projectResponse.Title, ReferenceCode: projectResponse.ReferenceCode, AcademicYear: projectResponse.AcademicYear, Semester: projectResponse.Semester, Program: projectResponse.Program, Major: projectResponse.Major, Course: projectResponse.Course, PublishedAt: projectResponse.PublishedAt, Role: api.ParticipationRole(role), ArtifactCount: len(projectResponse.Artifacts), Categories: filterTaxonomy(projectResponse.Taxonomy, "category"), Platforms: filterTaxonomy(projectResponse.Taxonomy, "platform"), People: projectResponse.Participations})
+		response.Projects = append(response.Projects, api.PublicPersonProject{Id: projectResponse.Id, Title: projectResponse.Title, ReferenceCode: projectResponse.ReferenceCode, AcademicYear: projectResponse.AcademicYear, Semester: projectResponse.Semester, Program: projectResponse.Program, Major: projectResponse.Major, Course: projectResponse.Course, PublishedAt: projectResponse.PublishedAt, Role: api.ParticipationRole(role), ArtifactCount: len(projectResponse.Artifacts), Categories: filterTaxonomy(projectResponse.Taxonomy, "category"), Platforms: filterTaxonomy(projectResponse.Taxonomy, "platform"), People: projectResponse.Participations, LogoUrl: projectResponse.LogoUrl})
 	}
 	if err := rows.Err(); err != nil {
 		problem(writer, request, 500, "internal_error", "Internal server error", "")
@@ -920,7 +1030,16 @@ func (controller *Controller) adminProjectResponse(ctx context.Context, value pr
 	if err != nil {
 		return api.AdminProject{}, err
 	}
-	return adminProjectResponse(value, program, major, course, participations, taxonomy, artifacts), nil
+	response := adminProjectResponse(value, program, major, course, participations, taxonomy, artifacts)
+	logoRevision, hasLogo, logoErr := controller.Logos.ActiveRevision(ctx, value.ID)
+	if logoErr != nil {
+		return api.AdminProject{}, logoErr
+	}
+	if hasLogo {
+		logoURL := projectLogoURL(controller.Config.PublicBasePath, value.ID, logoRevision)
+		response.LogoUrl = &logoURL
+	}
+	return response, nil
 }
 
 func adminProjectResponse(value projects.Project, program, major, course *api.CatalogReference, participations []api.Participation, taxonomy []api.TaxonomyValue, artifacts []api.Artifact) api.AdminProject {
@@ -958,6 +1077,12 @@ func (controller *Controller) publicProjectResponse(ctx context.Context, value p
 		return api.PublicProject{}, err
 	}
 	response := api.PublicProject{Id: value.ID, Title: valueOrEmpty(value.Title), Abstract: valueOrEmpty(value.Abstract), AcademicYear: valueOrZero(value.AcademicYear), Semester: api.Semester(valueOrEmpty(value.Semester)), ReferenceCode: value.ReferenceCode, TitleAliases: &value.TitleAliases, Artifacts: artifacts, Participations: participations, Taxonomy: taxonomy, CreatedAt: value.CreatedAt, UpdatedAt: value.UpdatedAt, PublishedAt: publishedAt(value), Status: value.Status}
+	if logoRevision, hasLogo, logoErr := controller.Logos.ActiveRevision(ctx, value.ID); logoErr == nil && hasLogo {
+		logoURL := projectLogoURL(controller.Config.PublicBasePath, value.ID, logoRevision)
+		response.LogoUrl = &logoURL
+	} else if logoErr != nil {
+		return api.PublicProject{}, logoErr
+	}
 	if program != nil {
 		response.Program = *program
 	}
@@ -1153,7 +1278,11 @@ func searchQuery(params api.SearchProjectsParams) searchservice.Query {
 	return query
 }
 
-func searchResponse(result searchservice.Result) api.SearchResponse {
+func projectLogoURL(publicBasePath string, projectID uuid.UUID, revision int64) string {
+	return strings.TrimSuffix(publicBasePath, "/") + "/api/v1/projects/" + projectID.String() + "/logo?v=" + strconv.FormatInt(revision, 10)
+}
+
+func searchResponse(result searchservice.Result, publicBasePath string) api.SearchResponse {
 	response := api.SearchResponse{
 		Items: []api.SearchResult{},
 		Page:  api.PageInfo{Limit: result.Limit, NextCursor: result.NextCursor},
@@ -1183,6 +1312,10 @@ func searchResponse(result searchservice.Result) api.SearchResponse {
 		if item.Major != nil {
 			major := searchCatalogReference(*item.Major)
 			searchResult.Major = &major
+		}
+		if item.LogoRevision != nil {
+			logoURL := projectLogoURL(publicBasePath, item.ID, *item.LogoRevision)
+			searchResult.LogoUrl = &logoURL
 		}
 		for _, highlight := range item.Highlights {
 			searchResult.Highlights = append(searchResult.Highlights, api.SearchHighlight{Field: api.SearchHighlightField(highlight.Field), Value: highlight.Value})

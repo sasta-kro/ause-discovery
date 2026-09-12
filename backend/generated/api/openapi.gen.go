@@ -461,6 +461,7 @@ type AdminProject struct {
 	DeletedAt         *time.Time              `json:"deleted_at"`
 	ExtensionMetadata *map[string]interface{} `json:"extension_metadata,omitempty"`
 	Id                Uuid                    `json:"id"`
+	LogoUrl           *string                 `json:"logo_url,omitempty"`
 	Major             *CatalogReference       `json:"major,omitempty"`
 	Participations    []Participation         `json:"participations"`
 	Program           *CatalogReference       `json:"program"`
@@ -745,6 +746,7 @@ type ProjectSummary struct {
 	Categories    []TaxonomyValue   `json:"categories"`
 	Course        CatalogReference  `json:"course"`
 	Id            Uuid              `json:"id"`
+	LogoUrl       *string           `json:"logo_url,omitempty"`
 	Major         *CatalogReference `json:"major,omitempty"`
 	People        []Participation   `json:"people"`
 	Platforms     []TaxonomyValue   `json:"platforms"`
@@ -770,6 +772,7 @@ type PublicPersonProject struct {
 	Categories    []TaxonomyValue   `json:"categories"`
 	Course        CatalogReference  `json:"course"`
 	Id            Uuid              `json:"id"`
+	LogoUrl       *string           `json:"logo_url,omitempty"`
 	Major         *CatalogReference `json:"major,omitempty"`
 	People        []Participation   `json:"people"`
 	Platforms     []TaxonomyValue   `json:"platforms"`
@@ -790,6 +793,7 @@ type PublicProject struct {
 	CreatedAt         Timestamp               `json:"created_at"`
 	ExtensionMetadata *map[string]interface{} `json:"extension_metadata,omitempty"`
 	Id                Uuid                    `json:"id"`
+	LogoUrl           *string                 `json:"logo_url,omitempty"`
 	Major             *CatalogReference       `json:"major,omitempty"`
 	Participations    []Participation         `json:"participations"`
 	Program           CatalogReference        `json:"program"`
@@ -914,6 +918,7 @@ type SearchResult struct {
 	Course        CatalogReference  `json:"course"`
 	Highlights    []SearchHighlight `json:"highlights"`
 	Id            Uuid              `json:"id"`
+	LogoUrl       *string           `json:"logo_url,omitempty"`
 	Major         *CatalogReference `json:"major,omitempty"`
 	People        []Participation   `json:"people"`
 	Platforms     []TaxonomyValue   `json:"platforms"`
@@ -1008,6 +1013,12 @@ type UploadArtifactRequest struct {
 	File                    openapi_types.File `json:"file"`
 }
 
+// UploadProjectLogoRequest defines model for UploadProjectLogoRequest.
+type UploadProjectLogoRequest struct {
+	ExpectedProjectRevision Revision           `json:"expected_project_revision"`
+	File                    openapi_types.File `json:"file"`
+}
+
 // Uuid defines model for Uuid.
 type Uuid = openapi_types.UUID
 
@@ -1077,6 +1088,9 @@ type HasSourceCode = bool
 // Limit defines model for Limit.
 type Limit = int
 
+// LogoVersion defines model for LogoVersion.
+type LogoVersion = int
+
 // MajorKey defines model for MajorKey.
 type MajorKey = []StableKey
 
@@ -1121,6 +1135,9 @@ type Health = HealthStatus
 
 // ImportResult defines model for ImportResult.
 type ImportResult = ImportCommitResult
+
+// ProjectLogoStorageUnavailable defines model for ProjectLogoStorageUnavailable.
+type ProjectLogoStorageUnavailable = Problem
 
 // ReindexProject defines model for ReindexProject.
 type ReindexProject = ReindexProjectResponse
@@ -1236,6 +1253,16 @@ type DeleteProjectParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
 }
 
+// RemoveProjectLogoParams defines parameters for RemoveProjectLogo.
+type RemoveProjectLogoParams struct {
+	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
+// UploadProjectLogoParams defines parameters for UploadProjectLogo.
+type UploadProjectLogoParams struct {
+	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
 // PublishProjectParams defines parameters for PublishProject.
 type PublishProjectParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
@@ -1254,6 +1281,12 @@ type ReindexProjectParams struct {
 // CreateSearchRebuildParams defines parameters for CreateSearchRebuild.
 type CreateSearchRebuildParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
+// GetProjectLogoParams defines parameters for GetProjectLogo.
+type GetProjectLogoParams struct {
+	// V Active Project Logo revision. The response is immutable and cached long only when this matches the active revision.
+	V LogoVersion `form:"v" json:"v"`
 }
 
 // SearchProjectsParams defines parameters for SearchProjects.
@@ -1327,6 +1360,12 @@ type UploadArtifactMultipartRequestBody = UploadArtifactRequest
 
 // DeleteProjectJSONRequestBody defines body for DeleteProject for application/json ContentType.
 type DeleteProjectJSONRequestBody = DeleteProjectRequest
+
+// RemoveProjectLogoJSONRequestBody defines body for RemoveProjectLogo for application/json ContentType.
+type RemoveProjectLogoJSONRequestBody = ExpectedRevisionRequest
+
+// UploadProjectLogoMultipartRequestBody defines body for UploadProjectLogo for multipart/form-data ContentType.
+type UploadProjectLogoMultipartRequestBody = UploadProjectLogoRequest
 
 // PublishProjectJSONRequestBody defines body for PublishProject for application/json ContentType.
 type PublishProjectJSONRequestBody = ExpectedRevisionRequest
@@ -1412,6 +1451,12 @@ type ServerInterface interface {
 	// (POST /admin/projects/{project_id}/delete)
 	DeleteProject(w http.ResponseWriter, r *http.Request, projectId ProjectId, params DeleteProjectParams)
 
+	// (DELETE /admin/projects/{project_id}/logo)
+	RemoveProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params RemoveProjectLogoParams)
+
+	// (PUT /admin/projects/{project_id}/logo)
+	UploadProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params UploadProjectLogoParams)
+
 	// (POST /admin/projects/{project_id}/publish)
 	PublishProject(w http.ResponseWriter, r *http.Request, projectId ProjectId, params PublishProjectParams)
 
@@ -1450,6 +1495,9 @@ type ServerInterface interface {
 
 	// (GET /projects/{project_id})
 	GetPublicProject(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+
+	// (GET /projects/{project_id}/logo)
+	GetProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params GetProjectLogoParams)
 
 	// (GET /search)
 	SearchProjects(w http.ResponseWriter, r *http.Request, params SearchProjectsParams)
@@ -1584,6 +1632,16 @@ func (_ Unimplemented) DeleteProject(w http.ResponseWriter, r *http.Request, pro
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// (DELETE /admin/projects/{project_id}/logo)
+func (_ Unimplemented) RemoveProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params RemoveProjectLogoParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (PUT /admin/projects/{project_id}/logo)
+func (_ Unimplemented) UploadProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params UploadProjectLogoParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // (POST /admin/projects/{project_id}/publish)
 func (_ Unimplemented) PublishProject(w http.ResponseWriter, r *http.Request, projectId ProjectId, params PublishProjectParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -1646,6 +1704,11 @@ func (_ Unimplemented) GetPublicPerson(w http.ResponseWriter, r *http.Request, p
 
 // (GET /projects/{project_id})
 func (_ Unimplemented) GetPublicProject(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /projects/{project_id}/logo)
+func (_ Unimplemented) GetProjectLogo(w http.ResponseWriter, r *http.Request, projectId ProjectId, params GetProjectLogoParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2787,6 +2850,114 @@ func (siw *ServerInterfaceWrapper) DeleteProject(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// RemoveProjectLogo operation middleware
+func (siw *ServerInterfaceWrapper) RemoveProjectLogo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", chi.URLParam(r, "project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveProjectLogoParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveProjectLogo(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadProjectLogo operation middleware
+func (siw *ServerInterfaceWrapper) UploadProjectLogo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", chi.URLParam(r, "project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UploadProjectLogoParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadProjectLogo(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PublishProject operation middleware
 func (siw *ServerInterfaceWrapper) PublishProject(w http.ResponseWriter, r *http.Request) {
 
@@ -3171,6 +3342,48 @@ func (siw *ServerInterfaceWrapper) GetPublicProject(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPublicProject(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProjectLogo operation middleware
+func (siw *ServerInterfaceWrapper) GetProjectLogo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "project_id" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "project_id", chi.URLParam(r, "project_id"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "project_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetProjectLogoParams
+
+	// ------------- Required query parameter "v" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "v", r.URL.Query(), &params.V, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "v"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "v", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProjectLogo(w, r, projectId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3628,6 +3841,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/people/{person_id}", wrapper.GetPublicPerson)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{project_id}/logo", wrapper.GetProjectLogo)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/catalogs", wrapper.GetCatalogs)
 	})
 	r.Group(func(r chi.Router) {
@@ -3695,6 +3911,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/admin/artifacts/{artifact_id}/replace", wrapper.ReplaceArtifact)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/admin/projects/{project_id}/logo", wrapper.RemoveProjectLogo)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/admin/projects/{project_id}/logo", wrapper.UploadProjectLogo)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/admin/imports", wrapper.CreateImport)

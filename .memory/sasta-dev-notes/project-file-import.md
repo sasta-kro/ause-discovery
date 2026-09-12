@@ -77,59 +77,8 @@ Add `--apply` after the dry-run succeeds. The API service writes final bytes int
 
 ## Manifest import for real Project files
 
-The manifest is a CSV file with this exact header:
-
-```csv
-project_id,project_import_key,artifact_type,display_name,file_path
-```
-
-Each row must provide exactly one Project identifier:
-
-- `project_id`: canonical Project UUID.
-- `project_import_key`: the `import_key` used by the metadata CSV or XLSX import.
-
-`reference_code` is not accepted as a mapping identity because it does not guarantee uniqueness. `file_path` must be relative to the manifest directory and must resolve to a regular file inside that directory.
-
-Example bundle:
-
-```text
-project-file-import/
-├── manifest.csv
-└── projects/
-    ├── sp-1703/
-    │   ├── report.pdf
-    │   └── slides.pdf
-    └── sp-1711/
-        └── source.zip
-```
-
-Example manifest:
-
-```csv
-project_id,project_import_key,artifact_type,display_name,file_path
-,sp-1703,report,Final report,projects/sp-1703/report.pdf
-,sp-1703,slides,Presentation slides,projects/sp-1703/slides.pdf
-,sp-1711,source_code,Source code,projects/sp-1711/source.zip
-```
-
-Run a dry-run:
-
-```sh
-docker compose --env-file <file> \
-  run --rm --no-deps \
-  --volume /srv/ause-discovery/project-file-import:/bulk:ro \
-  --entrypoint /usr/local/bin/ausectl \
-  api artifacts import-manifest \
-  --manifest /bulk/manifest.csv \
-  --actor-username <admin-username>
-```
-
-Add `--apply` to perform the uploads. A repeated manifest import skips an active Artifact when the Project, Artifact type, and file digest already match. A different file of the same type remains a separate Artifact because Projects may legitimately contain multiple reports, slide decks, or archives.
-
-## Validation and recovery behavior
-
-Before writing, the importer validates every source path, file size, extension, detected content type, Project mapping, administrator identity, and projected per-Project quota. Missing or ambiguous `project_import_key` values stop the run.
-
-Uploads are committed one file at a time. A runtime failure can leave earlier uploads committed. Repeating the command is the recovery procedure because already imported demonstration types or matching manifest files are skipped. Published Projects are queued for normal search reconciliation after each successful upload.
-
-Demonstration files and final corpus files should normally use separate deployments. Manifest import can add real files to a demonstration deployment, but it does not automatically delete or replace demonstration Artifacts.
+The former CSV manifest import (`ausectl artifacts import-manifest`) was
+removed. Real Project Files and Project Logos import through the unified
+Project Content JSON manifest instead. See
+`project-content-import.md` in this directory for the manifest contract, the
+extractor export command, and dry-run and recovery behavior.

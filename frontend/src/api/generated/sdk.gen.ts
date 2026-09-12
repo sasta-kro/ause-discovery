@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { CommitImportData, CommitImportErrors, CommitImportResponses, CreateImportData, CreateImportErrors, CreateImportResponses, CreatePersonData, CreatePersonErrors, CreatePersonResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateSearchRebuildData, CreateSearchRebuildErrors, CreateSearchRebuildResponses, DeleteArtifactData, DeleteArtifactErrors, DeleteArtifactResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DownloadArtifactData, DownloadArtifactErrors, DownloadArtifactResponses, GetAdminPersonData, GetAdminPersonErrors, GetAdminPersonResponses, GetAdminProjectData, GetAdminProjectErrors, GetAdminProjectResponses, GetCatalogsData, GetCatalogsResponses, GetCsrfTokenData, GetCsrfTokenErrors, GetCsrfTokenResponses, GetImportData, GetImportErrors, GetImportResponses, GetImportResultData, GetImportResultErrors, GetImportResultResponses, GetLiveHealthData, GetLiveHealthResponses, GetPublicPersonData, GetPublicPersonErrors, GetPublicPersonResponses, GetPublicProjectData, GetPublicProjectErrors, GetPublicProjectResponses, GetReadyHealthData, GetReadyHealthErrors, GetReadyHealthResponses, GetSearchRebuildData, GetSearchRebuildErrors, GetSearchRebuildResponses, GetSearchStatusData, GetSearchStatusErrors, GetSearchStatusResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ListAdminPeopleData, ListAdminPeopleErrors, ListAdminPeopleResponses, ListAdminProjectsData, ListAdminProjectsErrors, ListAdminProjectsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListImportRowsData, ListImportRowsErrors, ListImportRowsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, PublishProjectData, PublishProjectErrors, PublishProjectResponses, ReindexProjectData, ReindexProjectErrors, ReindexProjectResponses, ReplaceArtifactData, ReplaceArtifactErrors, ReplaceArtifactResponses, ReplaceProjectData, ReplaceProjectErrors, ReplaceProjectResponses, RestoreArtifactData, RestoreArtifactErrors, RestoreArtifactResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, SearchProjectsData, SearchProjectsErrors, SearchProjectsResponses, UpdateArtifactData, UpdateArtifactErrors, UpdateArtifactResponses, UpdateImportRowsData, UpdateImportRowsErrors, UpdateImportRowsResponses, UpdatePersonData, UpdatePersonErrors, UpdatePersonResponses, UploadArtifactData, UploadArtifactErrors, UploadArtifactResponses, ViewArtifactData, ViewArtifactErrors, ViewArtifactResponses } from './types.gen';
+import type { CommitImportData, CommitImportErrors, CommitImportResponses, CreateImportData, CreateImportErrors, CreateImportResponses, CreatePersonData, CreatePersonErrors, CreatePersonResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateSearchRebuildData, CreateSearchRebuildErrors, CreateSearchRebuildResponses, DeleteArtifactData, DeleteArtifactErrors, DeleteArtifactResponses, DeleteProjectData, DeleteProjectErrors, DeleteProjectResponses, DownloadArtifactData, DownloadArtifactErrors, DownloadArtifactResponses, GetAdminPersonData, GetAdminPersonErrors, GetAdminPersonResponses, GetAdminProjectData, GetAdminProjectErrors, GetAdminProjectResponses, GetCatalogsData, GetCatalogsResponses, GetCsrfTokenData, GetCsrfTokenErrors, GetCsrfTokenResponses, GetImportData, GetImportErrors, GetImportResponses, GetImportResultData, GetImportResultErrors, GetImportResultResponses, GetLiveHealthData, GetLiveHealthResponses, GetProjectLogoData, GetProjectLogoErrors, GetProjectLogoResponses, GetPublicPersonData, GetPublicPersonErrors, GetPublicPersonResponses, GetPublicProjectData, GetPublicProjectErrors, GetPublicProjectResponses, GetReadyHealthData, GetReadyHealthErrors, GetReadyHealthResponses, GetSearchRebuildData, GetSearchRebuildErrors, GetSearchRebuildResponses, GetSearchStatusData, GetSearchStatusErrors, GetSearchStatusResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ListAdminPeopleData, ListAdminPeopleErrors, ListAdminPeopleResponses, ListAdminProjectsData, ListAdminProjectsErrors, ListAdminProjectsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListImportRowsData, ListImportRowsErrors, ListImportRowsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutErrors, LogoutResponses, PublishProjectData, PublishProjectErrors, PublishProjectResponses, ReindexProjectData, ReindexProjectErrors, ReindexProjectResponses, RemoveProjectLogoData, RemoveProjectLogoErrors, RemoveProjectLogoResponses, ReplaceArtifactData, ReplaceArtifactErrors, ReplaceArtifactResponses, ReplaceProjectData, ReplaceProjectErrors, ReplaceProjectResponses, RestoreArtifactData, RestoreArtifactErrors, RestoreArtifactResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, SearchProjectsData, SearchProjectsErrors, SearchProjectsResponses, UpdateArtifactData, UpdateArtifactErrors, UpdateArtifactResponses, UpdateImportRowsData, UpdateImportRowsErrors, UpdateImportRowsResponses, UpdatePersonData, UpdatePersonErrors, UpdatePersonResponses, UploadArtifactData, UploadArtifactErrors, UploadArtifactResponses, UploadProjectLogoData, UploadProjectLogoErrors, UploadProjectLogoResponses, ViewArtifactData, ViewArtifactErrors, ViewArtifactResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -27,6 +27,8 @@ export const searchProjects = <ThrowOnError extends boolean = false>(options?: O
 export const getPublicProject = <ThrowOnError extends boolean = false>(options: Options<GetPublicProjectData, ThrowOnError>): RequestResult<GetPublicProjectResponses, GetPublicProjectErrors, ThrowOnError> => (options.client ?? client).get<GetPublicProjectResponses, GetPublicProjectErrors, ThrowOnError>({ url: '/projects/{project_id}', ...options });
 
 export const getPublicPerson = <ThrowOnError extends boolean = false>(options: Options<GetPublicPersonData, ThrowOnError>): RequestResult<GetPublicPersonResponses, GetPublicPersonErrors, ThrowOnError> => (options.client ?? client).get<GetPublicPersonResponses, GetPublicPersonErrors, ThrowOnError>({ url: '/people/{person_id}', ...options });
+
+export const getProjectLogo = <ThrowOnError extends boolean = false>(options: Options<GetProjectLogoData, ThrowOnError>): RequestResult<GetProjectLogoResponses, GetProjectLogoErrors, ThrowOnError> => (options.client ?? client).get<GetProjectLogoResponses, GetProjectLogoErrors, ThrowOnError>({ url: '/projects/{project_id}/logo', ...options });
 
 export const getCatalogs = <ThrowOnError extends boolean = false>(options?: Options<GetCatalogsData, ThrowOnError>): RequestResult<GetCatalogsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetCatalogsResponses, unknown, ThrowOnError>({ url: '/catalogs', ...options });
 
@@ -276,6 +278,35 @@ export const replaceArtifact = <ThrowOnError extends boolean = false>(options: O
             type: 'apiKey'
         }, { name: 'X-CSRF-Token', type: 'apiKey' }],
     url: '/admin/artifacts/{artifact_id}/replace',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+export const removeProjectLogo = <ThrowOnError extends boolean = false>(options: Options<RemoveProjectLogoData, ThrowOnError>): RequestResult<RemoveProjectLogoResponses, RemoveProjectLogoErrors, ThrowOnError> => (options.client ?? client).delete<RemoveProjectLogoResponses, RemoveProjectLogoErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'ause_session',
+            type: 'apiKey'
+        }, { name: 'X-CSRF-Token', type: 'apiKey' }],
+    url: '/admin/projects/{project_id}/logo',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const uploadProjectLogo = <ThrowOnError extends boolean = false>(options: Options<UploadProjectLogoData, ThrowOnError>): RequestResult<UploadProjectLogoResponses, UploadProjectLogoErrors, ThrowOnError> => (options.client ?? client).put<UploadProjectLogoResponses, UploadProjectLogoErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    security: [{
+            in: 'cookie',
+            name: 'ause_session',
+            type: 'apiKey'
+        }, { name: 'X-CSRF-Token', type: 'apiKey' }],
+    url: '/admin/projects/{project_id}/logo',
     ...options,
     headers: {
         'Content-Type': null,
