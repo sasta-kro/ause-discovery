@@ -77,9 +77,14 @@ The extractor repository produces `output/enrichment/manifest.json`. Export a
 logo-only Project Content manifest with jq from the extractor repository
 root:
 
+Slide-only projects have no abstract, never enter the metadata CSV, and so
+never exist in the database; exclude them or whole-bundle planning will stop
+at the first unresolvable entry (sp-2021 was the only such logo entry).
+
 ```sh
 jq '{version: 1, projects: [to_entries[]
   | select(.value.logo.output != null)
+  | select(.key != "2021")
   | {project_import_key: ("sp-" + .key),
      logo: {file_path: .value.logo.output},
      files: []}]}' \
