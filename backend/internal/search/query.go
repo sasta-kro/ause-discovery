@@ -370,6 +370,10 @@ func decodeCursor(query Query, cursor string) (int, error) {
 
 func queryHash(query Query) (string, error) {
 	query.Cursor = ""
+	// The hash binds the normalized query: ordering resolution already
+	// trims text, so hashing the same trimmed value keeps semantically
+	// equivalent surrounding-whitespace queries cursor-compatible.
+	query.Text = strings.TrimSpace(query.Text)
 	// The hash binds the resolved ordering rather than the raw sort token,
 	// so semantically equivalent omitted and explicit relevance states hash
 	// identically, and any ordering or schema change invalidates older

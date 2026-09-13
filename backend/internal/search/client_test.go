@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -127,5 +128,52 @@ func TestEnsureIndexDoesNotRecreateExistingIndex(t *testing.T) {
 	}
 	if createRequests != 0 {
 		t.Fatalf("existing index was recreated %d times", createRequests)
+	}
+}
+
+func TestDeleteIndexWaitsForTaskAndTreatsMissingAsSuccess(t *testing.T) {
+	var mutex sync.Mutex
+	requests := []string{}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		mutex.Lock()
+		requests = append(requests, request.Method+" "+request.URL.Path)
+		mutex.Unlock()
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodDelete && request.URL.Path == "/indexes/waited":
+			writer.WriteHeader(http.StatusAccepted)
+			_, _ = writer.Write([]byte(`{"taskUid": 41}`))
+		case request.Method == http.MethodDelete && request.URL.Path == "/indexes/absent":
+			writer.WriteHeader(http.StatusNotFound)
+			_, _ = writer.Write([]byte(`{"code":"index_not_found"}`))
+		case request.Method == http.MethodDelete && request.URL.Path == "/indexes/enqueued-missing":
+			writer.WriteHeader(http.StatusAccepted)
+			_, _ = writer.Write([]byte(`{"taskUid": 42}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/tasks/41":
+			_, _ = writer.Write([]byte(`{"status":"succeeded"}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/tasks/42":
+			_, _ = writer.Write([]byte(`{"status":"failed","error":{"code":"index_not_found","message":"Index not found."}}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := MeilisearchClient{BaseURL: server.URL, APIKey: "test-key", TaskTimeout: 2 * time.Second}
+
+	if err := client.DeleteIndex(context.Background(), "waited"); err != nil {
+		t.Fatalf("DeleteIndex for an accepted deletion returned an error: %v", err)
+	}
+	if err := client.DeleteIndex(context.Background(), "absent"); err != nil {
+		t.Fatalf("DeleteIndex for a missing index returned an error: %v", err)
+	}
+	// The engine accepts a missing-index deletion as a task that then fails
+	// with index_not_found: the end state is still a controlled success.
+	if err := client.DeleteIndex(context.Background(), "enqueued-missing"); err != nil {
+		t.Fatalf("DeleteIndex for an enqueued missing index returned an error: %v", err)
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	if fmt.Sprint(requests) != fmt.Sprint([]string{"DELETE /indexes/waited", "GET /tasks/41", "DELETE /indexes/absent", "DELETE /indexes/enqueued-missing", "GET /tasks/42"}) {
+		t.Fatalf("requests were %v", requests)
 	}
 }

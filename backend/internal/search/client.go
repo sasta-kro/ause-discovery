@@ -116,19 +116,45 @@ func (client MeilisearchClient) UpsertDocuments(ctx context.Context, indexUID st
 	return client.waitForAcceptedTask(ctx, response)
 }
 
-// DeleteIndex removes one index. It exists for disposable test indexes and
-// operator recovery; the application's own lifecycle never deletes the
-// logical index.
+// taskError marks a completed-but-failed engine task and keeps the engine
+// error code branchable through errors.As.
+type taskError struct {
+	code    string
+	message string
+}
+
+func (err *taskError) Error() string { return "Meilisearch task " + err.code + ": " + err.message }
+
+// taskErrorCode reports the engine error code of a failed task, or an empty
+// string for other errors.
+func taskErrorCode(err error) string {
+	var taskErr *taskError
+	if errors.As(err, &taskErr) {
+		return taskErr.code
+	}
+	return ""
+}
+
+// DeleteIndex removes one index and waits for the accepted deletion task so
+// callers can rely on the index actually being gone. A missing index is a
+// controlled success whether the engine answers 404 directly or enqueues a
+// deletion task that fails with index_not_found. It exists for disposable
+// test indexes and operator recovery; the application's own lifecycle never
+// deletes the logical index.
 func (client MeilisearchClient) DeleteIndex(ctx context.Context, indexUID string) error {
 	response, err := client.request(ctx, http.MethodDelete, "/indexes/"+url.PathEscape(indexUID), nil)
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusAccepted && response.StatusCode != http.StatusNotFound {
-		return client.responseError(response)
+	if response.StatusCode == http.StatusNotFound {
+		defer response.Body.Close()
+		return nil
 	}
-	return nil
+	err = client.waitForAcceptedTask(ctx, response)
+	if code := taskErrorCode(err); code == "index_not_found" {
+		return nil
+	}
+	return err
 }
 
 func (client MeilisearchClient) DeleteDocument(ctx context.Context, indexUID string, documentID uuid.UUID) error {
@@ -239,7 +265,7 @@ func (client MeilisearchClient) waitForAcceptedTask(ctx context.Context, respons
 			return nil
 		case "failed", "canceled":
 			if task.Error != nil {
-				return fmt.Errorf("Meilisearch task %s: %s", task.Error.Code, task.Error.Message)
+				return &taskError{code: task.Error.Code, message: task.Error.Message}
 			}
 			return fmt.Errorf("Meilisearch task ended with status %s", task.Status)
 		}

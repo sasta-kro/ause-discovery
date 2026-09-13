@@ -166,3 +166,22 @@ func TestCursorBindsToResolvedOrderingAndSchema(t *testing.T) {
 		t.Fatal("empty-text cursor accepted against textual query")
 	}
 }
+
+func TestCursorAcceptsSemanticallyEquivalentWhitespace(t *testing.T) {
+	padded := Query{Text: "  greenhouse  ", Limit: 20}
+	cursor, err := encodeCursor(padded, 20)
+	if err != nil {
+		t.Fatalf("encodeCursor returned an error: %v", err)
+	}
+	trimmed := Query{Text: "greenhouse", Limit: 20}
+	if _, err := decodeCursor(trimmed, cursor); err != nil {
+		t.Fatalf("trimmed query rejected the padded-query cursor: %v", err)
+	}
+	if _, err := decodeCursor(padded, cursor); err != nil {
+		t.Fatalf("padded query rejected its own cursor: %v", err)
+	}
+	different := Query{Text: "greenhouse kit", Limit: 20}
+	if _, err := decodeCursor(different, cursor); err != ErrInvalidCursor {
+		t.Fatal("genuinely different text accepted the cursor")
+	}
+}

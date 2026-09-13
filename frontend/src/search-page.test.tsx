@@ -217,14 +217,14 @@ describe('public search contextual sort display', () => {
   it('switches the implicit displayed default when text is submitted and cleared', async () => {
     renderSearch()
     await screen.findByText('Sort Display Result')
+    const input = screen.getByPlaceholderText('Search title, student, advisor, or code')
+    const form = input.closest('form') as HTMLFormElement
     const select = screen.getByLabelText('Sort results') as HTMLSelectElement
-    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
-    // Submitting uses the form's current input value; type first.
-    fireEvent.change(screen.getByPlaceholderText('Search title, student, advisor, or code'), { target: { value: 'vision' } })
-    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
+    fireEvent.change(input, { target: { value: 'vision' } })
+    fireEvent.submit(form)
     await waitFor(() => expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('relevance'))
-    fireEvent.change(screen.getByPlaceholderText('Search title, student, advisor, or code'), { target: { value: '' } })
-    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.submit(form)
     await waitFor(() => expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('newest'))
     expect(select.value).toBe('newest')
   })

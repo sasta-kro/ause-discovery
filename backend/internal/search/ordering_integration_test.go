@@ -34,7 +34,13 @@ func TestPinnedMeilisearchOrdersAcademically(t *testing.T) {
 	if err := client.DeleteIndex(ctx, indexUID); err != nil {
 		t.Fatalf("pre-clean index: %v", err)
 	}
-	t.Cleanup(func() { _ = client.DeleteIndex(context.Background(), indexUID) })
+	t.Cleanup(func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := client.DeleteIndex(cleanupContext, indexUID); err != nil {
+			t.Errorf("clean up disposable index %s: %v", indexUID, err)
+		}
+	})
 	if err := client.EnsureIndex(ctx, indexUID); err != nil {
 		t.Fatalf("ensure index: %v", err)
 	}
@@ -100,6 +106,26 @@ func TestPinnedMeilisearchOrdersAcademically(t *testing.T) {
 	}
 	if relevant.Items[1].AcademicYear != 2024 || relevant.Items[2].AcademicYear != 2018 {
 		t.Fatalf("equal-relevance tie did not use academic newest: %v", got)
+	}
+
+	// An explicit academic sort is authoritative even for a nonempty text
+	// query: the older document with the strong lexical match must not
+	// outrank the newer document when the user asks for newest.
+	explicitNewest, err := service.Search(ctx, Query{Text: "greenhouse", Sort: "newest", Limit: 20})
+	if err != nil {
+		t.Fatalf("explicit newest text search: %v", err)
+	}
+	got = titles(explicitNewest)
+	if got[0] != "Modern ledger" || got[1] != "Identical twin controller" {
+		t.Fatalf("explicit newest did not override lexical relevance: %v", got)
+	}
+	explicitOldest, err := service.Search(ctx, Query{Text: "greenhouse", Sort: "oldest", Limit: 20})
+	if err != nil {
+		t.Fatalf("explicit oldest text search: %v", err)
+	}
+	got = titles(explicitOldest)
+	if got[0] != "Identical twin controller" || explicitOldest.Items[0].AcademicYear != 2018 || got[len(got)-1] != "Modern ledger" {
+		t.Fatalf("explicit oldest did not reverse chronology for a text query: %v", got)
 	}
 
 	// Explicit oldest reverses academic chronology.
