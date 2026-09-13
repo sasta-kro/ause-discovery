@@ -23,7 +23,7 @@ changes it.
    Project Content Import
 4. `.memory/architectural_decision_logs.md`, especially AD-001, AD-003,
    AD-004, and AD-007
-5. `.memory/mvp_implementation_status.md`, especially backlog item 18 and the
+5. `.memory/implementation-status/completed.md`, especially former backlog item 18 and the
    enrichment-pass record
 6. `.memory/docs/increments/12-project-logo-integration.md`
 7. `.memory/sasta-dev-notes/project-content-import.md`
@@ -442,7 +442,7 @@ After focused verification:
 - extend `.memory/sasta-dev-notes/project-content-import.md` with the `links`
   manifest contract, extractor mapping, current 13-Project and 15-link evidence,
   dry-run, apply, rerun, and combined-bundle behavior;
-- update backlog item 18 in `.memory/mvp_implementation_status.md` to
+- record former backlog item 18 in `.memory/implementation-status/completed.md` as
   implemented with concise verification evidence;
 - update `.memory/CONTEXT.md` only if implementation materially changes the
   term already recorded;

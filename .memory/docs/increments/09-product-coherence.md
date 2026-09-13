@@ -18,7 +18,7 @@ Read the following files in order:
 2. `.memory/MEMORY.md`
 3. `.memory/project_context.md`
 4. `.memory/architectural_decision_logs.md`
-5. `.memory/mvp_implementation_status.md`
+5. `.memory/implementation-status/completed.md`
 6. `.memory/lessons_learned.md`
 7. `CONTEXT.md`
 8. `docs/ause-discovery_specification_v1.md`, especially sections 8, 16, 23 through 32, 34, 43, 49, 50, 55, and 58
@@ -517,7 +517,7 @@ The increment is ready for review only when all conditions below hold:
 - the non-root Nginx and security-header smoke passes for default and root paths.
 - Compose renders with the new internal web port.
 - starter assets are removed only after tracked-reference checks.
-- `.memory/mvp_implementation_status.md` records implemented behavior and exact focused verification without declaring final technical MVP acceptance.
+- `.memory/implementation-status/completed.md` records implemented behavior and exact focused verification without declaring final technical MVP acceptance.
 - `.memory/MEMORY.md` continues to name `27ecdd0` as the accepted review baseline until this implementation passes independent review. It may state that product coherence is submitted for review.
 - `.memory/lessons_learned.md` changes only for a verified reusable failure pattern.
 - no unrelated source, generated output, dependency, lockfile, CI, or backend changes are present.

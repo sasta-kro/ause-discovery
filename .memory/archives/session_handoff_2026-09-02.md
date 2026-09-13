@@ -160,7 +160,7 @@ Priority review points before committing:
 - Complete Project participation and taxonomy frontend controls.
 - Run focused backend unit tests, one PostgreSQL integration pass, frontend lint/tests, and root plus subpath builds.
 - Smoke test login, Person CRUD, Project draft, Project publish, public Project, delete, and restore.
-- Update `.memory/mvp_implementation_status.md`.
+- Update the appropriate file under `.memory/implementation-status/`.
 - Commit the coherent increment.
 
 ### 2. Artifact vertical

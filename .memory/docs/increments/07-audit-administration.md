@@ -16,7 +16,7 @@ Read the following files in order:
 2. `.memory/MEMORY.md`
 3. `.memory/project_context.md`
 4. `.memory/architectural_decision_logs.md`
-5. `.memory/mvp_implementation_status.md`
+5. `.memory/implementation-status/completed.md`
 6. `.memory/lessons_learned.md`
 7. `CONTEXT.md`
 8. `docs/ause-discovery_specification_v1.md`, especially sections 16 and 35
@@ -272,7 +272,7 @@ The increment is complete only when all conditions below hold:
 - Generated code matches source contracts.
 - Focused backend, HTTP, and frontend checks pass.
 - The targeted authenticated HTTP smoke path passes.
-- `.memory/mvp_implementation_status.md` records verified audit behavior and evidence.
+- `.memory/implementation-status/completed.md` records verified audit behavior and evidence.
 - `.memory/MEMORY.md` advances the checkpoint only after verification.
 - `.memory/lessons_learned.md` changes only when a durable reusable lesson was actually discovered.
 - No unrelated formatting or cleanup is included.

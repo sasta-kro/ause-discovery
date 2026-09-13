@@ -14,7 +14,7 @@ Start only after increment 11 is accepted. Treat that accepted commit as the bas
 2. `.memory/MEMORY.md`
 3. `.memory/CONTEXT.md`
 4. `.memory/architectural_decision_logs.md`, especially AD-011
-5. `.memory/mvp_implementation_status.md`, especially the completed enrichment pass
+5. `.memory/implementation-status/completed.md`, especially the completed enrichment pass
 6. `.memory/docs/increments/10-pluggable-artifact-storage.md`
 7. `.memory/docs/increments/11-project-file-import-concurrency.md`
 8. `api/openapi.yaml`
@@ -321,7 +321,7 @@ Do not add Project Logo or Project File fields to CSV/XLSX metadata import. Proj
 8. Remove the superseded `artifacts import-manifest` command, CSV loader, tests, and instructions.
 9. Add search result, Project detail, and administrator Project UI.
 10. Run focused verification once.
-11. Update `.memory/CONTEXT.md`, `.memory/mvp_implementation_status.md`, and any verified reusable lesson.
+11. Update `.memory/CONTEXT.md`, `.memory/implementation-status/completed.md`, and any verified reusable lesson.
 12. Commit the main repository once and stop.
 
 ## Focused verification

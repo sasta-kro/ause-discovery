@@ -12,7 +12,8 @@ Read these files in order before planning or implementation:
 2. `MEMORY.md`
 3. `project_context.md`
 4. `architectural_decision_logs.md`
-5. `mvp_implementation_status.md`, after implementation begins
+5. `implementation-status/README.md`, then `implementation-status/backlog.md`
+   for current work or `implementation-status/completed.md` for accepted history
 6. `lessons_learned.md`, when substantive lessons exist
 
 Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_implementation_specification_v1.md` before implementation.
@@ -21,7 +22,9 @@ Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_
 
 - `project_context.md` contains durable product, repository, and implementation-baseline context.
 - `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
-- `mvp_implementation_status.md` will contain verified implementation state after application work begins.
+- `implementation-status/README.md` routes status reading;
+  `implementation-status/backlog.md` contains current or incomplete work; and
+  `implementation-status/completed.md` contains accepted history and evidence.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
 - `archives/session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
 - `archives/history-rewrite-2026-09-05.md` preserves the old-to-new commit map for correlating earlier reports and conversations.
@@ -38,7 +41,13 @@ Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_
 
 ## Current checkpoint
 
-As of 2026-09-05, the AUSE Discovery technical MVP is complete at commit `1cc5dc6`. Foundation, data contracts, identity and core records, Artifacts, search, imports, audit administration, CI and operator readiness, product coherence, and final product acceptance are verified. Final acceptance covered fresh migration and catalog synchronization, authenticated administration, public discovery, Artifact serving, CSV and XLSX imports, search outage and rebuild recovery, restart persistence, root and subpath deployments, browser accessibility, dependency checks, and runtime image scans. No unresolved technical MVP defect remains. A first demo deployment runs at `https://life.au.edu/ause-discovery/` (shared university host; the application occupies the `/ause-discovery/` base path alongside other services) with 138 imported Projects and hosted Artifacts. The deployment is a demonstration of the technical MVP, not the finished product: permanently wrapped admin import rows and acknowledge-all-warnings remain open, while the Project classification breakdown is implemented. Production ownership, URLs, infrastructure, approved institutional content, and other launch-time inputs remain external launch-readiness work.
+As of 2026-09-13, the AUSE Discovery technical MVP is complete at commit
+`1cc5dc6`, the application is deployed at
+`https://life.au.edu/ause-discovery/`, and post-MVP implementation through
+Project Logo loading Increment 16 exists at commit `af53e63`. Read
+`implementation-status/backlog.md` for current work and constraints. Read
+`implementation-status/completed.md` only for accepted history, detailed
+behavior, or verification evidence.
 
 ## Implementation workflow
 

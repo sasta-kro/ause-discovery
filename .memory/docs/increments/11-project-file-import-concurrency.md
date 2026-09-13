@@ -13,7 +13,7 @@ The accepted code baseline is commit `3394f0f`. Preserve unrelated working-tree 
 1. `AGENTS.md`
 2. `.memory/MEMORY.md`
 3. `.memory/CONTEXT.md`
-4. `.memory/mvp_implementation_status.md`, especially backlog item 12
+4. `.memory/implementation-status/completed.md`, especially former backlog item 12
 5. `.memory/sasta-dev-notes/project-file-import.md`
 6. `backend/internal/artifactimport/`
 7. `backend/cmd/ausectl/main.go` and its focused tests
@@ -150,7 +150,7 @@ Concurrency must not change these cases:
 4. Extend `backend/cmd/ausectl/main.go` with `--workers`, the start line, Project progress formatting, and final failed counts.
 5. Update focused parser and import tests.
 6. Run focused verification once the increment is coherent.
-7. Record the implemented behavior and exact evidence in `.memory/mvp_implementation_status.md`.
+7. Record the implemented behavior and exact evidence in `.memory/implementation-status/completed.md`.
 8. Commit once and stop.
 
 Do not extract a generic concurrency framework during this increment. If the Project Logo importer in increment 12 creates a verified second use, the smallest shared Project-work helper may be extracted there.

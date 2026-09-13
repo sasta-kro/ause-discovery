@@ -20,7 +20,7 @@ changes and existing behavior unless this brief explicitly changes it.
 2. `.memory/MEMORY.md`
 3. `.memory/CONTEXT.md`, especially Project Logo and Artifact Store
 4. `.memory/architectural_decision_logs.md`, especially AD-009 and AD-011
-5. `.memory/mvp_implementation_status.md`, especially backlog item 21
+5. `.memory/implementation-status/completed.md`, especially former backlog item 21
 6. `.memory/docs/increments/12-project-logo-integration.md`
 7. `frontend/src/app-shell.tsx`
 8. `frontend/src/features/admin/project-logo.tsx`
@@ -275,7 +275,7 @@ maintainer.
 4. Add opacity and reduced-motion styles.
 5. Add focused lifecycle and priority tests.
 6. Run static checks and the production build once.
-7. Update backlog item 21 and verified implementation status after acceptance.
+7. Move backlog item 21 to `.memory/implementation-status/completed.md` after acceptance.
 8. Commit the main repository once and stop.
 
 ## Completion criteria

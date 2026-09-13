@@ -19,7 +19,7 @@ and all existing behavior unless this brief explicitly changes it.
 2. `.memory/MEMORY.md`
 3. `.memory/CONTEXT.md`
 4. `.memory/architectural_decision_logs.md`, especially AD-011
-5. `.memory/mvp_implementation_status.md`, especially items 8, 12, and 13
+5. `.memory/implementation-status/completed.md`, especially former items 8, 12, and 13
 6. `.memory/docs/increments/10-pluggable-artifact-storage.md`
 7. `backend/internal/artifacts/storage.go`
 8. `backend/internal/artifacts/storage_b2.go`
@@ -305,7 +305,7 @@ deferred rather than weakening the automated evidence.
 
 ## Documentation and memory
 
-Update `.memory/mvp_implementation_status.md` with:
+Update `.memory/implementation-status/completed.md` with:
 
 - the previous readiness gap;
 - the implemented default-provider readiness behavior;

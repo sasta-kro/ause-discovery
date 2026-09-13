@@ -15,7 +15,7 @@ brief explicitly changes it.
 1. `AGENTS.md`
 2. `.memory/MEMORY.md`
 3. `.memory/CONTEXT.md`
-4. `.memory/mvp_implementation_status.md`, especially backlog item 11
+4. `.memory/implementation-status/completed.md`, especially former backlog item 11
 5. `.memory/docs/ause-discovery_implementation_specification_v1.md`, Artifact
    allowlist and serving sections
 6. `backend/internal/artifacts/validation.go`
@@ -180,7 +180,7 @@ After focused verification:
 - change the internal implementation specification's `report` allowlist to
   `.pdf`, `.docx`, with PDF-only inline view;
 - change the Project Content operator guide's allowed-extension table;
-- update backlog item 11 in `.memory/mvp_implementation_status.md` to
+- record former backlog item 11 in `.memory/implementation-status/completed.md` as
   implemented with concise verification evidence;
 - add a lesson only if a new durable failure pattern is discovered.
 

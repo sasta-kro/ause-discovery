@@ -16,7 +16,7 @@ Note: the split author-review workflow is suspended for this increment by the ma
 2. `.memory/MEMORY.md`
 3. `.memory/project_context.md`
 4. `.memory/architectural_decision_logs.md`, especially AD-011 (supersedes AD-008) and AD-010
-5. `.memory/mvp_implementation_status.md`, backlog item 8
+5. `.memory/implementation-status/completed.md`, former backlog item 8
 6. This brief
 
 ## Repository starting state
@@ -147,6 +147,6 @@ All through the pinned containers (`make` targets):
 
 ## Completion
 
-After verification: update `.memory/mvp_implementation_status.md` backlog item 8 (implemented state), record any reusable lesson in `lessons_learned.md`, commit everything as one past-tense commit referencing AD-011, and hand off with the commit hash, the verification evidence, and the residual risks (notably: none of the automated tests exercise the live endpoint; the live check in item 4 is the only end-to-end proof).
+After verification: record backlog item 8 as implemented in `.memory/implementation-status/completed.md`, record any reusable lesson in `lessons_learned.md`, commit everything as one past-tense commit referencing AD-011, and hand off with the commit hash, the verification evidence, and the residual risks (notably: none of the automated tests exercise the live endpoint; the live check in item 4 is the only end-to-end proof).
 
 Increment 10 ends here. Tagging `v*` and VM migration are subsequent maintainer-driven steps tracked as separate tasks.

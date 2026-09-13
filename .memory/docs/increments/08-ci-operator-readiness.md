@@ -18,7 +18,7 @@ Read these files in order:
 2. `.memory/MEMORY.md`
 3. `.memory/project_context.md`
 4. `.memory/architectural_decision_logs.md`
-5. `.memory/mvp_implementation_status.md`
+5. `.memory/implementation-status/completed.md`
 6. `.memory/lessons_learned.md`
 7. `docs/ause-discovery_specification_v1.md`, especially sections 24 and 37 through 40
 8. `docs/ause-discovery_implementation_specification_v1.md`, especially sections 3, 5, 11, 13, 14, 15, 16.7, and 17
@@ -456,7 +456,7 @@ The increment is complete only when all conditions below hold:
 - Operator runbook covers every required operational section and uses commands that match the repository.
 - README points to the runbook and local CI parity commands.
 - Focused infrastructure verification passes.
-- `.memory/mvp_implementation_status.md` records only verified CI and operations behavior.
+- `.memory/implementation-status/completed.md` records only verified CI and operations behavior.
 - `.memory/MEMORY.md` advances the checkpoint only after verification.
 - `.memory/lessons_learned.md` changes only for genuinely durable lessons.
 - No unrelated application or formatting changes are present.

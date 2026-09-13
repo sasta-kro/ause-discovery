@@ -79,7 +79,8 @@ The repository uses lightweight durable records:
 - `CONTEXT.md` changes only when domain language changes.
 - `.memory/architectural_decision_logs.md` records hard-to-reverse architecture choices with real tradeoffs.
 - `.memory/lessons_learned.md` records verified failure patterns that could recur.
-- `.memory/mvp_implementation_status.md` records completed and verified implementation state after coding begins.
+- `.memory/implementation-status/` separates current backlog and constraints
+  from completed and verified implementation history.
 
 Routine implementation choices, normal bug fixes, work logs, and speculative concerns do not belong in ADRs or long-term memory.
 
