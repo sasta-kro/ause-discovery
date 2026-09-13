@@ -9,12 +9,19 @@ export type DecodedLogoStatus = 'absent' | 'pending' | 'ready' | 'failed'
 export type DecodedLogoBinding = {
   status: DecodedLogoStatus
   imageProps: {
+    key: string
     ref: (element: HTMLImageElement | null) => void
     onLoad: () => void
     onError: () => void
   }
 }
 
+// useDecodedLogo owns one Logo request per URL. Callers must spread
+// imageProps (including the key) onto the img element so a URL change mounts
+// a fresh element: events from a detached previous element then arrive with
+// that element's own captured URL and can never settle the replacement
+// request. Decode promises carry the same captured URL, so a late decode
+// settlement from a superseded request is ignored too.
 export function useDecodedLogo(logoUrl?: string | null): DecodedLogoBinding {
   const [status, setStatus] = useState<DecodedLogoStatus>(logoUrl ? 'pending' : 'absent')
   const imageRef = useRef<HTMLImageElement | null>(null)
@@ -40,6 +47,8 @@ export function useDecodedLogo(logoUrl?: string | null): DecodedLogoBinding {
     return () => {
       aliveRef.current = false
     }
+    // decodeAndSettle only touches refs and the settled status, so the
+    // effect can depend on the URL alone.
   }, [logoUrl])
 
   function decodeAndSettle(image: HTMLImageElement, url: string) {
@@ -53,19 +62,23 @@ export function useDecodedLogo(logoUrl?: string | null): DecodedLogoBinding {
     Promise.resolve(image.decode()).then(() => settle('ready'), () => settle('failed'))
   }
 
+  // Handlers capture the URL of the render that mounted the element. An
+  // event from an older element arrives with its older closure, whose URL
+  // no longer matches, so it is ignored.
+  const requestUrl = logoUrl ?? ''
   return {
     status,
     imageProps: {
+      key: requestUrl,
       ref: (element: HTMLImageElement | null) => {
         imageRef.current = element
       },
       onLoad: () => {
         const image = imageRef.current
-        const url = urlRef.current
-        if (image && url) decodeAndSettle(image, url)
+        if (image && requestUrl) decodeAndSettle(image, requestUrl)
       },
       onError: () => {
-        if (aliveRef.current && urlRef.current) setStatus('failed')
+        if (aliveRef.current && requestUrl && urlRef.current === requestUrl) setStatus('failed')
       },
     },
   }

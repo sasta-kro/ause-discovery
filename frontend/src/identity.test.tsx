@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ProjectDetailIdentity, ProjectIdentity } from './app-shell'
+import { useDecodedLogo } from './decoded-logo'
 
 afterEach(cleanup)
 
@@ -97,19 +98,62 @@ describe('Project identity decoded Logo loading', () => {
     expect(concealed(image)).toBe(true)
   })
 
-  it('ignores a late completion from a previous URL', async () => {
+  it('mounts a fresh image element when the versioned URL changes', () => {
+    const { container, rerender } = render(<ProjectIdentity logoUrl="/p/logo?v=1" title="Web Portal" />)
+    const first = container.querySelector('img') as HTMLImageElement
+    rerender(<ProjectIdentity logoUrl="/p/logo?v=2" title="Web Portal" />)
+    const second = container.querySelector('img') as HTMLImageElement
+    expect(second).not.toBe(first)
+    expect(second.getAttribute('src')).toBe('/p/logo?v=2')
+    expect(concealed(second)).toBe(true)
+  })
+
+  it('ignores a stale request settlement arriving for a replacement URL', async () => {
     const controllers = mockDecode()
     try {
-      const { container, rerender } = render(<ProjectIdentity logoUrl="/p/logo?v=1" title="Web Portal" />)
-      fireEvent.load(container.querySelector('img') as HTMLImageElement)
-      rerender(<ProjectIdentity logoUrl="/p/logo?v=2" title="Web Portal" />)
-      const second = container.querySelector('img') as HTMLImageElement
-      expect(second.getAttribute('src')).toBe('/p/logo?v=2')
-      expect(concealed(second)).toBe(true)
-      // The decode promise belonging to ?v=1 settles late.
+      // Hook level: the first render's handlers are captured, the URL then
+      // changes, and the stale handlers are invoked exactly as a late
+      // browser event from the previous request would invoke them.
+      const initial = renderHook(({ url }) => useDecodedLogo(url), { initialProps: { url: '/p/logo?v=1' } })
+      const stale = initial.result.current.imageProps
+      // Stand in for the mounted img element the ref would normally hold.
+      stale.ref(document.createElement('img'))
+      initial.rerender({ url: '/p/logo?v=2' })
+      expect(initial.result.current.status).toBe('pending')
+
+      // A late load, its decode success, and a late error from the previous
+      // request can none of them settle or fail the replacement URL.
+      stale.onLoad()
+      expect(controllers.length).toBeGreaterThanOrEqual(1)
       controllers[0].resolve()
+      await waitFor(() => expect(initial.result.current.status).toBe('pending'))
+      stale.onError()
       await Promise.resolve()
-      expect(concealed(second)).toBe(true)
+      expect(initial.result.current.status).toBe('pending')
+
+      // The replacement settles only through its own handlers.
+      initial.result.current.imageProps.onLoad()
+      controllers[controllers.length - 1].resolve()
+      await waitFor(() => expect(initial.result.current.status).toBe('ready'))
+    } finally {
+      restoreDecode()
+    }
+  })
+
+  it('ignores a late decode rejection from a previous URL', async () => {
+    const controllers = mockDecode()
+    try {
+      const initial = renderHook(({ url }) => useDecodedLogo(url), { initialProps: { url: '/p/logo?v=1' } })
+      initial.result.current.imageProps.ref(document.createElement('img'))
+      initial.result.current.imageProps.onLoad()
+      initial.rerender({ url: '/p/logo?v=2' })
+      controllers[0].reject()
+      await Promise.resolve()
+      expect(initial.result.current.status).toBe('pending')
+      initial.result.current.imageProps.ref(document.createElement('img'))
+      initial.result.current.imageProps.onLoad()
+      controllers[1].resolve()
+      await waitFor(() => expect(initial.result.current.status).toBe('ready'))
     } finally {
       restoreDecode()
     }
@@ -117,19 +161,21 @@ describe('Project identity decoded Logo loading', () => {
 
   it('routes an already-complete cached image through the decode path', async () => {
     const controllers = mockDecode()
+    const described = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete')
+    const widthDescribed = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'naturalWidth')
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true })
+    Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', { configurable: true, get: () => 64 })
     try {
-      const { container, rerender } = render(<ProjectIdentity logoUrl="/p/logo?v=1" title="Web Portal" />)
-      const image = container.querySelector('img') as HTMLImageElement
-      Object.defineProperty(image, 'complete', { configurable: true, value: true })
-      Object.defineProperty(image, 'naturalWidth', { configurable: true, value: 64 })
-      // A URL change re-runs the effect, which now observes the completed
-      // image and enters the decode path without a load event.
-      rerender(<ProjectIdentity logoUrl="/p/logo?v=2" title="Web Portal" />)
+      // The mounted image reports already complete, as an image restored
+      // from the immutable cache does before the load listener attaches.
+      const { container } = render(<ProjectIdentity logoUrl="/p/logo?v=1" title="Web Portal" />)
       expect(controllers.length).toBe(1)
       controllers[0].resolve()
       await waitFor(() => expect(revealed(container.querySelector('img') as HTMLImageElement)).toBe(true))
     } finally {
       restoreDecode()
+      if (described) Object.defineProperty(HTMLImageElement.prototype, 'complete', described)
+      if (widthDescribed) Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', widthDescribed)
     }
   })
 

@@ -66,7 +66,7 @@ export function ProjectLogoManagement({ project, csrfToken, disabled = false }: 
     <p>{t('admin.projectLogoHelp')}</p>
     <div className={styles.logoManagement}>
       <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${previewReady ? styles.pageHeaderIdentityImage : styles.pageHeaderIdentityPurple}`}>
-        <span className={styles.pageHeaderInitials}>{projectInitials(project.title ?? '')}</span>
+        <span className={`${styles.pageHeaderInitials} ${previewReady ? styles.initialsConcealed : ''}`}>{projectInitials(project.title ?? '')}</span>
         {showPreview ? <img alt="" className={`${styles.pageHeaderLogo} ${previewReady ? styles.logoRevealed : styles.logoConcealed}`} decoding="async" loading="eager" src={previewUrl ?? undefined} {...previewImageProps} /> : null}
       </div>
       {disabled ? <p className={styles.notice}>{t('admin.projectLogoDeleted')}</p> : <>

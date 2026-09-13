@@ -321,7 +321,7 @@ export function ProjectDetailIdentity({ title, logoUrl, variantClass }: { title:
   // so it stays eager with high fetch priority; the decode still defers the
   // reveal until the image is fully prepared.
   return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${ready ? styles.pageHeaderIdentityImage : variantClass ?? styles.pageHeaderIdentityPurple}`}>
-    <span className={styles.pageHeaderInitials}>{projectInitials(title)}</span>
+    <span className={`${styles.pageHeaderInitials} ${ready ? styles.initialsConcealed : ''}`}>{projectInitials(title)}</span>
     {logoUrl && status !== 'failed' ? <img alt="" className={`${styles.pageHeaderLogo} ${ready ? styles.logoRevealed : styles.logoConcealed}`} decoding="async" fetchPriority="high" loading="eager" src={logoUrl} {...imageProps} /> : null}
   </div>
 }
@@ -333,7 +333,7 @@ export function ProjectIdentity({ title, logoUrl, variantClass, eager = false }:
   // stay eager at default priority; every later result defers to native
   // lazy loading at low priority so Logos never compete with the document.
   return <div aria-hidden="true" className={`${styles.projectIdentity} ${variantClass ?? ''} ${ready ? styles.projectIdentityImage : ''}`}>
-    <span aria-hidden="true">{projectInitials(title)}</span>
+    <span className={`${styles.projectIdentityInitials} ${ready ? styles.initialsConcealed : ''}`}>{projectInitials(title)}</span>
     {logoUrl && status !== 'failed' ? <img alt="" className={`${styles.projectIdentityLogo} ${ready ? styles.logoRevealed : styles.logoConcealed}`} decoding="async" fetchPriority={eager ? undefined : 'low'} loading={eager ? 'eager' : 'lazy'} src={logoUrl} {...imageProps} /> : null}
   </div>
 }
