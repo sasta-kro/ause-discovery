@@ -18,8 +18,9 @@ so routine planning does not require loading the full technical record.
 ## Current checkpoint
 
 The technical MVP was completed at commit `1cc5dc6`. Post-MVP work through
-Project Logo loading Increment 16 was completed at commit `af53e63`. No
-implementation item is currently recorded as in progress.
+Project Logo loading Increment 16 was implemented at commit `af53e63` and
+corrected through commit `bfb1cff`, the latest Increment 16 implementation
+baseline. No implementation item is currently recorded as in progress.
 
 ## Status lifecycle
 

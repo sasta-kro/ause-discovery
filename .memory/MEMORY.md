@@ -44,7 +44,9 @@ Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_
 As of 2026-09-13, the AUSE Discovery technical MVP is complete at commit
 `1cc5dc6`, the application is deployed at
 `https://life.au.edu/ause-discovery/`, and post-MVP implementation through
-Project Logo loading Increment 16 exists at commit `af53e63`. Read
+Project Logo loading Increment 16 was implemented at commit `af53e63` and
+corrected through commit `bfb1cff`, which is the latest Increment 16
+implementation baseline. Read
 `implementation-status/backlog.md` for current work and constraints. Read
 `implementation-status/completed.md` only for accepted history, detailed
 behavior, or verification evidence.
