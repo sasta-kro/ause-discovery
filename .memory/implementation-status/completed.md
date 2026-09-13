@@ -18,6 +18,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | DOCX report support | `../docs/increments/14-docx-report-support.md` |
 | Project Repository Links | `../docs/increments/15-project-repository-links.md` |
 | Project Logo loading experience | `../docs/increments/16-project-logo-loading-experience.md`, commit `af53e63`, correction commit `bfb1cff` (grid overlay and stale-request isolation) |
+| Newest-first academic search ordering | `../docs/increments/17-newest-first-academic-search-ordering.md`, commit `07db502`, correction commit `5f4bac7` |
 | VM deployment and proxy correction | `../sasta-dev-notes/vm-deployment-2026-09-13.md` |
 
 
@@ -182,8 +183,33 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 
 21. **Implemented as Increment 16, 2026-09-13** (`.memory/docs/increments/16-project-logo-loading-experience.md`). A shared `useDecodedLogo` hook (`frontend/src/decoded-logo.ts`) owns the Project Logo lifecycle for the search-result, public Project-detail, and administrator-preview identities with the explicit state contract absent (initials only, no image), pending (initials visible, image mounted at opacity zero so the request starts normally), ready (decoded image revealed over the initials), and failed (initials only, image removed so no broken-image icon can appear). The reveal boundary is the browser load event plus a successful `HTMLImageElement.decode()`; a load event alone stays hidden, a decode rejection behaves like a request failure, an image restored complete from the immutable cache still routes through the decode path, a changed versioned URL immediately returns to pending during render, late completions from a previous URL are ignored through a URL guard, and unmounting blocks state updates through an alive guard. The identities are shared-cell grid overlays: initials and the image occupy the same fixed square, so a concealed pending image never displaces the centered initials, the revealed image covers the full footprint, and the initials are visually suppressed (still rendered) once ready. Every image request is mounted as a keyed element carrying its URL as an immutable request identity, so load, error, and decode settlements from a superseded request can never settle the replacement URL. The reveal is a 160ms opacity-only transition removed under `prefers-reduced-motion`; decode failure is a simple return to the already-present fallback, and footprints, decorative `alt=""`, and aria-hidden containers are unchanged. Loading hints by interface: public Project detail `loading="eager"` plus `fetchPriority="high"` plus `decoding="async"`; administrator preview eager at default fetch priority with async decoding; the first four search results eager at default priority; every later result `loading="lazy"` with `fetchPriority="low"`, so Logos never compete with the document, styles, and fonts. No preloads, viewport observers, spinners, skeletons, derivatives, CDN, or direct storage URLs were introduced, and no backend, OpenAPI, or generated-client file changed. Verification: 15 identity component tests covering every lifecycle rule including controllable decode promises for pending, stale-completion, cached-complete, unmount, and stale load, error, and decode-rejection cases plus keyed element replacement and priority attributes by cohort, 5 administrator Logo tests including the unchanged upload/replace/remove behavior with the new eager default-priority preview, the full 24-file 86-test component suite, ESLint, `tsc -b`, and the default-subpath production build all pass; the grid overlay and stale-request isolation were verified in correction commit `bfb1cff`. Visual acceptance remains with the maintainer through the throttled-network smoke procedure recorded in the increment handoff.
 
+22. **Implemented and accepted as Increment 17, 2026-09-13**
+(`.memory/docs/increments/17-newest-first-academic-search-ordering.md`). Commit
+`07db502`, corrected through `5f4bac7`, makes empty discovery academic-newest
+by year, semester, normalized title, and Project ID; keeps lexical relevance
+ahead of the same academic tie-breakers for implicit text search; and makes
+explicit Newest, Oldest, and Title orders authoritative. Search schema version
+2 binds resolved ordering and normalized text into opaque cursor validation.
+The frontend preserves implicit versus explicit sort state and displays Newest
+first for empty implicit search and Most relevant for implicit text search.
+The pinned Meilisearch integration path now verifies placeholder, relevance,
+explicit ordering, and duplicate-free pages against a disposable index whose
+asynchronous deletion is awaited and checked. Focused search and HTTP tests,
+the real-engine test, 14 frontend search tests without unhandled errors, the
+93-test component suite, Go formatting and vet, frontend lint and type checks,
+the default-subpath build, generated-code drift, Compose validation, and diff
+checks pass. No PostgreSQL migration, Search Document field, search response,
+classification semantic, storage, Logo, publication, or deployment change was
+introduced.
+
 ## Completed correction work
 
+- **Resolved 2026-09-13, former backlog item 23:** live public API diagnosis
+  confirmed the accepted search contract. Multiple values within one filter
+  dimension use OR, and different dimensions combine with AND. The maintainer
+  retained this behavior, so no search defect or backend semantic change
+  remains. A small user-facing explanation is tracked separately in the
+  backlog.
 - **Implemented:** the SP metadata extractor moved to its own repository, `tools/ausesp-data-extractor` (remote `git@github.com:sasta-kro/ausesp-data-extractor.git`, nested and gitignored by the main repository). The main repository consumes generated deliverables rather than the extraction pipeline.
 - **Implemented:** the extractor reached agent-reviewed corpus quality. `ause-discovery-projects-metadata-import.csv`, built from dataset records, is the metadata source of truth; the superseded regex pipeline output is not used.
 

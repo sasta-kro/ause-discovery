@@ -18,9 +18,9 @@ so routine planning does not require loading the full technical record.
 ## Current checkpoint
 
 The technical MVP was completed at commit `1cc5dc6`. Post-MVP work through
-Project Logo loading Increment 16 was implemented at commit `af53e63` and
-corrected through commit `bfb1cff`, the latest Increment 16 implementation
-baseline. No implementation item is currently recorded as in progress.
+newest-first academic search ordering Increment 17 was implemented at commit
+`07db502` and corrected through commit `5f4bac7`, the latest accepted
+implementation baseline. No implementation item is currently in progress.
 
 ## Status lifecycle
 
@@ -39,4 +39,3 @@ When work is accepted, move its complete entry from `backlog.md` to
 `completed.md`, add the date and increment or direct-request reference, and
 avoid leaving a duplicate active entry. Keep detailed verification evidence in
 `completed.md`; keep `backlog.md` focused on decisions still required.
-

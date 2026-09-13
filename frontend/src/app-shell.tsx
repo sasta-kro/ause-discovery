@@ -12,6 +12,8 @@ import { configureApiClient, routerBasename } from './app/runtime'
 import { installSessionExpiryNotification } from './app/session-expiry'
 import { highlightText } from './features/search/highlight'
 import { FacetDisclosure, SelectedFilterChip, StudentIdDisclosure, projectIdentityVariant, projectInitials, type FilterChoice } from './features/search/filter-controls'
+import { SearchSuggestionInput } from './features/search/suggestion-input'
+import { applyFilterValue, buildSuggestionDefs, isSuggestionField, type SuggestionField } from './features/search/suggestions'
 import { useDecodedLogo } from './decoded-logo'
 import { displayedSort, parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
 import { projectDeleteConfirmation, projectDraftSchema, toProjectDraft, toProjectFormValues, type ProjectFormValues } from './features/admin/forms'
@@ -229,7 +231,13 @@ function SearchPage() {
   }
   const toggleArrayFilter = (key: ArrayFilterKey, value: string) => {
     const selected = (state[key] as string[] | undefined) ?? []
-    const next = selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]
+    // Adding routes through the same shared operation suggestions use;
+    // removing stays a left-panel-only behavior.
+    if (!selected.includes(value) && isSuggestionField(key)) {
+      setState(applyFilterValue(state, key, value))
+      return
+    }
+    const next = selected.filter((item) => item !== value)
     setState({ ...state, [key]: next.length ? next : undefined })
   }
   const clearFilters = () => setState({ q: state.q, limit: state.limit, sort: state.sort })
@@ -243,6 +251,13 @@ function SearchPage() {
     { value: 'second', label: t('fields.second'), count: semesterCounts.get('second') },
     { value: 'summer', label: t('fields.summer'), count: semesterCounts.get('summer') },
   ]
+  // Suggestion sources use the same choice data as the left panel, in panel
+  // dimension order: year, semester, then the active catalog dimensions.
+  const suggestionDefs = useMemo(() => buildSuggestionDefs([
+    { stateField: 'academic_year', dimensionLabel: t('fields.year'), cardinality: 'scalar', choices: yearChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
+    { stateField: 'semester', dimensionLabel: t('fields.semester'), cardinality: 'scalar', choices: semesterChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
+    ...filters.map((filter) => ({ stateField: filter.key as SuggestionField, dimensionLabel: t(filter.label), cardinality: 'multiple' as const, choices: (catalogFilterChoices.get(filter.key) ?? []).map((choice) => ({ value: choice.value, label: choice.label })) })),
+  ]), [t, yearChoices, semesterChoices, catalogFilterChoices])
   const activeFilters: Array<{ id: string; label: string; remove: () => void }> = []
   if (state.academic_year) activeFilters.push({ id: 'academic-year', label: `${t('fields.year')}: ${state.academic_year}`, remove: () => setState({ ...state, academic_year: undefined }) })
   if (state.semester) activeFilters.push({ id: 'semester', label: semesterChoices.find((option) => option.value === state.semester)?.label ?? state.semester, remove: () => setState({ ...state, semester: undefined }) })
@@ -273,8 +288,20 @@ function SearchPage() {
   const queryTerms = (state.q ?? '').split(/\s+/)
   const pending = searchQuery.isFetching
   return <section className={styles.searchPage}><PageTitle title={t('search.title')} /><div className={styles.searchPageHeader}><h1>{t('search.title')}</h1></div>
-    <form className={`${styles.searchBox} ${styles.searchToolbar}`} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft }) }}>
-      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t('search.placeholder')} />
+    <form className={`${styles.searchBox} ${styles.searchToolbar}`} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft || undefined }) }}>
+      <label className="sr-only" htmlFor="search-query">{t('search.query')}</label>
+      <SearchSuggestionInput
+        applied={state}
+        placeholder={t('search.placeholder')}
+        suggestionsDefs={suggestionDefs}
+        value={draft}
+        onAccept={(suggestion, remaining) => {
+          setDraft(remaining)
+          setState(applyFilterValue({ ...state, q: remaining || undefined }, suggestion.stateField, suggestion.value))
+        }}
+        onChange={setDraft}
+        onSearch={() => setState({ ...state, q: draft || undefined })}
+      />
       <select aria-label={t('search.sort')} value={displayedSort(state)} onChange={(event) => setState({ ...state, sort: event.target.value as SearchState['sort'] })}><option value="relevance">{t('search.relevance')}</option><option value="newest">{t('search.newest')}</option><option value="oldest">{t('search.oldest')}</option><option value="title">{t('search.alphabetical')}</option></select>
       <button className={styles.searchPrimaryButton} type="submit" disabled={pending}>{t('action.search')}</button>
     </form>
@@ -282,8 +309,8 @@ function SearchPage() {
       <div className={styles.selectedFilters} aria-label={t('search.selectedFilters')}><h3>{t('search.selectedFilters')}</h3>{activeFilters.length ? <div className={styles.selectedFilterList}>{activeFilters.map((filter) => <SelectedFilterChip key={filter.id} label={filter.label} onRemove={filter.remove} />)}</div> : <p>{t('search.noSelectedFilters')}</p>}</div>
       {catalogsQuery.isPending ? <p role="status">{t('search.filtersLoading')}</p> : null}
       {catalogsQuery.isError ? <p className={styles.error} role="alert">{t('search.filtersUnavailable')}</p> : null}
-      <FacetDisclosure label={t('fields.year')} options={yearChoices} searchLabel={t('search.findYear')} selected={state.academic_year ? [String(state.academic_year)] : []} onToggle={(value) => setState({ ...state, academic_year: state.academic_year === Number(value) ? undefined : Number(value) })} />
-      <FacetDisclosure label={t('fields.semester')} options={semesterChoices} selected={state.semester ? [state.semester] : []} onToggle={(value) => setState({ ...state, semester: state.semester === value ? undefined : value as SearchState['semester'] })} />
+      <FacetDisclosure label={t('fields.year')} options={yearChoices} searchLabel={t('search.findYear')} selected={state.academic_year ? [String(state.academic_year)] : []} onToggle={(value) => setState(state.academic_year === Number(value) ? { ...state, academic_year: undefined } : applyFilterValue(state, 'academic_year', value))} />
+      <FacetDisclosure label={t('fields.semester')} options={semesterChoices} selected={state.semester ? [state.semester] : []} onToggle={(value) => setState(state.semester === value ? { ...state, semester: undefined } : applyFilterValue(state, 'semester', value))} />
       {academicFilters.map((filter) => <FacetDisclosure key={filter.key} label={t(filter.label)} options={catalogFilterChoices.get(filter.key) ?? []} searchLabel={t('search.findFilter', { filter: t(filter.label).toLocaleLowerCase() })} selected={(state[filter.key] as string[] | undefined) ?? []} onToggle={(value) => toggleArrayFilter(filter.key, value)} />)}
       <FacetDisclosure label={t('search.people')} options={peopleChoices} searchLabel={t('search.findPeople')} selected={state.person_id ?? []} onToggle={(value) => toggleArrayFilter('person_id', value)} />
       <FacetDisclosure label={t('fields.advisor')} options={advisorChoices} searchLabel={t('search.findAdvisor')} selected={state.advisor_id ?? []} onToggle={(value) => toggleArrayFilter('advisor_id', value)} />
