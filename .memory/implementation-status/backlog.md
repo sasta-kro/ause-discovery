@@ -14,15 +14,17 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 17 | Open | Administrator experience redesign |
 | 19 | Open | Award and achievement Project File support |
 | 20 | Open | Projects without a recorded advisor |
-| 22 | Open | Newest-first academic search ordering |
-| 23 | Diagnose first | Classification filter match-all behavior |
+| 22 | Planned as Increment 17 | Newest-first academic search ordering |
 | Correction | Partial | Acknowledge all import warnings |
 | Correction | Open | Bounded import-preview text layout |
+| Correction | Open | Explain classification filter combination semantics |
 | 24 | Parked | Optional Project Logo payload optimization |
 
 ## Current activity
 
 - No technical MVP implementation work remains. Launch readiness begins when the external inputs listed below are available.
+- Increment 17 is planned for newest-first academic search ordering.
+  Implementation has not started.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -60,7 +62,12 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 9. **Partially implemented.** Storage readiness now checks the configured provider per item 14. Two required correctness fixes remain open: advance the B2 ranged reader's logical offset after each successful read, and replace boolean existence checks with a contract that distinguishes missing content from provider unavailability. Changing the configured default still does not provide failover for existing provider-stamped rows. Automatic second copies, reverse migration, and fallback tooling remain deferred. B2 upload validation stages each file in the container operating system temporary directory rather than `AUSE_IMPORT_TEMP_ROOT`; that accepted disk requirement is documented.
 
 - **Partially implemented:** the select-all-valid-rows action is implemented (2026-09-08) as one persisted row update that walks every preview page and selects only rows whose server state is valid. An acknowledge-all-warnings action remains open; error rows still require correction and ambiguous duplicates still require explicit decisions.
-- **Open:** import preview rows wrap text permanently; browser zoom does not restore layout. Long values need bounded truncation or normal wrapping inside a horizontally scrollable table region.
+- **Open:** import preview rows wrap text permanently. The 200 percent zoom
+  behavior is resolved. Long values still need bounded truncation or normal
+  wrapping inside a horizontally scrollable table region.
+- **Open:** add concise user-facing guidance that multiple selected values
+  within one filter dimension match any selected value, while different filter
+  dimensions must all match. The accepted search behavior does not change.
 
 ## Open implementation work
 
@@ -74,9 +81,40 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 
 20. **Open, future product increment.** The import schema rejects any metadata row without at least one advisor (`missing_advisor` error, `backend/internal/imports/validation.go`). Four corpus projects genuinely print no advisor in any staged document (verified by full-text search on 2026-09-13: sp-1800 report without an approval page, and the slide-only decks sp-2021, sp-2031, sp-2032). The maintainer dropped these four from the import CSV for now (documented in the extractor's `DROPPED_NO_ADVISOR` set) rather than invent names, and the dataset records remain as ground truth. A future implementation should treat a missing advisor as an import warning with an honest public display ("advisor not recorded"), so advisorless legacy documents can join the archive.
 
-22. **Open, MVP search-ordering improvement.** Empty-query discovery should show the newest academic Projects first by default instead of inheriting Meilisearch's current document order or treating an empty query as ordinary relevance. Define newest by academic chronology, primarily `academic_year DESC` and then the accepted semester order, with deterministic tie-breakers such as publication timestamp and stable Project identity. A nonempty text query must keep lexical relevance as the primary ordering, then use the same newest-first chronology to order otherwise equally ranked results. Review the Meilisearch ranking rules because custom `sort` currently precedes `exactness`; the chronological tie-breaker must not displace any intended relevance rule. Update the explicit Newest and Oldest options to use academic chronology rather than only `published_at`, keep Title sorting deterministic, bind the resolved ordering into cursor state, and add service, HTTP, and frontend state tests for empty queries, nonempty equal-relevance results, semester boundaries, and pagination. Artifact or Logo presence may correlate with newer Projects but must not become a hidden ranking boost under this item.
-
-23. **Open, suspected filter-semantics defect requiring diagnosis.** Selecting multiple values in some left-side Classification filters increases the result count, while the expected refinement behavior is to return Projects carrying every selected classification in that dimension. The current backend deliberately emits `attribute IN [a,b]`, which gives OR semantics within one facet, while separate facet expressions are combined with AND. First reproduce the issue against known Projects and record request parameters, result IDs, and counts for Category, Platform, Domain, and Technology independently and in combination. Then decide semantics by field cardinality: multi-valued classification dimensions should support match-all behavior when that matches the maintained taxonomy model, while single-valued dimensions such as Program, Major, Course, Academic Year, and Semester normally require OR within their own dimension. If classification match-all is accepted, emit one filter expression per selected classification value, verify Meilisearch array matching and facet distributions, update UI help or selection wording, and add backend plus rendered interaction tests proving that each additional classification narrows or preserves the result set. Do not change behavior until the reproduction distinguishes a backend filter bug, a facet-count misunderstanding, stale URL state, and the currently documented OR-within-facet contract.
+22. **Implemented as Increment 17, pending independent review.** Implemented
+2026-09-13 per `.memory/docs/increments/17-newest-first-academic-search-ordering.md`.
+Empty discovery defaults to academic-newest order and relevance mode preserves
+the full lexical ranking pipeline with academic newest only as its
+deterministic tie-breaker. Explicit Newest, Oldest, and Title selections are
+authoritative for any query state. Academic chronology uses `academic_year`,
+the existing semester order (Summer, Second, First for newest), normalized
+title, and the stable Project ID, never `published_at`. Central
+`ResolveOrder` resolution distinguishes implicit empty academic newest,
+relevance with academic-newest ties, and explicit newest, oldest, and title;
+Meilisearch ranking rules became `sort, words, typo, proximity, attribute,
+exactness, academic_year:desc, semester_order:desc, title_sort:asc, id:asc`
+with `id` sortable, so relevance mode sends no query-time sort, placeholder
+searches naturally follow the academic custom rules, and explicit sorts stay
+authoritative. Search schema version rose to 2 and cursor hashes bind the
+schema version plus the resolved ordering (semantically equivalent omitted and
+explicit relevance states interchange). The frontend keeps implicit versus
+explicit sort state in the URL: an omitted sort displays contextually (Newest
+first for an empty search, Most relevant once text exists) without
+serializing, every explicit selection including relevance serializes, and
+invalid sort values fall back to the contextual default. Verification: search
+unit tests for ordering resolution, deterministic sort lists, semester
+chronology, and cursor binding; an HTTP boundary test proving the resolved
+sort reaches the engine per explicit and implicit state, invalid sort stays a
+controlled 400, and two cursor pages cover distinct Projects; frontend state
+and page tests for contextual display, implicit default switching, and
+explicit serialization; and a non-optional pinned Meilisearch integration test
+(unique disposable index, wired into `make check-integration` and CI) proving
+actual engine behavior: placeholder academic newest across year and semester
+boundaries, a stronger older textual match outranking a weaker newer one,
+equal relevance falling back to academic newest, explicit oldest reversing
+chronology, deterministic title order, and duplicate-free pages. Excludes
+classification semantics, PostgreSQL schema changes, new Search Document
+fields, and deployment. Not yet independently reviewed.
 
 ## Parked possibilities
 

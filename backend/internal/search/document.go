@@ -14,7 +14,11 @@ import (
 
 var ErrProjectNotPublished = errors.New("Project is not published")
 
-const SchemaVersion = 1
+// SchemaVersion is the source-controlled search schema version. It covers
+// index settings and ranking semantics: version 2 added the academic-newest
+// custom ranking rules, the id sortable attribute, and ordering-aware cursor
+// binding.
+const SchemaVersion = 2
 
 type CatalogReference struct {
 	ID    uuid.UUID `json:"id"`

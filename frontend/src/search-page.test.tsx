@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, useNavigate } from 'react-router'
@@ -186,5 +186,57 @@ describe('public search paging', () => {
     navigate?.(-1)
     await waitFor(() => expect((screen.getByLabelText('Search terms') as HTMLInputElement).value).toBe(''))
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ q: undefined }) })))
+  })
+})
+
+describe('public search contextual sort display', () => {
+  afterEach(cleanup)
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.getSession.mockRejectedValue({ code: 'unauthorized', status: 401, title: 'Unauthorized', type: 'about:blank', request_id: 'test' })
+    apiMocks.getCatalogs.mockResolvedValue({ data: { programs: [], majors: [], courses: [], taxonomy: [] } })
+    apiMocks.searchProjects.mockImplementation(async () => {
+      return { data: { items: [resultItem('018f0000-0000-7000-8000-0000000000s1', 'Sort Display Result')], page: { limit: 20 }, facets: emptyFacets, total: 1 } }
+    })
+  })
+
+  it('displays Newest first for an implicit empty search without a sort parameter', async () => {
+    renderSearch()
+    await screen.findByText('Sort Display Result')
+    expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('newest')
+    expect(apiMocks.searchProjects.mock.calls[0][0].query.sort).toBeUndefined()
+  })
+
+  it('displays Most relevant for an implicit text search', async () => {
+    renderSearch('vision')
+    await screen.findByText('Sort Display Result')
+    expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('relevance')
+    expect(apiMocks.searchProjects.mock.calls[0][0].query.sort).toBeUndefined()
+  })
+
+  it('switches the implicit displayed default when text is submitted and cleared', async () => {
+    renderSearch()
+    await screen.findByText('Sort Display Result')
+    const select = screen.getByLabelText('Sort results') as HTMLSelectElement
+    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
+    // Submitting uses the form's current input value; type first.
+    fireEvent.change(screen.getByPlaceholderText('Search title, student, advisor, or code'), { target: { value: 'vision' } })
+    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
+    await waitFor(() => expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('relevance'))
+    fireEvent.change(screen.getByPlaceholderText('Search title, student, advisor, or code'), { target: { value: '' } })
+    fireEvent.submit(screen.getByPlaceholderText('Search title, student, advisor, or code'), {})
+    await waitFor(() => expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('newest'))
+    expect(select.value).toBe('newest')
+  })
+
+  it('sends an explicit sort selection to the API', async () => {
+    renderSearch()
+    await screen.findByText('Sort Display Result')
+    fireEvent.change(screen.getByLabelText('Sort results'), { target: { value: 'oldest' } })
+    await waitFor(() => {
+      const calls = apiMocks.searchProjects.mock.calls.map((call) => call[0].query.sort)
+      expect(calls[calls.length - 1]).toBe('oldest')
+    })
+    expect((screen.getByLabelText('Sort results') as HTMLSelectElement).value).toBe('oldest')
   })
 })

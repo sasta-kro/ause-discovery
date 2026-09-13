@@ -1326,29 +1326,31 @@ type GetProjectLogoParams struct {
 
 // SearchProjectsParams defines parameters for SearchProjects.
 type SearchProjectsParams struct {
-	Q             *Query                    `form:"q,omitempty" json:"q,omitempty"`
-	AcademicYear  *AcademicYear             `form:"academic_year,omitempty" json:"academic_year,omitempty"`
-	Semester      *Semester                 `form:"semester,omitempty" json:"semester,omitempty"`
-	ProgramKey    *ProgramKey               `form:"program_key,omitempty" json:"program_key,omitempty"`
-	MajorKey      *MajorKey                 `form:"major_key,omitempty" json:"major_key,omitempty"`
-	CourseKey     *CourseKey                `form:"course_key,omitempty" json:"course_key,omitempty"`
-	PersonId      *PersonIdQuery            `form:"person_id,omitempty" json:"person_id,omitempty"`
-	StudentId     *StudentId                `form:"student_id,omitempty" json:"student_id,omitempty"`
-	AdvisorId     *AdvisorId                `form:"advisor_id,omitempty" json:"advisor_id,omitempty"`
-	CategoryKey   *CategoryKey              `form:"category_key,omitempty" json:"category_key,omitempty"`
-	PlatformKey   *PlatformKey              `form:"platform_key,omitempty" json:"platform_key,omitempty"`
-	DomainKey     *DomainKey                `form:"domain_key,omitempty" json:"domain_key,omitempty"`
-	TopicKey      *TopicKey                 `form:"topic_key,omitempty" json:"topic_key,omitempty"`
-	TechnologyKey *TechnologyKey            `form:"technology_key,omitempty" json:"technology_key,omitempty"`
-	ArtifactType  *ArtifactTypeFilter       `form:"artifact_type,omitempty" json:"artifact_type,omitempty"`
-	HasArtifacts  *HasArtifacts             `form:"has_artifacts,omitempty" json:"has_artifacts,omitempty"`
-	HasReport     *HasReport                `form:"has_report,omitempty" json:"has_report,omitempty"`
-	HasSlides     *HasSlides                `form:"has_slides,omitempty" json:"has_slides,omitempty"`
-	HasSourceCode *HasSourceCode            `form:"has_source_code,omitempty" json:"has_source_code,omitempty"`
-	HasDataset    *HasDataset               `form:"has_dataset,omitempty" json:"has_dataset,omitempty"`
-	Sort          *SearchProjectsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
-	Cursor        *Cursor                   `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit         *Limit                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Q             *Query              `form:"q,omitempty" json:"q,omitempty"`
+	AcademicYear  *AcademicYear       `form:"academic_year,omitempty" json:"academic_year,omitempty"`
+	Semester      *Semester           `form:"semester,omitempty" json:"semester,omitempty"`
+	ProgramKey    *ProgramKey         `form:"program_key,omitempty" json:"program_key,omitempty"`
+	MajorKey      *MajorKey           `form:"major_key,omitempty" json:"major_key,omitempty"`
+	CourseKey     *CourseKey          `form:"course_key,omitempty" json:"course_key,omitempty"`
+	PersonId      *PersonIdQuery      `form:"person_id,omitempty" json:"person_id,omitempty"`
+	StudentId     *StudentId          `form:"student_id,omitempty" json:"student_id,omitempty"`
+	AdvisorId     *AdvisorId          `form:"advisor_id,omitempty" json:"advisor_id,omitempty"`
+	CategoryKey   *CategoryKey        `form:"category_key,omitempty" json:"category_key,omitempty"`
+	PlatformKey   *PlatformKey        `form:"platform_key,omitempty" json:"platform_key,omitempty"`
+	DomainKey     *DomainKey          `form:"domain_key,omitempty" json:"domain_key,omitempty"`
+	TopicKey      *TopicKey           `form:"topic_key,omitempty" json:"topic_key,omitempty"`
+	TechnologyKey *TechnologyKey      `form:"technology_key,omitempty" json:"technology_key,omitempty"`
+	ArtifactType  *ArtifactTypeFilter `form:"artifact_type,omitempty" json:"artifact_type,omitempty"`
+	HasArtifacts  *HasArtifacts       `form:"has_artifacts,omitempty" json:"has_artifacts,omitempty"`
+	HasReport     *HasReport          `form:"has_report,omitempty" json:"has_report,omitempty"`
+	HasSlides     *HasSlides          `form:"has_slides,omitempty" json:"has_slides,omitempty"`
+	HasSourceCode *HasSourceCode      `form:"has_source_code,omitempty" json:"has_source_code,omitempty"`
+	HasDataset    *HasDataset         `form:"has_dataset,omitempty" json:"has_dataset,omitempty"`
+
+	// Sort Result ordering. relevance ranks by lexical relevance with academic-newest tie-breakers (academic year, then semester order, then normalized title, then Project ID); newest and oldest order by academic year and semester (publication time never leads); title orders by normalized title. An omitted sort defaults to academic-newest order for an empty query and lexical relevance with academic-newest tie-breakers for a text query.
+	Sort   *SearchProjectsParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+	Cursor *Cursor                   `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                    `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // SearchProjectsParamsSort defines parameters for SearchProjects.

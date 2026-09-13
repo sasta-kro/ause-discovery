@@ -31,7 +31,9 @@ export function parseSearchState(parameters: URLSearchParams): SearchState {
     student_id: /^\d{7}$/.test(parameters.get('student_id') ?? '') ? parameters.get('student_id') ?? undefined : undefined,
     cursor: parameters.get('cursor') || undefined,
     limit: Number.isInteger(limit) && limit >= 1 && limit <= 100 ? limit : 20,
-    sort: sort.success ? sort.data : 'relevance',
+    // An omitted or invalid sort stays undefined so the contextual default
+    // (newest for an empty search, relevance for text) survives in state.
+    sort: sort.success ? sort.data : undefined,
   }
   for (const key of arrayKeys) Object.assign(state, { [key]: values(parameters, key) })
   for (const key of booleanKeys) Object.assign(state, { [key]: optionalBoolean(parameters, key) })
@@ -42,7 +44,9 @@ export function serializeSearchState(state: SearchState): URLSearchParams {
   const parameters = new URLSearchParams()
   for (const [key, value] of Object.entries(state)) {
     if (key === 'major_key' || key === 'topic_key') continue
-    if (value === undefined || value === '' || (key === 'sort' && value === 'relevance') || (key === 'limit' && value === 20)) continue
+    // Every explicit valid sort, including relevance, serializes; only the
+    // implicit undefined state stays omitted.
+    if (value === undefined || value === '' || (key === 'limit' && value === 20)) continue
     if (Array.isArray(value)) value.forEach((item) => parameters.append(key, item))
     else parameters.set(key, String(value))
   }
@@ -51,4 +55,12 @@ export function serializeSearchState(state: SearchState): URLSearchParams {
 
 export function resetSearchCursor(state: SearchState): SearchState {
   return { ...state, cursor: undefined }
+}
+
+// The effective selection for display: an explicit sort is authoritative;
+// an implicit state defaults to newest for an empty or whitespace-only
+// query and relevance once text exists.
+export function displayedSort(state: SearchState): NonNullable<SearchState['sort']> {
+  if (state.sort) return state.sort
+  return (state.q ?? '').trim() === '' ? 'newest' : 'relevance'
 }

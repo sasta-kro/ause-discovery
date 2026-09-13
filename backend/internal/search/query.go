@@ -105,7 +105,8 @@ func (service Service) Search(ctx context.Context, query Query) (Result, error) 
 		}
 		offset = decodedOffset
 	}
-	indexQuery := IndexQuery{Query: strings.TrimSpace(query.Text), Filters: buildFilters(query), Sort: searchSort(query.Sort), Offset: offset, Limit: query.Limit, Facets: searchFacetAttributes}
+	resolvedOrder := ResolveOrder(query.Sort, query.Text)
+	indexQuery := IndexQuery{Query: strings.TrimSpace(query.Text), Filters: buildFilters(query), Sort: resolvedOrder.Sort, Offset: offset, Limit: query.Limit, Facets: searchFacetAttributes}
 
 	var indexResult IndexResult
 	var err error
@@ -284,17 +285,54 @@ func quoteFilter(value string) string {
 	return string(encoded)
 }
 
-func searchSort(value string) []string {
-	switch value {
-	case "newest":
-		return []string{"published_at:desc"}
+// Resolved ordering modes. Academic chronology is academic_year first and
+// the internal semester order second (Summer, then Second, then First
+// semester for newest). Relevance mode never sends query-time sort so every
+// lexical ranking rule stays ahead of the academic tie-breakers configured
+// as custom ranking rules.
+const (
+	OrderAcademicNewest = "academic_newest"
+	OrderRelevance      = "relevance"
+	OrderAcademicOldest = "academic_oldest"
+	OrderTitle          = "title"
+)
+
+var (
+	academicNewestSort = []string{"academic_year:desc", "semester_order:desc", "title_sort:asc", "id:asc"}
+	academicOldestSort = []string{"academic_year:asc", "semester_order:asc", "title_sort:asc", "id:asc"}
+	titleSort          = []string{"title_sort:asc", "academic_year:desc", "semester_order:desc", "id:asc"}
+)
+
+// ResolvedOrder names one effective ordering and carries its query-time sort
+// list, empty when the ranking rules alone determine the order. The name is
+// the canonical ordering identity used for cursor binding.
+type ResolvedOrder struct {
+	Name string
+	Sort []string
+}
+
+// ResolveOrder centralizes ordering decisions for one search. Text is
+// normalized first: whitespace-only text is empty. Explicit Newest, Oldest,
+// and Title selections are authoritative regardless of text. An omitted sort
+// and an explicit relevance sort resolve identically, and any empty-text
+// relevance request resolves to academic newest because no textual ranking
+// exists to apply.
+func ResolveOrder(sortToken, text string) ResolvedOrder {
+	sortToken = strings.TrimSpace(sortToken)
+	switch sortToken {
 	case "oldest":
-		return []string{"published_at:asc"}
+		return ResolvedOrder{Name: OrderAcademicOldest, Sort: academicOldestSort}
 	case "title":
-		return []string{"title_sort:asc"}
-	default:
-		return nil
+		return ResolvedOrder{Name: OrderTitle, Sort: titleSort}
+	case "newest":
+		return ResolvedOrder{Name: OrderAcademicNewest, Sort: academicNewestSort}
 	}
+	// Omitted or explicit relevance: with no text there is no lexical
+	// ranking to apply, so the request behaves as academic newest.
+	if strings.TrimSpace(text) == "" {
+		return ResolvedOrder{Name: OrderAcademicNewest, Sort: academicNewestSort}
+	}
+	return ResolvedOrder{Name: OrderRelevance, Sort: nil}
 }
 
 type cursorPayload struct {
@@ -332,7 +370,16 @@ func decodeCursor(query Query, cursor string) (int, error) {
 
 func queryHash(query Query) (string, error) {
 	query.Cursor = ""
-	encoded, err := json.Marshal(query)
+	// The hash binds the resolved ordering rather than the raw sort token,
+	// so semantically equivalent omitted and explicit relevance states hash
+	// identically, and any ordering or schema change invalidates older
+	// cursors instead of paging them against new ranking behavior.
+	query.Sort = ResolveOrder(query.Sort, query.Text).Name
+	payload := struct {
+		SchemaVersion int   `json:"schema_version"`
+		Query         Query `json:"query"`
+	}{SchemaVersion: int(SchemaVersion), Query: query}
+	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}

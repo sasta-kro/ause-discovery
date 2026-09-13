@@ -13,7 +13,7 @@ import { installSessionExpiryNotification } from './app/session-expiry'
 import { highlightText } from './features/search/highlight'
 import { FacetDisclosure, SelectedFilterChip, StudentIdDisclosure, projectIdentityVariant, projectInitials, type FilterChoice } from './features/search/filter-controls'
 import { useDecodedLogo } from './decoded-logo'
-import { parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
+import { displayedSort, parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
 import { projectDeleteConfirmation, projectDraftSchema, toProjectDraft, toProjectFormValues, type ProjectFormValues } from './features/admin/forms'
 import { AdminSearchMaintenance } from './features/admin/search-maintenance'
 import { AdminImportReview, AdminImportUpload } from './features/admin/import-management'
@@ -275,7 +275,7 @@ function SearchPage() {
   return <section className={styles.searchPage}><PageTitle title={t('search.title')} /><div className={styles.searchPageHeader}><h1>{t('search.title')}</h1></div>
     <form className={`${styles.searchBox} ${styles.searchToolbar}`} onSubmit={(event) => { event.preventDefault(); setState({ ...state, q: draft }) }}>
       <label className="sr-only" htmlFor="search-query">{t('search.query')}</label><input id="search-query" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={t('search.placeholder')} />
-      <select aria-label={t('search.sort')} value={state.sort} onChange={(event) => setState({ ...state, sort: event.target.value as SearchState['sort'] })}><option value="relevance">{t('search.relevance')}</option><option value="newest">{t('search.newest')}</option><option value="oldest">{t('search.oldest')}</option><option value="title">{t('search.alphabetical')}</option></select>
+      <select aria-label={t('search.sort')} value={displayedSort(state)} onChange={(event) => setState({ ...state, sort: event.target.value as SearchState['sort'] })}><option value="relevance">{t('search.relevance')}</option><option value="newest">{t('search.newest')}</option><option value="oldest">{t('search.oldest')}</option><option value="title">{t('search.alphabetical')}</option></select>
       <button className={styles.searchPrimaryButton} type="submit" disabled={pending}>{t('action.search')}</button>
     </form>
     <div className={styles.searchLayout}><aside className={styles.filterPanel} aria-label={t('search.filters')}><div className={styles.filterPanelHeader}><h2>{t('search.refine')}</h2><button className={styles.clearFiltersButton} disabled={!activeFilters.length} type="button" onClick={clearFilters}>{t('search.clearAll')}</button></div>

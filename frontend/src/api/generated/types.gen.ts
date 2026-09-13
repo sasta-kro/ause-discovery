@@ -553,6 +553,9 @@ export type HasSourceCode = boolean;
 
 export type HasDataset = boolean;
 
+/**
+ * Result ordering. relevance ranks by lexical relevance with academic-newest tie-breakers (academic year, then semester order, then normalized title, then Project ID); newest and oldest order by academic year and semester (publication time never leads); title orders by normalized title. An omitted sort defaults to academic-newest order for an empty query and lexical relevance with academic-newest tie-breakers for a text query.
+ */
 export type SearchSort = 'relevance' | 'newest' | 'oldest' | 'title';
 
 /**
@@ -637,6 +640,9 @@ export type SearchProjectsData = {
         has_slides?: boolean;
         has_source_code?: boolean;
         has_dataset?: boolean;
+        /**
+         * Result ordering. relevance ranks by lexical relevance with academic-newest tie-breakers (academic year, then semester order, then normalized title, then Project ID); newest and oldest order by academic year and semester (publication time never leads); title orders by normalized title. An omitted sort defaults to academic-newest order for an empty query and lexical relevance with academic-newest tie-breakers for a text query.
+         */
         sort?: 'relevance' | 'newest' | 'oldest' | 'title';
         cursor?: string;
         limit?: number;

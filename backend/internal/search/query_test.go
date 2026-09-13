@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -65,5 +66,103 @@ func TestTopicTaxonomyDoesNotContributeSearchTerms(t *testing.T) {
 	}
 	if !reflect.DeepEqual(document.TaxonomyKeys, []string{"flutter"}) || !reflect.DeepEqual(document.TaxonomyLabels, []string{"Flutter"}) {
 		t.Fatalf("searchable taxonomy was keys %#v labels %#v", document.TaxonomyKeys, document.TaxonomyLabels)
+	}
+}
+
+func TestResolveOrderCoversImplicitAndExplicitModes(t *testing.T) {
+	cases := []struct {
+		name     string
+		sort     string
+		text     string
+		wantName string
+		wantSort []string
+	}{
+		{name: "implicit empty", sort: "", text: "", wantName: OrderAcademicNewest, wantSort: academicNewestSort},
+		{name: "implicit whitespace", sort: "", text: "   ", wantName: OrderAcademicNewest, wantSort: academicNewestSort},
+		{name: "implicit text", sort: "", text: "vision", wantName: OrderRelevance, wantSort: nil},
+		{name: "explicit relevance with text", sort: "relevance", text: "vision", wantName: OrderRelevance, wantSort: nil},
+		{name: "explicit relevance without text", sort: "relevance", text: "", wantName: OrderAcademicNewest, wantSort: academicNewestSort},
+		{name: "explicit newest", sort: "newest", text: "vision", wantName: OrderAcademicNewest, wantSort: academicNewestSort},
+		{name: "explicit oldest", sort: "oldest", text: "vision", wantName: OrderAcademicOldest, wantSort: academicOldestSort},
+		{name: "explicit title", sort: "title", text: "vision", wantName: OrderTitle, wantSort: titleSort},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			resolved := ResolveOrder(test.sort, test.text)
+			if resolved.Name != test.wantName {
+				t.Fatalf("resolved %q for sort %q text %q, expected %q", resolved.Name, test.sort, test.text, test.wantName)
+			}
+			if len(resolved.Sort) != len(test.wantSort) {
+				t.Fatalf("resolved sort %v, expected %v", resolved.Sort, test.wantSort)
+			}
+			for index := range resolved.Sort {
+				if resolved.Sort[index] != test.wantSort[index] {
+					t.Fatalf("resolved sort %v, expected %v", resolved.Sort, test.wantSort)
+				}
+			}
+		})
+	}
+}
+
+func TestAcademicSortListsAreDeterministic(t *testing.T) {
+	// Newest order: year descending, semester descending (Summer, Second,
+	// First through semester_order), normalized title, then the unique id.
+	if fmt.Sprint(academicNewestSort) != fmt.Sprint([]string{"academic_year:desc", "semester_order:desc", "title_sort:asc", "id:asc"}) {
+		t.Fatalf("newest sort list was %v", academicNewestSort)
+	}
+	if fmt.Sprint(academicOldestSort) != fmt.Sprint([]string{"academic_year:asc", "semester_order:asc", "title_sort:asc", "id:asc"}) {
+		t.Fatalf("oldest sort list was %v", academicOldestSort)
+	}
+	if fmt.Sprint(titleSort) != fmt.Sprint([]string{"title_sort:asc", "academic_year:desc", "semester_order:desc", "id:asc"}) {
+		t.Fatalf("title sort list was %v", titleSort)
+	}
+	// Relevance mode never sends query-time sort.
+	if resolved := ResolveOrder("", "vision"); resolved.Name == OrderRelevance && resolved.Sort != nil {
+		t.Fatal("relevance mode sent a query-time sort")
+	}
+}
+
+func TestSemesterOrderMatchesAcademicChronology(t *testing.T) {
+	// Within one academic year, newest order is Summer, Second, First.
+	if !(semesterOrder("summer") > semesterOrder("second") && semesterOrder("second") > semesterOrder("first")) {
+		t.Fatal("semester order does not satisfy Summer, Second, First chronology")
+	}
+}
+
+func TestCursorBindsToResolvedOrderingAndSchema(t *testing.T) {
+	query := Query{Text: "vision", Sort: "", Limit: 20}
+	cursor, err := encodeCursor(query, 20)
+	if err != nil {
+		t.Fatalf("encodeCursor returned an error: %v", err)
+	}
+	if _, err := decodeCursor(query, cursor); err != nil {
+		t.Fatalf("identical query cursor rejected: %v", err)
+	}
+
+	// Semantically equivalent omitted and explicit relevance share the same
+	// resolved ordering, so their cursors interchange.
+	explicit := query
+	explicit.Sort = "relevance"
+	if _, err := decodeCursor(explicit, cursor); err != nil {
+		t.Fatalf("explicit-relevance cursor rejected against implicit query: %v", err)
+	}
+
+	// A different resolved ordering invalidates the cursor.
+	changed := query
+	changed.Sort = "oldest"
+	if _, err := decodeCursor(changed, cursor); err != ErrInvalidCursor {
+		t.Fatal("changed-ordering cursor accepted")
+	}
+	changed = query
+	changed.Sort = "title"
+	if _, err := decodeCursor(changed, cursor); err != ErrInvalidCursor {
+		t.Fatal("title-ordering cursor accepted")
+	}
+
+	// Text emptiness changes the resolved ordering for a relevance request.
+	changed = query
+	changed.Text = ""
+	if _, err := decodeCursor(changed, cursor); err != ErrInvalidCursor {
+		t.Fatal("empty-text cursor accepted against textual query")
 	}
 }

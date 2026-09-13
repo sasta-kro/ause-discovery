@@ -8,6 +8,8 @@ GOVULNCHECK_VERSION := v1.7.0
 GO_MODULE_CACHE_VOLUME := ause-discovery-go-mod-cache
 GO_TEST_NETWORK ?= ause-discovery_default
 GO_TEST_DATABASE_URL ?= postgres://ause:ause@postgres:5432/postgres?sslmode=disable
+GO_TEST_MEILISEARCH_URL ?= http://meilisearch:7700
+GO_TEST_MEILISEARCH_KEY ?= local-development-key-change-before-production
 GO_RUN := docker run --rm -v $(GO_MODULE_CACHE_VOLUME):/go/pkg/mod --mount type=bind,source="$(CURDIR)",target=/workspace
 
 .PHONY: doctor install generate generate-database generate-openapi generate-openapi-go generate-openapi-typescript generate-check fmt lint test test-integration test-e2e test-all compose-up compose-down migrate seed dev check-action-pins check-action-pins-test check-frontend check-go-format go-mod-verify go-vet go-test go-test-integration check-integration check-source check-compose check-images vuln-report
@@ -108,11 +110,13 @@ go-test:
 
 # Integration tests create isolated databases on the referenced PostgreSQL
 # instance, so the URL must point at a server the test container can reach.
+# The pinned Meilisearch ordering test also requires a reachable engine.
 go-test-integration:
-	$(GO_RUN) --network $(GO_TEST_NETWORK) -e AUSE_TEST_DATABASE_URL='$(GO_TEST_DATABASE_URL)' -w /workspace/backend $(GO_TOOLCHAIN_IMAGE) go test ./... -count=1
+	$(GO_RUN) --network $(GO_TEST_NETWORK) -e AUSE_TEST_DATABASE_URL='$(GO_TEST_DATABASE_URL)' -e AUSE_TEST_MEILISEARCH_URL='$(GO_TEST_MEILISEARCH_URL)' -e AUSE_TEST_MEILISEARCH_KEY='$(GO_TEST_MEILISEARCH_KEY)' -w /workspace/backend $(GO_TOOLCHAIN_IMAGE) go test ./... -count=1
 
 check-integration:
 	@docker compose exec -T postgres pg_isready -U ause -d postgres >/dev/null 2>&1 || { printf 'PostgreSQL is not reachable through docker compose; start it with: docker compose up -d postgres\n'; exit 1; }
+	@docker compose exec -T meilisearch wget -q -O /dev/null http://127.0.0.1:7700/health || { printf 'Meilisearch is not reachable through docker compose; start it with: docker compose up -d meilisearch\n'; exit 1; }
 	$(MAKE) go-test-integration
 
 check-source: check-action-pins check-frontend check-go-format go-mod-verify go-vet go-test

@@ -64,6 +64,18 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      meilisearch:
+        image: getmeili/meilisearch:v1.53.1@sha256:8d6643d86d71fad6ad3cba92cde7ccfce9e4d6c384bda67598eb553571c32431
+        env:
+          MEILI_ENV: development
+          MEILI_MASTER_KEY: local-development-key-change-before-production
+        ports:
+          - 7700:7700
+        options: >-
+          --health-cmd "wget -q -O /dev/null http://127.0.0.1:7700/health"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -78,8 +90,8 @@ jobs:
         run: make check-go-format
       - name: Vet Go packages
         run: make go-vet
-      - name: Run backend tests with PostgreSQL integration
-        run: make go-test-integration GO_TEST_NETWORK=host GO_TEST_DATABASE_URL='postgres://ause:ause@localhost:5432/postgres?sslmode=disable'
+      - name: Run backend tests with PostgreSQL and Meilisearch integration
+        run: make go-test-integration GO_TEST_NETWORK=host GO_TEST_DATABASE_URL='postgres://ause:ause@localhost:5432/postgres?sslmode=disable' GO_TEST_MEILISEARCH_URL='http://localhost:7700' GO_TEST_MEILISEARCH_KEY='local-development-key-change-before-production'
 
   drift:
     name: Generated-code drift

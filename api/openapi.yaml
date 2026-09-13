@@ -394,7 +394,7 @@ components:
     HasSlides: { name: has_slides, in: query, schema: { type: boolean } }
     HasSourceCode: { name: has_source_code, in: query, schema: { type: boolean } }
     HasDataset: { name: has_dataset, in: query, schema: { type: boolean } }
-    SearchSort: { name: sort, in: query, schema: { type: string, enum: [relevance, newest, oldest, title] } }
+    SearchSort: { name: sort, in: query, description: 'Result ordering. relevance ranks by lexical relevance with academic-newest tie-breakers (academic year, then semester order, then normalized title, then Project ID); newest and oldest order by academic year and semester (publication time never leads); title orders by normalized title. An omitted sort defaults to academic-newest order for an empty query and lexical relevance with academic-newest tie-breakers for a text query.', schema: { type: string, enum: [relevance, newest, oldest, title] } }
     LogoVersion: { name: v, in: query, required: true, schema: { type: integer, minimum: 1 }, description: Active Project Logo revision. The response is immutable and cached long only when this matches the active revision. }
     Cursor: { name: cursor, in: query, schema: { type: string, minLength: 1, maxLength: 4096 } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }

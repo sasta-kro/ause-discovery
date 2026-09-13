@@ -85,11 +85,17 @@ func (client MeilisearchClient) EnsureIndex(ctx context.Context, indexUID string
 		response.Body.Close()
 		return err
 	}
+	// The query-time sort rule leads so an explicit user selection is
+	// authoritative. Every lexical rule, including exactness, precedes the
+	// academic-newest custom rules that order placeholder searches and break
+	// relevance ties. The custom rules end with the unique Project ID so any
+	// order they fully determine is stable across offset pages. Relevance
+	// mode sends no query-time sort; see ResolveOrder.
 	settings := map[string]any{
 		"searchableAttributes": []string{"student_ids", "reference_code", "title", "title_aliases", "student_names", "advisor_names", "co_advisor_names", "committee_names", "taxonomy_labels", "taxonomy_keys", "program.label", "major.label", "course.label", "abstract"},
 		"filterableAttributes": []string{"reference_code", "academic_year", "semester", "program_key", "major_key", "course_key", "person_ids", "student_ids", "advisor_person_ids", "category_keys", "platform_keys", "domain_keys", "topic_keys", "technology_keys", "artifact_types", "has_artifacts", "has_report", "has_slides", "has_source_code", "has_dataset"},
-		"sortableAttributes":   []string{"academic_year", "semester_order", "title_sort", "published_at", "updated_at"},
-		"rankingRules":         []string{"words", "typo", "proximity", "attribute", "sort", "exactness"},
+		"sortableAttributes":   []string{"academic_year", "semester_order", "title_sort", "id", "published_at", "updated_at"},
+		"rankingRules":         []string{"sort", "words", "typo", "proximity", "attribute", "exactness", "academic_year:desc", "semester_order:desc", "title_sort:asc", "id:asc"},
 		"typoTolerance":        map[string]any{"disableOnAttributes": []string{"student_ids", "reference_code"}},
 	}
 	response, err = client.request(ctx, http.MethodPatch, "/indexes/"+url.PathEscape(indexUID)+"/settings", settings)
@@ -108,6 +114,21 @@ func (client MeilisearchClient) UpsertDocuments(ctx context.Context, indexUID st
 		return err
 	}
 	return client.waitForAcceptedTask(ctx, response)
+}
+
+// DeleteIndex removes one index. It exists for disposable test indexes and
+// operator recovery; the application's own lifecycle never deletes the
+// logical index.
+func (client MeilisearchClient) DeleteIndex(ctx context.Context, indexUID string) error {
+	response, err := client.request(ctx, http.MethodDelete, "/indexes/"+url.PathEscape(indexUID), nil)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusAccepted && response.StatusCode != http.StatusNotFound {
+		return client.responseError(response)
+	}
+	return nil
 }
 
 func (client MeilisearchClient) DeleteDocument(ctx context.Context, indexUID string, documentID uuid.UUID) error {
