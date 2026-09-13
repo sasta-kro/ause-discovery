@@ -12,6 +12,7 @@ import { configureApiClient, routerBasename } from './app/runtime'
 import { installSessionExpiryNotification } from './app/session-expiry'
 import { highlightText } from './features/search/highlight'
 import { FacetDisclosure, SelectedFilterChip, StudentIdDisclosure, projectIdentityVariant, projectInitials, type FilterChoice } from './features/search/filter-controls'
+import { useDecodedLogo } from './decoded-logo'
 import { parseSearchState, resetSearchCursor, serializeSearchState, type SearchState } from './features/search/state'
 import { projectDeleteConfirmation, projectDraftSchema, toProjectDraft, toProjectFormValues, type ProjectFormValues } from './features/admin/forms'
 import { AdminSearchMaintenance } from './features/admin/search-maintenance'
@@ -294,7 +295,7 @@ function SearchPage() {
     <div className={styles.searchResults}><div className={styles.resultsHeader}><div><h2>{t('search.results', { count: searchQuery.data?.total ?? 0 })}</h2>{searchQuery.isPending ? <p role="status">{t('search.loading')}</p> : pending ? <p role="status">{t('search.updating')}</p> : null}</div></div>
       {searchQuery.isError ? <p className={styles.error} role="alert">{t('search.unavailable')}</p> : null}
       {!searchQuery.isPending && searchQuery.data?.items.length === 0 ? <p>{t('search.noResults')}</p> : <div className={styles.resultList}>{searchQuery.data?.items.map((result, index) => <article className={styles.searchResult} key={result.id}>
-        <ProjectIdentity logoUrl={result.logo_url} title={result.title} variantClass={projectIdentityVariant(index) === 'purple' ? styles.projectIdentityPurple : styles.projectIdentityRed} />
+        <ProjectIdentity eager={index < eagerLogoResults} logoUrl={result.logo_url} title={result.title} variantClass={projectIdentityVariant(index) === 'purple' ? styles.projectIdentityPurple : styles.projectIdentityRed} />
         <div className={styles.resultBody}><h2><Link to={`/projects/${result.id}`}>{highlightText(result.title, queryTerms)}</Link></h2>
           <div className={styles.metadata}><span>{result.academic_year}</span><span>{t(`fields.${result.semester}`)}</span><span>{result.program.label}</span>{result.people.length ? <span>{result.people.map((participation) => participation.person.display_name).join(', ')}</span> : null}</div>
           {excerptOf(result.highlights, queryTerms)}
@@ -309,21 +310,31 @@ function SearchPage() {
   </section>
 }
 
+// The first search results are the eager Logo cohort; every later result
+// uses native lazy loading.
+const eagerLogoResults = 4
+
 export function ProjectDetailIdentity({ title, logoUrl, variantClass }: { title: string; logoUrl?: string | null; variantClass?: string }) {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => { setFailed(false) }, [logoUrl])
-  const showLogo = logoUrl && !failed
-  return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${showLogo ? styles.pageHeaderIdentityImage : variantClass ?? styles.pageHeaderIdentityPurple}`}>
-    {showLogo ? <img alt="" className={styles.pageHeaderLogo} onError={() => setFailed(true)} src={logoUrl} /> : <span className={styles.pageHeaderInitials}>{projectInitials(title)}</span>}
+  const { status, imageProps } = useDecodedLogo(logoUrl)
+  const ready = status === 'ready'
+  // The header Logo is above the fold and may be the page's largest image,
+  // so it stays eager with high fetch priority; the decode still defers the
+  // reveal until the image is fully prepared.
+  return <div aria-hidden="true" className={`${styles.pageHeaderIdentity} ${ready ? styles.pageHeaderIdentityImage : variantClass ?? styles.pageHeaderIdentityPurple}`}>
+    <span className={styles.pageHeaderInitials}>{projectInitials(title)}</span>
+    {logoUrl && status !== 'failed' ? <img alt="" className={`${styles.pageHeaderLogo} ${ready ? styles.logoRevealed : styles.logoConcealed}`} decoding="async" fetchPriority="high" loading="eager" src={logoUrl} {...imageProps} /> : null}
   </div>
 }
 
-export function ProjectIdentity({ title, logoUrl, variantClass }: { title: string; logoUrl?: string | null; variantClass?: string }) {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => { setFailed(false) }, [logoUrl])
-  const showLogo = logoUrl && !failed
-  return <div aria-hidden="true" className={`${styles.projectIdentity} ${variantClass ?? ''} ${showLogo ? styles.projectIdentityImage : ''}`}>
-    {showLogo ? <img alt="" className={styles.projectIdentityLogo} onError={() => setFailed(true)} src={logoUrl} /> : projectInitials(title)}
+export function ProjectIdentity({ title, logoUrl, variantClass, eager = false }: { title: string; logoUrl?: string | null; variantClass?: string; eager?: boolean }) {
+  const { status, imageProps } = useDecodedLogo(logoUrl)
+  const ready = status === 'ready'
+  // The first search results are likely visible in the initial viewport and
+  // stay eager at default priority; every later result defers to native
+  // lazy loading at low priority so Logos never compete with the document.
+  return <div aria-hidden="true" className={`${styles.projectIdentity} ${variantClass ?? ''} ${ready ? styles.projectIdentityImage : ''}`}>
+    <span aria-hidden="true">{projectInitials(title)}</span>
+    {logoUrl && status !== 'failed' ? <img alt="" className={`${styles.projectIdentityLogo} ${ready ? styles.logoRevealed : styles.logoConcealed}`} decoding="async" fetchPriority={eager ? undefined : 'low'} loading={eager ? 'eager' : 'lazy'} src={logoUrl} {...imageProps} /> : null}
   </div>
 }
 

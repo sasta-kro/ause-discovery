@@ -157,6 +157,9 @@
 .pageHeaderIdentityPurple { background: var(--color-secondary); }
 .pageHeaderIdentityImage { background: var(--color-surface-raised, #f4f2f7); color: inherit; }
 .pageHeaderLogo { display: block; height: 100%; object-fit: contain; width: 100%; }
+.logoConcealed { opacity: 0; }
+.logoRevealed { opacity: 1; transition: opacity 160ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .logoRevealed { transition: none; } }
 .pageHeaderInitials { color: inherit; }
 .pageHeaderWithIdentity { align-items: center; display: flex; gap: var(--space-4); }
 .pageHeaderWithIdentity h1 { min-width: 0; }

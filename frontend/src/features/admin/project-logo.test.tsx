@@ -54,6 +54,15 @@ describe('Project logo management', () => {
     expect(retried.getAttribute('src')).toBe('/admin-logo-2')
   })
 
+  it('loads the preview eagerly without competing for high fetch priority', () => {
+    const queryClient = new QueryClient()
+    render(wrap(queryClient, { ...baseProject, logo_url: '/admin-logo' } as AdminProject))
+    const image = document.querySelector('img') as HTMLImageElement
+    expect(image.getAttribute('loading')).toBe('eager')
+    expect(image.getAttribute('decoding')).toBe('async')
+    expect(image.getAttribute('fetchpriority')).toBeNull()
+  })
+
   it('disables mutations on deleted Projects and hides actions', () => {
     const queryClient = new QueryClient()
     const project = { ...baseProject, status: 'deleted' as const, logo_url: '/logo?v=1' } as AdminProject
