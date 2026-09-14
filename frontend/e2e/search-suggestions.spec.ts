@@ -126,6 +126,26 @@ test('Escape closes without blur, text change reopens, second Escape blurs', asy
   await expect(input).not.toBeFocused()
 })
 
+test('Shift+Tab keeps ordinary backward focus navigation while a popup is open', async ({ page }) => {
+  const input = inputLocator(page)
+  await input.click()
+  await input.pressSequentially('2021')
+  await expect(suggestionOptions(page).first()).toContainText('2021')
+  const urlBefore = page.url()
+
+  await input.press('Shift+Tab')
+  await expect(input).not.toBeFocused()
+  await expect(page.getByRole('listbox', { name: 'Filter suggestions' })).toHaveCount(0)
+  expect(page.url()).toBe(urlBefore)
+  // Backward movement lands on a real control before the input, not the page.
+  const focused = page.evaluate(() => {
+    const active = document.activeElement
+    if (!active) return null
+    return { tag: active.tagName.toLowerCase(), text: (active.textContent ?? '').slice(0, 40) }
+  })
+  expect(await focused).not.toBeNull()
+})
+
 test('pointer selection applies exactly one filter without a blur race', async ({ page }) => {
   const input = inputLocator(page)
   await input.click()

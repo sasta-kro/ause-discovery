@@ -125,6 +125,21 @@ describe('search suggestion combobox', () => {
     expect(props.onSearch).not.toHaveBeenCalled()
   })
 
+  it('keeps Shift+Tab as ordinary backward navigation while a popup is open', () => {
+    const { input, props } = setup('gam')
+    focusAtEnd(input)
+    // fireEvent reports whether the event completed without a default
+    // prevention, so Shift+Tab stays available to the browser.
+    expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(true)
+    expect(props.onAccept).not.toHaveBeenCalled()
+    expect(props.onSearch).not.toHaveBeenCalled()
+    expect(screen.getByRole('listbox')).toBeTruthy()
+
+    // Plain Tab in the same state is intercepted for acceptance.
+    expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(false)
+    expect(props.onAccept).toHaveBeenCalledTimes(1)
+  })
+
   it('submits free text with Enter even while a suggestion is highlighted', () => {
     const { input, props } = setup('gam')
     focusAtEnd(input)

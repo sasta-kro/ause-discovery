@@ -99,7 +99,9 @@ export function SearchSuggestionInput({
         setActiveIndex(Math.max(activeOptionIndex - 1, 0))
         return
       }
-      if (event.key === 'Tab' && active) {
+      // Plain Tab accepts the highlighted suggestion. Shift+Tab keeps
+      // ordinary backward focus navigation, so it is never intercepted.
+      if (event.key === 'Tab' && !event.shiftKey && active) {
         event.preventDefault()
         accept(active)
         return

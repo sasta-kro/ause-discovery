@@ -123,6 +123,42 @@ describe('public search paging', () => {
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ technology_key: undefined }) })))
   })
 
+  it('adds and removes People and Advisor filters and resets paging history', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: { programs: [], majors: [], courses: [], taxonomy: [] } })
+    apiMocks.searchProjects.mockImplementation(async ({ query }: { query?: { cursor?: string } }) => {
+      const facets = {
+        ...emptyFacets,
+        people: [{ key: personID, label: 'Alex Advisor', count: 4 }],
+        advisors: [{ key: personID, label: 'Alex Advisor', count: 2 }],
+      }
+      if (query?.cursor === 'search-cursor-2') return { data: { items: [resultItem('018f0000-0000-7000-8000-0000000000r2', 'Second Page Result')], page: { limit: 20 }, facets, total: 2 } }
+      return { data: { items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')], page: { limit: 20, next_cursor: 'search-cursor-2' }, facets, total: 2 } }
+    })
+    renderSearch('neural')
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }))
+    await screen.findByRole('heading', { name: 'Second Page Result' })
+    expect((screen.getByRole('button', { name: 'Previous page' }) as HTMLButtonElement).disabled).toBe(false)
+
+    await user.click(screen.getByText('People'))
+    await user.click(screen.getByRole('button', { name: /Alex Advisor.*4.*Add/ }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ cursor: undefined, person_id: [personID] }) })))
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Previous page' }) as HTMLButtonElement).disabled).toBe(true)
+
+    await user.click(screen.getByText('Advisor'))
+    await user.click(screen.getByRole('button', { name: /Alex Advisor.*2.*Add/ }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ advisor_id: [personID], person_id: [personID] }) })))
+
+    await user.click(screen.getByRole('button', { name: 'Remove Advisor: Alex Advisor' }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ advisor_id: undefined, person_id: [personID] }) })))
+    await user.click(screen.getByRole('button', { name: 'Remove People: Alex Advisor' }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ person_id: undefined }) })))
+  })
+
   it('shows named participant facets and Semester counts while hiding paused dimensions', async () => {
     const user = userEvent.setup()
     const personID = '018f0000-0000-7000-8000-000000000701'

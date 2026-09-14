@@ -231,14 +231,19 @@ function SearchPage() {
   }
   const toggleArrayFilter = (key: ArrayFilterKey, value: string) => {
     const selected = (state[key] as string[] | undefined) ?? []
+    if (selected.includes(value)) {
+      const next = selected.filter((item) => item !== value)
+      setState({ ...state, [key]: next.length ? next : undefined })
+      return
+    }
     // Adding routes through the same shared operation suggestions use;
-    // removing stays a left-panel-only behavior.
-    if (!selected.includes(value) && isSuggestionField(key)) {
+    // dimensions outside the suggestion model, such as Person and Advisor,
+    // keep the plain append behavior.
+    if (isSuggestionField(key)) {
       setState(applyFilterValue(state, key, value))
       return
     }
-    const next = selected.filter((item) => item !== value)
-    setState({ ...state, [key]: next.length ? next : undefined })
+    setState({ ...state, [key]: [...selected, value] })
   }
   const clearFilters = () => setState({ q: state.q, limit: state.limit, sort: state.sort })
   const catalogFilterChoices = new Map(filters.map((filter) => [filter.key, catalogChoices(filter, catalogsQuery.data, searchQuery.data?.facets)]))
