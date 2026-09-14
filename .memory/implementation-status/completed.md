@@ -19,6 +19,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Project Repository Links | `../docs/increments/15-project-repository-links.md` |
 | Project Logo loading experience | `../docs/increments/16-project-logo-loading-experience.md`, commit `af53e63`, correction commit `bfb1cff` (grid overlay and stale-request isolation) |
 | Newest-first academic search ordering | `../docs/increments/17-newest-first-academic-search-ordering.md`, commit `07db502`, correction commit `5f4bac7` |
+| Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668` |
 | VM deployment and proxy correction | `../sasta-dev-notes/vm-deployment-2026-09-13.md` |
 
 
@@ -201,6 +202,23 @@ the default-subpath build, generated-code drift, Compose validation, and diff
 checks pass. No PostgreSQL migration, Search Document field, search response,
 classification semantic, storage, Logo, publication, or deployment change was
 introduced.
+
+25. **Implemented and accepted as Increment 18, 2026-09-14**
+(`.memory/docs/increments/18-search-filter-suggestions.md`). Commit `9278808`,
+corrected through `7cfc668`, adds frontend-only Search Filter Suggestions for
+Academic year, Semester, Program, Course, Category, Platform, Domain, and
+Technology. Conservative case-insensitive exact or prefix matching converts
+one nearest trailing suffix per Tab action, preserves and submits unmatched
+free text, excludes selected values, labels collisions, and issues no result
+request while typing. The accessible combobox keeps Enter for free-text search,
+supports mouse and clamped arrow navigation, uses two-stage Escape behavior,
+and preserves ordinary Shift+Tab navigation. Filter acceptance shares the
+left-panel mutation path without breaking People or Advisor toggles. Verification
+passed with 41 focused tests, the full 26-file 125-test frontend suite, ESLint,
+`tsc -b`, the default-subpath build, 10 Chromium interaction tests, and diff
+checks. No backend, OpenAPI, generated-client, Meilisearch, PostgreSQL,
+dependency, ordering, classification-semantic, publication, or deployment
+change was introduced.
 
 ## Completed correction work
 

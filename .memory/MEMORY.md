@@ -44,9 +44,9 @@ Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_
 As of 2026-09-13, the AUSE Discovery technical MVP is complete at commit
 `1cc5dc6`, the application is deployed at
 `https://life.au.edu/ause-discovery/`, and post-MVP implementation through
-newest-first academic search ordering Increment 17 was implemented at commit
-`07db502` and corrected through commit `5f4bac7`, which is the latest accepted
-implementation baseline. Read
+Search Filter Suggestions Increment 18 was implemented at commit `9278808` and
+corrected through commit `7cfc668`, which is the latest accepted implementation
+baseline. Read
 `implementation-status/backlog.md` for current work and constraints. Read
 `implementation-status/completed.md` only for accepted history, detailed
 behavior, or verification evidence.

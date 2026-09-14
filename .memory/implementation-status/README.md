@@ -18,9 +18,9 @@ so routine planning does not require loading the full technical record.
 ## Current checkpoint
 
 The technical MVP was completed at commit `1cc5dc6`. Post-MVP work through
-newest-first academic search ordering Increment 17 was implemented at commit
-`07db502` and corrected through commit `5f4bac7`, the latest accepted
-implementation baseline. No implementation item is currently in progress.
+Search Filter Suggestions Increment 18 was implemented at commit `9278808` and
+corrected through commit `7cfc668`, the latest accepted implementation
+baseline. No implementation item is currently in progress.
 
 ## Status lifecycle
 

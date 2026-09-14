@@ -18,28 +18,32 @@ Completed work and historical verification evidence belong in `completed.md`.
 | Correction | Open | Bounded import-preview text layout |
 | Correction | Open | Explain classification filter combination semantics |
 | 24 | Parked | Optional Project Logo payload optimization |
-| 25 | Implemented as Increment 18, pending independent review | Search Filter Suggestions |
 
 ## Current activity
 
 - No technical MVP implementation work remains. Launch readiness begins when the external inputs listed below are available.
-- Increment 18 implemented Search Filter Suggestions on 2026-09-13 per
-  `.memory/docs/increments/18-search-filter-suggestions.md`. The public search
-  input is now an accessible combobox that suggests exact or prefix matches of
-  already-loaded Academic year, Semester, Program, Course, Category, Platform,
-  Domain, and Technology controlled values. One Tab action converts exactly one
-  nearest-suffix suggestion through the shared filter mutation, Enter keeps
-  free-text search, and Escape dismisses then blurs. The item awaits
-  independent review.
+- No implementation item is currently in progress.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
 
 ## Current operating constraints
 
-### Disposable-data rebuild policy
+### Production data preservation policy
 
-Recorded 2026-09-12: no current PostgreSQL, Meilisearch, local Artifact, or B2 data requires preservation. The reviewed metadata CSV and the versioned Project Content manifest plus its referenced local files are the development sources of truth. A fully fresh rehearsal may stop the application, remove the intended Compose project's volumes, empty every object version from the B2 bucket, bootstrap and synchronize catalogs, import Project metadata from the reviewed CSV, then import logos and Project Files from the Project Content bundle. PostgreSQL owns the mapping from stored objects to Projects, so preserving B2 while wiping PostgreSQL leaves unreferenced objects and does not provide an idempotent rebuild. This disposable-data policy remains active until the maintainer explicitly declares a non-disposable production dataset or manual administrative changes that must survive rebuilds.
+Superseded 2026-09-14: the earlier disposable-data rebuild policy no longer
+applies to the hosted `ause-discovery` Compose project or its Backblaze B2
+bucket. B2 is production storage and must not be emptied during routine image
+updates, container recreation, migration, or search rebuild. The production
+PostgreSQL volume and B2 objects form one coordinated restore set because
+PostgreSQL owns every Project-to-object association and opaque storage key.
+Routine upgrades preserve both, omit metadata and Project Content re-import,
+and never use `docker compose down -v`. Any production volume removal, B2
+deletion, or full source-data rebuild requires explicit maintainer authorization
+and a verified coordinated backup or intentional reset plan. Meilisearch remains
+disposable derived state. Separately named local test Compose projects may still
+use disposable volumes and a deliberately selected non-production storage
+target.
 
 ### Toolchain constraints
 
@@ -86,79 +90,6 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 19. **Open, future product increment.** Project File types admit image files only under `poster`. Award and achievement material in the corpus therefore has no importable type: the sp-2039 external material (YRSS 2021 bronze prize, two jpg files and one png file) stays out of the content bundle by maintainer decision on 2026-09-12, and the extractor build reports each skipped image as a warning. A future implementation should let such evidence import. Candidate designs: permit jpg/jpeg/png under the `other` type, or add a dedicated type such as `award` with its own public label and frontend rendering. The full case record is in the extractor's `notes/bundle-building.md`.
 
 20. **Open, future product increment.** The import schema rejects any metadata row without at least one advisor (`missing_advisor` error, `backend/internal/imports/validation.go`). Four corpus projects genuinely print no advisor in any staged document (verified by full-text search on 2026-09-13: sp-1800 report without an approval page, and the slide-only decks sp-2021, sp-2031, sp-2032). The maintainer dropped these four from the import CSV for now (documented in the extractor's `DROPPED_NO_ADVISOR` set) rather than invent names, and the dataset records remain as ground truth. A future implementation should treat a missing advisor as an import warning with an honest public display ("advisor not recorded"), so advisorless legacy documents can join the archive.
-
-25. **Implemented as Increment 18, pending independent review.** Implemented
-2026-09-13 per `.memory/docs/increments/18-search-filter-suggestions.md`. The
-public search input is an editable combobox with `aria-autocomplete="list"`
-semantics. Suggestions are computed locally from the loaded facet and catalog
-choices, use case-insensitive exact or prefix matching with a three-character
-threshold (a complete shorter alias and an existing four-digit academic year
-remain eligible), never fuzzy-match, exclude already-selected values, label
-collisions by dimension, and cap the list at six ranked rows. One Tab action
-converts exactly the highlighted suggestion, applies it through the same
-filter mutation as the left panel, removes only the consumed trailing range
-plus boundary whitespace, resets pagination, and triggers one filtered search.
-Enter always submits the draft as free text, and Escape dismisses then blurs
-in two stages. Typing alone never requests results.
-
-Implement
-`.memory/docs/increments/18-search-filter-suggestions.md`. Add Search Filter
-Suggestions to the
-public search input. Typing a controlled value such as `2025` or `game` should
-offer dimension-labelled completions such as `Academic year: 2025` or
-`Category: Game`. Accepting a suggestion adds the same structured URL filter
-and selected-filter chip as the left filter panel, removes the recognized text
-from the input while preserving every unmatched free-text term, resets
-pagination, and triggers one filtered search. Suggestions should initially
-cover active academic and classification dimensions already available through
-loaded catalogs and search facets and exclude already-selected values.
-
-Only the nearest eligible suffix ending at the caret may become a filter. A
-single Tab action converts exactly one highlighted suggestion, never every
-controlled term in the input. After acceptance, suggestions immediately
-recompute from the remaining text. For example, `machine learning 2025`
-followed by Tab selects `Academic year: 2025` and leaves `machine learning`;
-only then may `machine learning` become the next suggestion. `best gam`
-followed by Tab selects `Category: Game` and leaves `best`. `best game project`
-does not scan backward to suggest Game because the active trailing term is
-`project`.
-
-Matching is case-insensitive and requires a word boundary. Use normalized exact
-or prefix matching with no typo correction, edit distance, or fuzzy dependency
-for the initial version. Fuzzy behavior is deliberately provisional and may be
-reconsidered only after the first implementation receives a manual interaction
-review. A textual fragment normally requires at least three characters unless
-it exactly matches a shorter controlled value; an academic year requires four
-digits. A space after a completed unmatched term, unrelated trailing text, or
-a misspelling closes suggestions rather than guessing intent. Removing or
-correcting that text must reopen matching suggestions immediately. Rank exact
-matches before prefixes and label every collision with its dimension.
-
-This is filter autocomplete, not live result search, so typing alone must not
-request results on every keystroke. Implement an accessible editable combobox
-with a labelled listbox, automatic first-option highlight, mouse selection, and
-arrow navigation. Enter always submits the free-text search and never accepts a
-suggestion. Tab accepts the highlighted suggestion, prevents focus movement for
-that action, and keeps focus in the input for continued composition. The active
-suggestion must carry a small non-intrusive visual keycap and instruction such
-as `<kbd>Tab</kbd> to select filter`; equivalent screen-reader instructions must
-describe the same controls.
-
-Escape uses two stages. The first Escape dismisses and suppresses the current
-popup without moving the caret or removing input focus. Any subsequent text
-change clears that suppression and recomputes suggestions immediately. A second
-Escape with the same unchanged input and dismissed popup removes focus from the
-search input; later Tab behavior returns to ordinary page navigation. The
-implementation must verify that this focus transition remains predictable in a
-real browser.
-
-Suggestions should appear only while the caret is at the end so accepting one
-can remove the matched suffix safely. Applying a suggestion should use the
-remaining normalized text as the submitted query and share filter mutation
-logic with the left panel. Prefer a small shared suggestion model over
-duplicating that logic. A backend, OpenAPI, or search-engine change is
-unnecessary unless later evidence shows that the already-loaded catalog and
-facet data is insufficient.
 
 ## Parked possibilities
 
