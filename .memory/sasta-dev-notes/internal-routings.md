@@ -13,7 +13,7 @@ The precise arrangement is:
 ```text
 VM Nginx
   |
-  | HTTP to 127.0.0.1:8090
+  | HTTP to 127.0.0.1:8088
   v
 web:8080
   |

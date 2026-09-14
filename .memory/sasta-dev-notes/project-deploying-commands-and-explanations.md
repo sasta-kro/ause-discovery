@@ -10,8 +10,14 @@ errors, fixes, image digests, and cleanup from the latest deployment. This file
 keeps the reusable command flow.
 
 Project metadata and Project Content remain external source-of-truth files
-during development. A completely fresh stack is expected and does not require
-preserving the current PostgreSQL, Meilisearch, local storage, or B2 contents.
+during development. The `ause-local-test` Compose project is fully disposable:
+tear it down, delete its volumes, and rebuild it freely. Production is
+different: the hosted `ause-discovery` Compose project and its B2 bucket carry
+soft preservation. Everything is rebuildable from the source files, but a full
+re-import costs roughly 10 to 15 minutes for about 2 GB, so routine upgrades
+preserve the production PostgreSQL volume and B2 objects and never empty them.
+A production wipe is a deliberate maintainer decision, used for data-model,
+storage-layout, or corruption recovery, and resets PostgreSQL and B2 together.
 
 ## Quick copy: fresh local test stack
 
@@ -513,9 +519,10 @@ The VM deployment sequence performs these operations:
     removed from VM staging after verification.
 
 For an upgrade, the existing administrator remains in PostgreSQL and
-`admin create` is omitted. For the current development reset workflow, the VM
-may be rebuilt from empty volumes, metadata imported from the reviewed CSV,
-and Project Content imported from its bundle.
+`admin create` is omitted. Upgrades preserve the production PostgreSQL volume
+and B2 objects. Rebuilding the VM from empty volumes, with a fresh metadata
+import and Project Content import, is a deliberate maintainer decision rather
+than the routine path.
 
 ## Routine commands
 
@@ -558,11 +565,17 @@ docker compose -p ause-local-test --env-file .env.local-test \
 This deletes the selected local project's containers, network, PostgreSQL,
 Meilisearch, and local application volumes. B2 remains unchanged.
 
-For the current development source-of-truth workflow, a fully clean reset is:
+For the current development source-of-truth workflow, a fully clean reset is
+routine for `ause-local-test` only. For the production `ause-discovery`
+project the same sequence is a deliberate maintainer decision, roughly 10 to
+15 minutes of re-import for about 2 GB, reserved for data-model changes,
+storage-layout changes, or corruption recovery. Production PostgreSQL and B2
+must be reset together or not at all:
 
 1. Delete the disposable Compose volumes.
 2. Empty every version and unfinished multipart upload in the selected B2
-   bucket with the commands in `project-content-import.md`.
+   bucket with the commands in `project-content-import.md`, only when that
+   bucket is being deliberately reset.
 3. Rebuild or pull the desired images.
 4. Start PostgreSQL and Meilisearch.
 5. Migrate, validate the migration status, and synchronize catalogs.

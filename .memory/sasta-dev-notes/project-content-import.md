@@ -15,8 +15,12 @@ administrator Imports page.
 ## Quick copy: reset and verify B2
 
 For a deliberate fresh-data rehearsal, empty B2 together with the disposable
-PostgreSQL volumes. Load the application environment into the B2 CLI without
-placing secret values directly in shell history:
+PostgreSQL volumes. This is routine for a local-test bucket. Emptying the
+production bucket is a deliberate maintainer decision, reserved for
+data-model changes, storage-layout changes, or corruption recovery, and must
+always run together with a production PostgreSQL reset. Load the application
+environment into the B2 CLI without placing secret values directly in shell
+history:
 
 ```sh
 set -a
@@ -605,9 +609,14 @@ enough free container disk for the largest single file being uploaded.
 
 ## Current reset model
 
-During development, the reviewed metadata CSV and Project Content bundle are
-the source of truth. A clean rebuild can delete PostgreSQL and local volumes,
-empty B2, then repeat both imports.
+The reviewed metadata CSV and Project Content bundle remain the source of
+truth. Production data carries soft preservation: everything is rebuildable
+from these files, but a full re-import costs roughly 10 to 15 minutes for
+about 2 GB, so routine upgrades preserve the production PostgreSQL volume and
+B2 objects instead of resetting them. A clean rebuild that deletes PostgreSQL
+and local volumes and empties B2 is routine for `ause-local-test` and, for
+production, a deliberate maintainer decision reserved for data-model changes,
+storage-layout changes, or corruption recovery.
 
 PostgreSQL and B2 must be considered together:
 
@@ -617,5 +626,5 @@ PostgreSQL and B2 must be considered together:
 - Reusing both preserves idempotent skip behavior.
 
 Once administrators begin creating authoritative records outside these source
-files, this reset model no longer applies and coordinated database plus storage
-backups become necessary.
+files, this soft reset model no longer applies and coordinated database plus
+storage backups become necessary.

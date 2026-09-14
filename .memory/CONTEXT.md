@@ -2,6 +2,23 @@
 
 AUSE Discovery is the domain of preserving and discovering historical senior projects and associated academic records at Assumption University.
 
+## Project orientation
+
+AUSE Discovery is a public searchable institutional archive of historical senior projects. Public visitors search and browse Project metadata, people, academic context, controlled classifications, and available Artifacts. Authenticated administrators maintain canonical records and search state.
+
+Canonical boundaries:
+
+- PostgreSQL is canonical.
+- Meilisearch is disposable derived state.
+- Artifact and Project Logo bytes use the configured storage provider, local persistent storage or Backblaze B2, outside PostgreSQL. Provider selection is configuration, per the accepted pluggable-storage decision.
+- Project is the search-result unit. Project ID is application-owned UUID identity.
+- Reference Code is optional external data without assumed uniqueness or encoded semantics.
+- Person records remain separate from Application Users.
+- Student ID is public, searchable, and exactly seven digits.
+- Delete is reversible soft deletion. Permanent destruction is outside MVP scope.
+
+Outside MVP scope: recommendations, analytics, semantic search, report-body indexing, AI extraction, public accounts, taxonomy CMS, custom document viewers, Redis, message brokers, microservices, external-link Artifacts, automatic backup, and automated VM deployment.
+
 ## Projects
 
 **Project**:

@@ -16,8 +16,11 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 20 | Open | Projects without a recorded advisor |
 | Correction | Partial | Acknowledge all import warnings |
 | Correction | Open | Bounded import-preview text layout |
-| Correction | Open | Explain classification filter combination semantics |
+| Correction | Completed | Explain classification filter combination semantics |
 | 24 | Parked | Optional Project Logo payload optimization |
+| 26 | Discussion required | Ownership, institutional license, public legal text, and developer credit |
+| 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
+| 28 | Discussion required | Clarify the People search facet terminology and scope |
 
 ## Current activity
 
@@ -33,23 +36,25 @@ active across sessions without being represented by an implementation brief.
 
 Superseded 2026-09-14: the earlier disposable-data rebuild policy no longer
 applies to the hosted `ause-discovery` Compose project or its Backblaze B2
-bucket. B2 is production storage and must not be emptied during routine image
-updates, container recreation, migration, or search rebuild. The production
-PostgreSQL volume and B2 objects form one coordinated restore set because
-PostgreSQL owns every Project-to-object association and opaque storage key.
-Routine upgrades preserve both, omit metadata and Project Content re-import,
-and never use `docker compose down -v`. Any production volume removal, B2
-deletion, or full source-data rebuild requires explicit maintainer authorization
-and a verified coordinated backup or intentional reset plan. Meilisearch remains
-disposable derived state. Separately named local test Compose projects may still
-use disposable volumes and a deliberately selected non-production storage
-target.
+bucket. Production data carries soft preservation: everything is rebuildable
+from the reviewed metadata CSV and Project Content bundle, but a full
+re-import costs roughly 10 to 15 minutes for about 2 GB of Project File and
+Logo bytes, so routine work avoids it. Routine image updates, container
+recreation, migration, and search rebuild preserve the production PostgreSQL
+volume and B2 objects, omit metadata and Project Content re-import, and never
+use `docker compose down -v`. A deliberate production wipe is acceptable when
+the maintainer intends it, for example after a data-model or storage-layout
+change or corruption, and is executed as a coordinated reset: PostgreSQL and
+B2 together, since PostgreSQL owns every Project-to-object association and
+opaque storage key. Meilisearch remains disposable derived state. Separately
+named local test Compose projects remain fully disposable and may use
+deliberately selected non-production storage targets.
 
 ### Toolchain constraints
 
-- The host Node.js version is below the exact repository baseline; the pinned container toolchain provides the reproducible path.
-- Go is absent on the host; Go verification uses the pinned container toolchain.
-- `typescript-eslint` 8.69.0 rejects TypeScript 7.0.2. The current lint gate runs ESLint on compatible JavaScript configuration and uses `tsc -b` for TypeScript static checking while preserving the accepted exact pins.
+- The host Node.js version, 24.14.1, is below the exact repository baseline, 24.20.0. Routine frontend lint, tests, and builds run on host pnpm regardless; the pinned Node container is used for generated-client regeneration.
+- Host Go 1.27.1 exists but differs from the pinned Go 1.27.0 baseline. Makefile Go verification still runs through the pinned `golang:1.27.0-alpine3.23` container.
+- No `typescript-eslint` release supports TypeScript 7.0.2, the native compiler generation (upstream tracking: typescript-eslint issue 10940). The inert `typescript-eslint` pin was removed on 2026-09-14. The lint gate runs ESLint on compatible JavaScript configuration only, and `tsc -b` provides all TypeScript static checking. Real TypeScript linting requires either a TypeScript 6 side-by-side setup or upstream tsgo support.
 - `@hey-api/openapi-ts` 0.99.0 rejects TypeScript 7.0.2. Reproducible client generation uses the isolated `api/generator` workspace with TypeScript 5.9.3 while application compilation remains on TypeScript 7.0.2.
 
 ### Launch-only inputs
@@ -75,9 +80,10 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 - **Open:** import preview rows wrap text permanently. The 200 percent zoom
   behavior is resolved. Long values still need bounded truncation or normal
   wrapping inside a horizontally scrollable table region.
-- **Open:** add concise user-facing guidance that multiple selected values
-  within one filter dimension match any selected value, while different filter
-  dimensions must all match. The accepted search behavior does not change.
+- **Completed in Increment 18:** the Search Filter Suggestions combobox help
+  explains that multiple selected values within one filter dimension match any
+  selected value, while different filter dimensions must all match. The
+  accepted search behavior did not change.
 
 ## Open implementation work
 
@@ -90,6 +96,42 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 19. **Open, future product increment.** Project File types admit image files only under `poster`. Award and achievement material in the corpus therefore has no importable type: the sp-2039 external material (YRSS 2021 bronze prize, two jpg files and one png file) stays out of the content bundle by maintainer decision on 2026-09-12, and the extractor build reports each skipped image as a warning. A future implementation should let such evidence import. Candidate designs: permit jpg/jpeg/png under the `other` type, or add a dedicated type such as `award` with its own public label and frontend rendering. The full case record is in the extractor's `notes/bundle-building.md`.
 
 20. **Open, future product increment.** The import schema rejects any metadata row without at least one advisor (`missing_advisor` error, `backend/internal/imports/validation.go`). Four corpus projects genuinely print no advisor in any staged document (verified by full-text search on 2026-09-13: sp-1800 report without an approval page, and the slide-only decks sp-2021, sp-2031, sp-2032). The maintainer dropped these four from the import CSV for now (documented in the extractor's `DROPPED_NO_ADVISOR` set) rather than invent names, and the dataset records remain as ground truth. A future implementation should treat a missing advisor as an import warning with an honest public display ("advisor not recorded"), so advisorless legacy documents can join the archive.
+
+26. **Discussion required before an implementation brief.** Establish the
+copyright owner, the rights granted to Assumption University, maintenance and
+modification rights after graduation, institutional approval of public legal
+text, and professional developer attribution. The intended presentation is a
+short developer credit in the site footer and a fuller About-page section with
+the developer's approved name, GitHub profile, and contact route. No public
+copyright ownership claim or license notice should be published until written
+agreements, applicable university policy, contributor rights, and Thai legal
+advice have been checked. Privacy, Terms of Use, Contact, and any separate
+copyright or license notice should use approved institutional content.
+
+27. **Discussion required, future product increment separate from item 26.**
+Add first-party telemetry for institutional insight and an administrator-only
+analytics area with appropriate tables, graphs, and charts. Candidate measures
+include search phrases, zero-result searches, selected filters, traffic by
+time, Project views, Person views, and Project File opens or downloads. Design
+must precede implementation and cover event definitions, aggregation, search
+term sensitivity, bots, retention, deletion, lawful basis, privacy notice,
+cookie or consent requirements, administrator authorization, and operational
+cost. The preferred first stage is cookieless, privacy-minimized aggregate
+telemetry without cross-site tracking, advertising identifiers, fingerprinting,
+or persistent public visitor identities. Unique-visitor or session analytics
+remain a separate decision. This work requires backend persistence and APIs as
+well as frontend dashboards and is not a frontend-only addition.
+
+28. **Discussion required before deciding whether this is copy or a product
+change.** The current `People` search facet uses `person_ids`, which includes
+every Project Participation role: student, advisor, co-advisor, and committee
+member. The separate `Advisor` facet uses the narrower advisor role set.
+Renaming `People` to `Students` without changing the search projection would be
+incorrect. Candidate directions are: rename the current public label to
+`Participants` with concise role guidance, or add a true student-only search
+field and facet while preserving the narrower Advisor facet. Update the domain
+glossary only after the public terminology and intended filtering semantics are
+selected.
 
 ## Parked possibilities
 

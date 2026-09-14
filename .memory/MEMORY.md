@@ -10,7 +10,8 @@ Read these files in order before planning or implementation:
 
 1. `../AGENTS.md`
 2. `MEMORY.md`
-3. `project_context.md`
+3. `CONTEXT.md`, whose Project orientation section carries the durable
+   product summary, canonical boundaries, and MVP exclusions
 4. `architectural_decision_logs.md`
 5. `implementation-status/README.md`, then `implementation-status/backlog.md`
    for current work or `implementation-status/completed.md` for accepted history
@@ -20,14 +21,17 @@ Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_
 
 ## Memory files
 
-- `project_context.md` contains durable product, repository, and implementation-baseline context.
+- `CONTEXT.md` contains the domain glossary plus the durable project
+  orientation: product summary, canonical boundaries, and MVP exclusions.
 - `architectural_decision_logs.md` contains accepted architecture decisions and consequences.
 - `implementation-status/README.md` routes status reading;
   `implementation-status/backlog.md` contains current or incomplete work; and
   `implementation-status/completed.md` contains accepted history and evidence.
 - `lessons_learned.md` remains reserved for verified reusable lessons.
-- `archives/session_handoff_2026-09-02.md` preserves the historical interrupted core checkpoint and continuation sequence.
-- `archives/history-rewrite-2026-09-05.md` preserves the old-to-new commit map for correlating earlier reports and conversations.
+- `archives/history-rewrite-2026-09-05.md` preserves the old-to-new commit map
+  for correlating earlier reports and conversations. Superseded session and
+  deployment archives were removed on 2026-09-14 because their content was
+  stale or fully superseded by the current notes.
 
 ## Maintenance rules
 
