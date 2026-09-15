@@ -530,8 +530,18 @@ Liveness proves that the Backend API process accepts HTTP requests. Readiness
 checks the supported PostgreSQL schema, the metadata-import temporary
 directory, and the configured default storage provider. B2 readiness uses a
 read-only `ListObjectsV2` request limited to one result under `v1/`; successful
-checks cache for 30 seconds and failures for 5 seconds. Meilisearch is omitted
+checks cache for 10 minutes and failures for 1 minute. Meilisearch is omitted
 from readiness because search degrades independently and can be rebuilt.
+
+The container healthcheck polls liveness only, on purpose. Readiness is a
+deploy-time and on-demand signal: the compose `HEALTHCHECK` calls
+`ause-api healthcheck`, which GETs `health/live`. Polling `health/ready` from
+inside the container every 10 seconds re-probed B2 roughly 2,880 times per day
+per API container, which alone exceeded the 2,500-per-day free B2 Class C
+transaction cap and triggered repeated cap alert emails while development
+stacks ran beside production. During deploys and troubleshooting, call
+`health/ready` explicitly with the curl commands above instead of relying on
+continuous polling.
 
 ## Environment values that commonly change
 

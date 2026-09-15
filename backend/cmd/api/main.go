@@ -160,8 +160,13 @@ func runHealthcheck() int {
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"
 	}
+	// The container healthcheck polls liveness only. Polling readiness here
+	// would re-probe the remote storage provider every interval, turning a
+	// diagnostic into constant provider traffic and, on B2, daily
+	// Class C transaction cap exhaustion. Readiness stays a deploy-time and
+	// on-demand check.
 	client := &http.Client{Timeout: 3 * time.Second}
-	response, err := client.Get("http://" + net.JoinHostPort(host, port) + configuration.PublicBasePath + "health/ready")
+	response, err := client.Get("http://" + net.JoinHostPort(host, port) + configuration.PublicBasePath + "health/live")
 	if err != nil {
 		return 1
 	}

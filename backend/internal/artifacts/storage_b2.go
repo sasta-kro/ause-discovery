@@ -230,10 +230,13 @@ func classifyB2ReadinessError(err error) error {
 
 // readinessProbe bounds readiness traffic to the remote provider: at most
 // one request in flight for the sharing instance, concurrent callers reuse
-// the in-flight result, and results are cached briefly. Successful results
-// cache for readinessSuccessTTL and failures for readinessFailureTTL so B2
-// recovery is observed promptly. The controller holds no credentials,
-// object names, or response bodies.
+// the in-flight result, and results are cached. Successful results cache
+// for readinessSuccessTTL and failures for readinessFailureTTL. Readiness
+// is a deploy-time and on-demand signal, never a high-frequency poll, so a
+// stale-but-fresh-enough verdict is preferred over repeating provider
+// metadata requests: on B2 each ListObjectsV2 call is a billed Class C
+// transaction under a small daily free cap. The controller holds no
+// credentials, object names, or response bodies.
 type readinessProbe struct {
 	mu         sync.Mutex
 	leader     *readinessCall
@@ -255,8 +258,8 @@ type readinessCall struct {
 }
 
 const (
-	readinessSuccessTTL = 30 * time.Second
-	readinessFailureTTL = 5 * time.Second
+	readinessSuccessTTL = 10 * time.Minute
+	readinessFailureTTL = time.Minute
 )
 
 // newReadinessProbe builds a controller around one request function. A nil
