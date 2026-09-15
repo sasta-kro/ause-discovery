@@ -257,8 +257,6 @@ adjustment, keep the component local and preserve semantic `details` and
 The existing `FacetDisclosure` is the natural boundary. Extend it with explicit
 ordering intent rather than inferring behavior from translated labels.
 
-One possible API shape is conceptually:
-
 ```text
 order: fixed | year-desc | toggleable
 defaultOrder: occurrence | alphabetical

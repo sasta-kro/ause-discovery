@@ -228,6 +228,98 @@ describe('public search paging', () => {
     expect(screen.getByRole('button', { name: 'Remove People: Alex Advisor' })).toBeTruthy()
   })
 
+  it('orders fixed dimensions and defaults toggleable groups to count descending without requests', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: {
+      programs: [{ id: 'p-it', key: 'information_technology', label: 'Information Technology' }, { id: 'p-cs', key: 'computer_science', label: 'Computer Science' }],
+      majors: [], courses: [],
+      taxonomy: [
+        { id: 't-react', key: 'react', dimension: 'technology', labels: { en: 'React' } },
+        { id: 't-node', key: 'nodejs', dimension: 'technology', labels: { en: 'Node.js' } },
+        { id: 't-go', key: 'go', dimension: 'technology', labels: { en: 'Go' } },
+      ],
+    } })
+    apiMocks.searchProjects.mockResolvedValue({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: {
+        ...emptyFacets,
+        academic_years: [{ key: '2021', count: 7 }, { key: '2025', count: 50 }, { key: '2023', count: 12 }],
+        people: [{ key: personID, label: 'Alex Advisor', count: 4 }, { key: '018f0000-0000-7000-8000-000000000702', label: 'Bee Student', count: 19 }],
+        programs: [{ key: 'computer_science', count: 2 }, { key: 'information_technology', count: 33 }],
+        technologies: [{ key: 'go', count: 1 }, { key: 'react', count: 56 }, { key: 'nodejs', count: 41 }],
+      },
+      total: 1,
+    } })
+    renderSearch()
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+    const callsBefore = apiMocks.searchProjects.mock.calls.length
+
+    const groupButtons = (name: string) => within(screen.getByRole('group', { name })).getAllByRole('button')
+    await user.click(screen.getByText('Academic year'))
+    expect(groupButtons('Academic year options').map((button) => button.textContent)).toEqual(['202550Add', '202312Add', '20217Add'])
+    expect(document.activeElement).toBe(screen.getByLabelText('Find a year'))
+    expect(screen.queryByRole('button', { name: /Academic year order:/ })).toBeNull()
+
+    await user.click(screen.getByText('Semester'))
+    expect(groupButtons('Semester options').map((button) => button.textContent![0])).toEqual(['F', 'S', 'S'])
+    expect(screen.queryByRole('searchbox', { name: /semester/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Semester order:/ })).toBeNull()
+
+    await user.click(screen.getByText('Program'))
+    expect(groupButtons('Program options').map((button) => button.textContent)).toEqual(['Information Technology33Add', 'Computer Science2Add'])
+    await user.click(screen.getByText('People'))
+    expect(groupButtons('People options').map((button) => button.textContent)).toEqual(['Bee Student19Add', 'Alex Advisor4Add'])
+    await user.click(screen.getByText('Technology'))
+    expect(groupButtons('Technology options').map((button) => button.textContent)).toEqual(['React56Add', 'Node.js41Add', 'Go1Add'])
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('toggles representative groups to alphabetical independently and keeps selection bound', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: {
+      programs: [{ id: 'p-it', key: 'information_technology', label: 'Information Technology' }, { id: 'p-cs', key: 'computer_science', label: 'Computer Science' }],
+      majors: [], courses: [],
+      taxonomy: [{ id: 't-react', key: 'react', dimension: 'technology', labels: { en: 'React' } }, { id: 't-go', key: 'go', dimension: 'technology', labels: { en: 'Go' } }],
+    } })
+    apiMocks.searchProjects.mockResolvedValue({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: {
+        ...emptyFacets,
+        people: [{ key: personID, label: 'Zeta Advisor', count: 4 }, { key: '018f0000-0000-7000-8000-000000000702', label: 'Alpha Student', count: 1 }],
+        programs: [{ key: 'computer_science', count: 9 }, { key: 'information_technology', count: 2 }],
+        technologies: [{ key: 'go', count: 1 }, { key: 'react', count: 56 }],
+      },
+      total: 1,
+    } })
+    renderSearch()
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+    const callsBefore = apiMocks.searchProjects.mock.calls.length
+    const groupButtons = (name: string) => within(screen.getByRole('group', { name })).getAllByRole('button')
+
+    await user.click(screen.getByText('Program'))
+    await user.click(screen.getByRole('button', { name: 'Program order: Most common first. Change to alphabetical.' }))
+    expect(groupButtons('Program options').map((button) => button.textContent)).toEqual(['Computer Science9Add', 'Information Technology2Add'])
+
+    await user.click(screen.getByText('People'))
+    await user.click(screen.getByRole('button', { name: 'People order: Most common first. Change to alphabetical.' }))
+    expect(groupButtons('People options').map((button) => button.textContent)).toEqual(['Alpha Student1Add', 'Zeta Advisor4Add'])
+
+    await user.click(screen.getByText('Technology'))
+    expect(groupButtons('Technology options').map((button) => button.textContent)).toEqual(['React56Add', 'Go1Add'])
+    expect(screen.getByRole('button', { name: 'Program order: Alphabetical. Change to most common first.' }).getAttribute('aria-pressed')).toBe('true')
+
+    await user.click(groupButtons('People options')[0])
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ person_id: ['018f0000-0000-7000-8000-000000000702'] }) })))
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBefore + 1)
+    await user.type(screen.getByLabelText('Find a person'), 'zet')
+    expect(groupButtons('People options').map((button) => button.textContent)).toEqual(['Zeta Advisor4Add'])
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBefore + 1)
+  })
+
   it('shows named participant facets and Semester counts while hiding paused dimensions', async () => {
     const user = userEvent.setup()
     const personID = '018f0000-0000-7000-8000-000000000701'

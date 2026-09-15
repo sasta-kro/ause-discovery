@@ -19,6 +19,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Project Repository Links | `../docs/increments/15-project-repository-links.md` |
 | Project Logo loading experience | `../docs/increments/16-project-logo-loading-experience.md`, commit `af53e63`, correction commit `bfb1cff` (grid overlay and stale-request isolation) |
 | Newest-first academic search ordering | `../docs/increments/17-newest-first-academic-search-ordering.md`, commit `07db502`, correction commit `5f4bac7` |
+| Person-name Search Filter Suggestions | `../docs/increments/19-person-filter-suggestions.md`, commit `eb84ae7` |
 | Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668` |
 | VM deployment and proxy correction | `../sasta-dev-notes/vm-deployment-2026-09-13.md` |
 
@@ -222,6 +223,35 @@ passed with 41 focused tests, the full 26-file 125-test frontend suite, ESLint,
 checks. No backend, OpenAPI, generated-client, Meilisearch, PostgreSQL,
 dependency, ordering, classification-semantic, publication, or deployment
 change was introduced.
+
+26. **Implemented and accepted as Increment 19, 2026-09-15**
+(`.memory/docs/increments/19-person-filter-suggestions.md`). Commit `eb84ae7`,
+built on the accepted Increment 18 baseline plus its visual correction,
+extends Search Filter Suggestions to the People and Advisor facets using only
+the loaded Search response facet choices, with no second Person request. The
+suggestion field model gains `person_id` and `advisor_id`, and a matching
+policy is attached to every definition at build time: year, person, or
+standard. Person definitions carry the display name as their only alias, so a
+UUID is never matchable or visible. Matching is case-insensitive exact or
+prefix with the three-character threshold and no Person abbreviation
+exception; `Min Tun`, `Pyo`, and misspellings never match. A matched
+Person-name prefix stays eligible across a trailing space only when the text
+before it ends at a display-name segment boundary, while standard dimensions
+and academic years keep their trailing-whitespace suppression and unrelated
+trailing terms never trigger a backward scan. One Person in both facets
+yields two dimension-labelled rows ordered People then Advisor, selection
+excludes per dimension only, and one Tab acceptance applies the exact UUID
+through the shared filter mutation while removing only the matched trailing
+name fragment, preserving preceding free text, resetting pagination, and
+issuing one search. Typing issues no result or Person request, and left-panel
+People and Advisor additions route through the same shared operation.
+Verification passed with 26 pure tests, 18 combobox tests, 12 SearchPage
+tests, the full 28-file 140-test frontend suite, ESLint, `tsc -b`, the
+default-subpath build, and 15 Chromium interaction tests against a fresh
+local-test stack with 205 imported Projects. No backend, OpenAPI,
+generated-client, Search Document, Meilisearch, PostgreSQL, dependency,
+People-terminology, filter-semantic, publication, or deployment change was
+introduced.
 
 ## Completed correction work
 
