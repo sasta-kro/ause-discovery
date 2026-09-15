@@ -8,7 +8,10 @@ values:
   - {id: 018f0000-0000-7000-8000-000000000112, dimension: platform, key: mobile, labels: {en: Mobile}, sort_order: 2}
   - {id: 018f0000-0000-7000-8000-000000000113, dimension: platform, key: desktop, labels: {en: Desktop}, sort_order: 3}
   - {id: 018f0000-0000-7000-8000-000000000114, dimension: platform, key: embedded_hardware, labels: {en: Embedded / Hardware}, sort_order: 4}
-  - {id: 018f0000-0000-7000-8000-000000000115, dimension: platform, key: game, labels: {en: Game}, sort_order: 5}
+  # Retired 2026-09-15: game is a category, not a platform, and the category
+  # dimension already carries it. Retirement keeps the stable identity for
+  # existing databases until the next full rebuild, which may drop the entry.
+  - {id: 018f0000-0000-7000-8000-000000000115, dimension: platform, key: game, labels: {en: Game}, sort_order: 5, retired_at: "2026-09-15T00:00:00Z"}
   - {id: 018f0000-0000-7000-8000-000000000116, dimension: platform, key: other, labels: {en: Other}, sort_order: 6}
   - {id: 018f0000-0000-7000-8000-000000000117, dimension: platform, key: none, labels: {en: No Platform}, sort_order: 7}
   - {id: 018f0000-0000-7000-8000-000000000118, dimension: platform, key: android, labels: {en: Android}, sort_order: 8}
