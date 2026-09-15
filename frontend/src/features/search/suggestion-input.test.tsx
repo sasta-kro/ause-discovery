@@ -10,11 +10,14 @@ import { buildSuggestionDefs, type SuggestionSource } from './suggestions'
 
 afterEach(cleanup)
 
+const personID = '018f0000-0000-7000-8000-00000000phyo'
 const sources: SuggestionSource[] = [
   { stateField: 'academic_year', dimensionLabel: 'Academic year', cardinality: 'scalar', choices: [{ value: '2025', label: '2025' }] },
   { stateField: 'semester', dimensionLabel: 'Semester', cardinality: 'scalar', choices: [{ value: 'first', label: 'First semester' }] },
   { stateField: 'category_key', dimensionLabel: 'Category', cardinality: 'multiple', choices: [{ value: 'game', label: 'Game' }, { value: 'go', label: 'Go' }] },
   { stateField: 'platform_key', dimensionLabel: 'Platform', cardinality: 'multiple', choices: [{ value: 'game', label: 'Game' }] },
+  { stateField: 'person_id', dimensionLabel: 'People', cardinality: 'multiple', choices: [{ value: personID, label: 'Phyo Min Tun' }] },
+  { stateField: 'advisor_id', dimensionLabel: 'Advisor', cardinality: 'multiple', choices: [{ value: personID, label: 'Phyo Min Tun' }] },
 ]
 const defs = buildSuggestionDefs(sources)
 const applied: SearchState = { limit: 20 }
@@ -216,5 +219,41 @@ describe('search suggestion combobox', () => {
     expect(screen.getByRole('listbox')).toBeTruthy()
     fireEvent.blur(input)
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('keeps person suggestions open across a typed name space without searching', () => {
+    const view = setup('Phy')
+    focusAtEnd(view.input)
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    for (const value of ['Phyo', 'Phyo ', 'Phyo Min', 'Phyo Min Tun']) {
+      typeText(view, value)
+      expect(screen.queryByRole('listbox')).toBeTruthy()
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0)
+    }
+    expect(view.props.onSearch).not.toHaveBeenCalled()
+    expect(view.props.onChange).toHaveBeenCalledTimes(4)
+  })
+
+  it('labels a person collision with both dimensions in option names', () => {
+    const { input } = setup('Phyo Min Tun')
+    focusAtEnd(input)
+    const options = screen.getAllByRole('option')
+    expect(options).toHaveLength(2)
+    expect(options[0].textContent).toContain('Phyo Min Tun')
+    expect(options[0].textContent).toContain('People')
+    expect(options[1].textContent).toContain('Advisor')
+  })
+
+  it('accepts a person suggestion with the exact id and remaining text', () => {
+    const { input, props } = setup('archive Phyo Min')
+    focusAtEnd(input)
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    fireEvent.keyDown(input, { key: 'Tab' })
+    expect(props.onAccept).toHaveBeenCalledTimes(1)
+    const [suggestion, remaining] = props.onAccept.mock.calls[0]
+    expect(suggestion.id).toBe(`advisor_id:${personID}`)
+    expect(suggestion.value).toBe(personID)
+    expect(remaining).toBe('archive')
+    expect(document.activeElement).toBe(input)
   })
 })

@@ -4,9 +4,14 @@ import type { SearchState } from './state'
 // recognized trailing query fragment into one existing structured filter.
 // Matching is exact or prefix, case-insensitive, never fuzzy.
 
-export type SuggestionField = 'academic_year' | 'semester' | 'program_key' | 'course_key' | 'category_key' | 'platform_key' | 'domain_key' | 'technology_key'
+export type SuggestionField = 'academic_year' | 'semester' | 'program_key' | 'course_key' | 'person_id' | 'advisor_id' | 'category_key' | 'platform_key' | 'domain_key' | 'technology_key'
 
 export type FilterCardinality = 'scalar' | 'multiple'
+
+// SuggestionKind is the matching policy attached at definition build time.
+// Year values need an existing exact four-digit alias; person names may
+// continue across a matched trailing space; everything else is standard.
+export type SuggestionKind = 'year' | 'person' | 'standard'
 
 // SuggestionDef is one controlled value eligible for suggestion. Ranges are
 // attached per input by matchSuggestions.
@@ -18,6 +23,7 @@ export type SuggestionDef = {
   valueLabel: string
   cardinality: FilterCardinality
   priority: number
+  kind: SuggestionKind
   aliases: string[]
 }
 
@@ -48,12 +54,16 @@ export function normalizeAlias(alias: string): string {
 
 // buildSuggestionDefs derives one definition per controlled value, in the
 // stable panel dimension order the caller provides. The visible label and
-// the underscore-spaced key are both aliases; nothing else is invented.
+// the underscore-spaced key are both aliases for standard values; person
+// names match on the display name only so a UUID is never a matching alias;
+// nothing else is invented.
 export function buildSuggestionDefs(sources: SuggestionSource[]): SuggestionDef[] {
   const defs: SuggestionDef[] = []
   for (const [priority, source] of sources.entries()) {
+    const kind: SuggestionKind = source.stateField === 'academic_year' ? 'year' : source.stateField === 'person_id' || source.stateField === 'advisor_id' ? 'person' : 'standard'
     for (const choice of source.choices) {
-      const aliases = [choice.label, choice.value.replaceAll('_', ' ')]
+      const rawAliases = kind === 'person' ? [choice.label] : [choice.label, choice.value.replaceAll('_', ' ')]
+      const aliases = rawAliases
         .map((alias) => normalizeAlias(alias))
         .filter((alias, index, all) => alias !== '' && all.indexOf(alias) === index)
       defs.push({
@@ -64,6 +74,7 @@ export function buildSuggestionDefs(sources: SuggestionSource[]): SuggestionDef[
         valueLabel: choice.label,
         cardinality: source.cardinality,
         priority,
+        kind,
         aliases,
       })
     }
@@ -79,9 +90,10 @@ export type SuggestionInputState = {
 }
 
 // isSuggestionEligible applies the caret boundary: focus, a collapsed caret
-// at the end, and no trailing whitespace.
+// at the end. Trailing whitespace is a per-kind decision made against the
+// definitions inside matchSuggestions.
 export function isSuggestionEligible(input: SuggestionInputState): boolean {
-  return input.focused && input.collapsedCaret && input.caretAtEnd && !/\s$/.test(input.text)
+  return input.focused && input.collapsedCaret && input.caretAtEnd
 }
 
 // candidateSuffixes lists suffixes that end at the caret (here the text end)
@@ -102,12 +114,24 @@ export function candidateSuffixes(text: string): Array<{ start: number; end: num
 
 function fragmentEligible(normalized: string, def: SuggestionDef): boolean {
   // Academic years need exactly four digits that fully match an alias.
-  if (def.stateField === 'academic_year') {
+  if (def.kind === 'year') {
     return /^\d{4}$/.test(normalized) && def.aliases.some((alias) => alias === normalized)
+  }
+  if (def.kind === 'person') {
+    // Person names use the plain threshold; no shorter-than-three
+    // abbreviation exception exists for them.
+    return normalized.length >= 3
   }
   if (normalized.length >= 3) return true
   // A shorter fragment is eligible only as a complete alias, such as Go.
   return def.aliases.some((alias) => alias === normalized)
+}
+
+// personContinues holds when the normalized prefix before a trailing space
+// ends exactly at a display-name segment boundary, so the next typed
+// characters can complete another name segment of the same Person.
+function personContinues(normalized: string, alias: string): boolean {
+  return alias === normalized || alias.startsWith(`${normalized} `)
 }
 
 // matchSuggestions returns the ranked bounded suggestion list for the input.
@@ -116,7 +140,12 @@ function fragmentEligible(normalized: string, def: SuggestionDef): boolean {
 // (the caller-provided panel order), then label, then id.
 export function matchSuggestions(defs: SuggestionDef[], input: SuggestionInputState, applied: SearchState): Suggestion[] {
   if (!isSuggestionEligible(input)) return []
-  const suffixes = candidateSuffixes(input.text)
+  // A trailing whitespace run closes every standard suggestion and the year
+  // dimension. A Person-name prefix may remain open across it so the next
+  // name segment can be typed.
+  const trailingWhitespace = /\s$/.test(input.text)
+  const baseText = trailingWhitespace ? input.text.replace(/\s+$/, '') : input.text
+  const suffixes = candidateSuffixes(baseText)
   const matches: Suggestion[] = []
   for (const def of defs) {
     if (alreadyApplied(def, applied)) continue
@@ -127,10 +156,11 @@ export function matchSuggestions(defs: SuggestionDef[], input: SuggestionInputSt
         const prefix = alias.startsWith(suffix.normalized)
         if (!exact && !prefix) continue
         if (!fragmentEligible(suffix.normalized, def)) continue
+        if (trailingWhitespace && !(def.kind === 'person' && personContinues(suffix.normalized, alias))) continue
         const candidate: Suggestion = {
           ...def,
           start: suffix.start,
-          end: suffix.end,
+          end: input.text.length,
           exact,
           consumed: suffix.normalized.length,
         }
@@ -170,7 +200,7 @@ export function removeSuggestionRange(text: string, start: number, end: number):
   return before + text.slice(end).replace(/^\s+/, '')
 }
 
-const suggestionFields: ReadonlySet<string> = new Set<SuggestionField>(['academic_year', 'semester', 'program_key', 'course_key', 'category_key', 'platform_key', 'domain_key', 'technology_key'])
+const suggestionFields: ReadonlySet<string> = new Set<SuggestionField>(['academic_year', 'semester', 'program_key', 'course_key', 'person_id', 'advisor_id', 'category_key', 'platform_key', 'domain_key', 'technology_key'])
 
 // isSuggestionField narrows an array filter key to the dimensions the left
 // panel and suggestions share.

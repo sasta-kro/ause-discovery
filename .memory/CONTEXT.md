@@ -114,11 +114,11 @@ The derived searchable representation of one published Project.
 _Avoid_: Canonical Project record
 
 **Search Filter Suggestion**:
-An actionable completion shown from controlled academic or classification
-values while a visitor composes a search query. Accepting a Search Filter
-Suggestion adds the corresponding structured filter and removes the recognized
-text from the query input. It suggests filters rather than running result
-search on every keystroke.
+An actionable completion shown from controlled academic, classification, or
+Person facet values while a visitor composes a search query. Accepting a Search
+Filter Suggestion adds the corresponding structured filter and removes the
+recognized text from the query input. It suggests filters rather than running
+result search on every keystroke.
 _Avoid_: Tag, live result search, AI intent detection
 
 **Search Synchronization**:

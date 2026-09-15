@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, useNavigate } from 'react-router'
@@ -157,6 +157,75 @@ describe('public search paging', () => {
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ advisor_id: undefined, person_id: [personID] }) })))
     await user.click(screen.getByRole('button', { name: 'Remove People: Alex Advisor' }))
     await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ person_id: undefined }) })))
+  })
+
+  it('suggests person names without searching and applies one dimension per Tab', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: { programs: [], majors: [], courses: [], taxonomy: [] } })
+    apiMocks.searchProjects.mockResolvedValue({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: { ...emptyFacets, people: [{ key: personID, label: 'Alex Advisor', count: 4 }], advisors: [{ key: personID, label: 'Alex Advisor', count: 2 }] },
+      total: 1,
+    } })
+    renderSearch('neural')
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+
+    const input = screen.getByLabelText('Search terms') as HTMLInputElement
+    const callsBeforeTyping = apiMocks.searchProjects.mock.calls.length
+    await user.type(input, ' Alex')
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    await user.type(input, ' Adv')
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBeforeTyping)
+
+    await user.type(input, 'isor')
+    // Scoped to the suggestion popup: the sort select and filter panels also
+    // expose option roles.
+    const options = within(screen.getByRole('listbox', { name: 'Filter suggestions' })).getAllByRole('option')
+    expect(options).toHaveLength(2)
+    expect(options[0].textContent).toContain('People')
+    expect(options[1].textContent).toContain('Advisor')
+
+    await user.keyboard('{ArrowDown}')
+    await user.keyboard('{Tab}')
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBeforeTyping + 1)
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ advisor_id: [personID], cursor: undefined, q: 'neural' }) })))
+    expect(document.activeElement).toBe(input)
+    expect(screen.getByRole('button', { name: 'Remove Advisor: Alex Advisor' })).toBeTruthy()
+    expect(input.value).toBe('neural')
+
+    await user.click(screen.getByRole('button', { name: 'Remove Advisor: Alex Advisor' }))
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ advisor_id: undefined }) })))
+    await user.type(input, ' Alex')
+    const restored = within(screen.getByRole('listbox', { name: 'Filter suggestions' })).getAllByRole('option')
+    expect(restored.length).toBeGreaterThan(0)
+    expect(restored.some((option) => option.textContent?.includes('Advisor'))).toBe(true)
+    expect(apiMocks.searchProjects.mock.calls.length).toBe(callsBeforeTyping + 2)
+  })
+
+  it('preserves preceding free text when a person suggestion is accepted', async () => {
+    const user = userEvent.setup()
+    const personID = '018f0000-0000-7000-8000-000000000701'
+    apiMocks.getCatalogs.mockResolvedValue({ data: { programs: [], majors: [], courses: [], taxonomy: [] } })
+    apiMocks.searchProjects.mockResolvedValue({ data: {
+      items: [resultItem('018f0000-0000-7000-8000-0000000000r1', 'First Page Result')],
+      page: { limit: 20 },
+      facets: { ...emptyFacets, people: [{ key: personID, label: 'Alex Advisor', count: 4 }] },
+      total: 1,
+    } })
+    renderSearch('archive')
+    expect(await screen.findByRole('heading', { name: 'First Page Result' })).toBeTruthy()
+
+    const input = screen.getByLabelText('Search terms') as HTMLInputElement
+    await user.click(input)
+    await user.type(input, ' Alex Adv')
+    expect(within(screen.getByRole('listbox', { name: 'Filter suggestions' })).getAllByRole('option')).toHaveLength(1)
+    await user.keyboard('{Tab}')
+    await waitFor(() => expect(apiMocks.searchProjects).toHaveBeenLastCalledWith(expect.objectContaining({ query: expect.objectContaining({ person_id: [personID], q: 'archive' }) })))
+    expect(input.value).toBe('archive')
+    expect(screen.getByRole('button', { name: 'Remove People: Alex Advisor' })).toBeTruthy()
   })
 
   it('shows named participant facets and Semester counts while hiding paused dimensions', async () => {

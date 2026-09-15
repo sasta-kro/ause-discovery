@@ -237,8 +237,8 @@ function SearchPage() {
       return
     }
     // Adding routes through the same shared operation suggestions use;
-    // dimensions outside the suggestion model, such as Person and Advisor,
-    // keep the plain append behavior.
+    // dimensions outside the suggestion model keep the plain append
+    // behavior.
     if (isSuggestionField(key)) {
       setState(applyFilterValue(state, key, value))
       return
@@ -257,12 +257,18 @@ function SearchPage() {
     { value: 'summer', label: t('fields.summer'), count: semesterCounts.get('summer') },
   ]
   // Suggestion sources use the same choice data as the left panel, in panel
-  // dimension order: year, semester, then the active catalog dimensions.
+  // dimension order: year, semester, academic catalogs, People, Advisor,
+  // then the classification dimensions. Person facets refresh from the
+  // latest successful Search response and keepPreviousData holds the prior
+  // facet set stable during a short refetch.
   const suggestionDefs = useMemo(() => buildSuggestionDefs([
     { stateField: 'academic_year', dimensionLabel: t('fields.year'), cardinality: 'scalar', choices: yearChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
     { stateField: 'semester', dimensionLabel: t('fields.semester'), cardinality: 'scalar', choices: semesterChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
-    ...filters.map((filter) => ({ stateField: filter.key as SuggestionField, dimensionLabel: t(filter.label), cardinality: 'multiple' as const, choices: (catalogFilterChoices.get(filter.key) ?? []).map((choice) => ({ value: choice.value, label: choice.label })) })),
-  ]), [t, yearChoices, semesterChoices, catalogFilterChoices])
+    ...academicFilters.map((filter) => ({ stateField: filter.key as SuggestionField, dimensionLabel: t(filter.label), cardinality: 'multiple' as const, choices: (catalogFilterChoices.get(filter.key) ?? []).map((choice) => ({ value: choice.value, label: choice.label })) })),
+    { stateField: 'person_id', dimensionLabel: t('search.people'), cardinality: 'multiple', choices: peopleChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
+    { stateField: 'advisor_id', dimensionLabel: t('fields.advisor'), cardinality: 'multiple', choices: advisorChoices.map((choice) => ({ value: choice.value, label: choice.label })) },
+    ...classificationFilters.map((filter) => ({ stateField: filter.key as SuggestionField, dimensionLabel: t(filter.label), cardinality: 'multiple' as const, choices: (catalogFilterChoices.get(filter.key) ?? []).map((choice) => ({ value: choice.value, label: choice.label })) })),
+  ]), [t, yearChoices, semesterChoices, catalogFilterChoices, peopleChoices, advisorChoices])
   const activeFilters: Array<{ id: string; label: string; remove: () => void }> = []
   if (state.academic_year) activeFilters.push({ id: 'academic-year', label: `${t('fields.year')}: ${state.academic_year}`, remove: () => setState({ ...state, academic_year: undefined }) })
   if (state.semester) activeFilters.push({ id: 'semester', label: semesterChoices.find((option) => option.value === state.semester)?.label ?? state.semester, remove: () => setState({ ...state, semester: undefined }) })

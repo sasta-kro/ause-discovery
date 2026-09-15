@@ -190,3 +190,75 @@ test('suggestions and controls remain usable at 200 percent zoom and narrow widt
   await zoomInput.pressSequentially('2019')
   await expect(suggestionOptions(page).first()).toContainText('2019')
 })
+
+// Increment 19 Person-name suggestions. Adtha Lawanna exists in both the
+// People and the Advisor facet of the imported local-test data, so the
+// collision path runs against real facet values.
+const personName = 'Adtha Lawanna'
+
+test('person prefixes suggest locally across name spaces and apply one dimension per Tab', async ({ page }) => {
+  const input = inputLocator(page)
+  await input.click()
+  const before = await searchRequestCount(page)
+
+  await input.pressSequentially('ADTH')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+  expect(await searchRequestCount(page)).toBe(before)
+
+  await input.pressSequentially('a ')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+  await input.pressSequentially('Law')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+  expect(await searchRequestCount(page)).toBe(before)
+
+  const options = suggestionOptions(page)
+  await expect(options).toHaveCount(2)
+  await expect(options.nth(0)).toContainText('People')
+  await expect(options.nth(1)).toContainText('Advisor')
+
+  await input.press('ArrowDown')
+  await input.press('Tab')
+  await expect(input).toBeFocused()
+  await expect(input).toHaveValue('')
+  await expect(page).toHaveURL(/advisor_id=/)
+  await expect(page.getByText('Advisor: Adtha Lawanna')).toBeVisible()
+  expect(await searchRequestCount(page)).toBe(before + 1)
+
+  await page.getByRole('button', { name: `Remove Advisor: ${personName}` }).click()
+  await expect(page.getByRole('button', { name: `Remove Advisor: ${personName}` })).toHaveCount(0)
+  await input.click()
+  await input.pressSequentially('Adtha')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+})
+
+test('person acceptance preserves preceding free text and unrelated trailing terms close the popup', async ({ page }) => {
+  const input = inputLocator(page)
+  await input.click()
+  await input.pressSequentially('archive Adtha Law')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+  await input.press('Tab')
+  await expect(input).toHaveValue('archive')
+  await expect(page).toHaveURL(/person_id=/)
+  await expect(page).toHaveURL(/q=archive/)
+  // The archive text matches none of this Person's Projects, so the filtered
+  // response carries no people facet and the chip shows the stored ID.
+  await expect(page.getByRole('button', { name: /Remove People: / })).toBeVisible()
+
+  await page.getByRole('button', { name: /Remove People: / }).click()
+  await input.click()
+  await input.pressSequentially('Adtha Law report')
+  await expect(page.getByRole('listbox', { name: 'Filter suggestions' })).toHaveCount(0)
+})
+
+test('person suggestions remain usable mixed-case at a narrow viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 })
+  const input = inputLocator(page)
+  await input.click()
+  await input.pressSequentially('aDTHa LAw')
+  await expect(suggestionOptions(page).first()).toContainText(personName)
+  await expect(page.locator('kbd')).toBeVisible()
+  await input.press('Tab')
+  await expect(page).toHaveURL(/person_id=/)
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+  expect(overflow).toBe(false)
+})

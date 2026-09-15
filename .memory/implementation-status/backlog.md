@@ -20,13 +20,22 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 26 | Discussion required | Ownership, institutional license, public legal text, and developer credit |
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
-| 29 | Open, frontend extension | Person-name Search Filter Suggestions |
-| 30 | Open, frontend UX | Filter option ordering, sort toggles, and expansion focus |
+| 29 | Implemented as Increment 19, pending independent review | Person-name Search Filter Suggestions |
+| 30 | Sequenced as Increment 20 | Filter option ordering, sort toggles, and expansion focus |
 
 ## Current activity
 
 - No technical MVP implementation work remains. Launch readiness begins when the external inputs listed below are available.
-- No implementation item is currently in progress.
+- Increment 19 implemented Person-name Search Filter Suggestions on 2026-09-15
+  per `.memory/docs/increments/19-person-filter-suggestions.md`. People and
+  Advisor facet display names now autocomplete in the public search input with
+  case-insensitive prefix matching, a matched name prefix stays eligible across
+  a trailing space at a name-segment boundary, one Person appears as separate
+  People and Advisor rows, Tab applies exactly one dimension while preserving
+  preceding free text, and typing issues no request. The item awaits
+  independent review.
+- Increment 20 is planned next for filter ordering, sort toggles, and expansion
+  focus. Neither implementation has started.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -121,7 +130,24 @@ well as frontend dashboards and is not a frontend-only addition.
 
 
 
-29. **Open, frontend-only extension to Increment 18.** Include loaded People
+29. **Implemented as Increment 19, pending independent review.** Implemented
+2026-09-15 per `.memory/docs/increments/19-person-filter-suggestions.md`.
+People and Advisor facet values are suggestion dimensions sourced from the
+loaded Search response facets through the same choice data as the left panel.
+Person definitions carry the display name as their only alias, so a UUID is
+never matchable. Matching is case-insensitive exact or prefix with the
+three-character threshold and no Person abbreviation exception. A Person-name
+prefix may stay open across a trailing space only when the text before it ends
+at a display-name segment boundary; standard dimensions and academic years
+keep their trailing-whitespace suppression. One Person in both facets yields
+two dimension-labelled rows ordered People then Advisor, selection excludes
+per dimension only, and Tab acceptance applies the exact `person_id` or
+`advisor_id` UUID through the shared filter mutation while removing only the
+matched trailing name fragment and issuing one search. Typing issues no
+result or Person request.
+
+Implement
+`.memory/docs/increments/19-person-filter-suggestions.md`. Include loaded People
 and Advisor facet choices in Search Filter Suggestions. A case-insensitive
 prefix such as `Phyo` or `Phyo Mi` should suggest `Phyo Min Tun`; acceptance
 adds the same `person_id` or `advisor_id` filter as the corresponding left-panel
@@ -135,7 +161,8 @@ data and make no backend, OpenAPI, or search-document change. Public wording
 may follow the current People and Advisor labels until item 28 resolves the
 broader People terminology.
 
-30. **Open, frontend-only filter-panel improvement.** Order Academic year
+30. **Sequenced as Increment 20 after Increment 19 acceptance.** Implement
+`.memory/docs/increments/20-filter-panel-ordering-and-focus.md`. Order Academic year
 choices newest first. Keep explicitly ordinal dimensions such as Semester in
 their defined academic order. Default every non-ordinal choice list to
 descending occurrence count with alphabetical label and stable key tie-breakers;
