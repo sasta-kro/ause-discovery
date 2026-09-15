@@ -112,8 +112,8 @@ func (client MeilisearchClient) EnsureIndex(ctx context.Context, indexUID string
 		"faceting": map[string]any{
 			"maxValuesPerFacet": maxFacetValues,
 			"sortFacetValuesBy": map[string]any{
-				"*":                   "alpha",
-				"person_ids":          "count",
+				"*":                  "alpha",
+				"person_ids":         "count",
 				"advisor_person_ids": "count",
 			},
 		},

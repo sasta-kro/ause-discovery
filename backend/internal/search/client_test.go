@@ -14,6 +14,49 @@ import (
 	"github.com/google/uuid"
 )
 
+// indexSettingsPayload mirrors the settings EnsureIndex must send on both
+// the created-index and existing-index paths.
+type indexSettingsPayload struct {
+	SearchableAttributes []string `json:"searchableAttributes"`
+	FilterableAttributes []string `json:"filterableAttributes"`
+	SortableAttributes   []string `json:"sortableAttributes"`
+	RankingRules         []string `json:"rankingRules"`
+	TypoTolerance        struct {
+		DisableOnAttributes []string `json:"disableOnAttributes"`
+	} `json:"typoTolerance"`
+	Faceting struct {
+		MaxValuesPerFacet int               `json:"maxValuesPerFacet"`
+		SortFacetValuesBy map[string]string `json:"sortFacetValuesBy"`
+	} `json:"faceting"`
+}
+
+// assertExplicitIndexSettings proves the nested settings contract, including
+// the faceting distribution bound and Person facet count ordering.
+func assertExplicitIndexSettings(t *testing.T, payload indexSettingsPayload) {
+	t.Helper()
+	if payload.Faceting.MaxValuesPerFacet != maxFacetValues {
+		t.Fatalf("maxValuesPerFacet was %d, expected %d", payload.Faceting.MaxValuesPerFacet, maxFacetValues)
+	}
+	if got := payload.Faceting.SortFacetValuesBy["*"]; got != "alpha" {
+		t.Fatalf("default facet ordering was %q", got)
+	}
+	if got := payload.Faceting.SortFacetValuesBy["person_ids"]; got != "count" {
+		t.Fatalf("person_ids facet ordering was %q", got)
+	}
+	if got := payload.Faceting.SortFacetValuesBy["advisor_person_ids"]; got != "count" {
+		t.Fatalf("advisor_person_ids facet ordering was %q", got)
+	}
+	if len(payload.SearchableAttributes) == 0 || len(payload.FilterableAttributes) == 0 || len(payload.SortableAttributes) == 0 {
+		t.Fatal("searchable, filterable, or sortable attributes were dropped")
+	}
+	if strings.Join(payload.RankingRules, ",") != "sort,words,typo,proximity,attribute,exactness,academic_year:desc,semester_order:desc,title_sort:asc,id:asc" {
+		t.Fatalf("ranking rules were %v", payload.RankingRules)
+	}
+	if strings.Join(payload.TypoTolerance.DisableOnAttributes, ",") != "student_ids,reference_code" {
+		t.Fatalf("typo tolerance attributes were %v", payload.TypoTolerance.DisableOnAttributes)
+	}
+}
+
 func TestMeilisearchClientConfiguresMutatesAndQueriesIndex(t *testing.T) {
 	var mutex sync.Mutex
 	requests := []string{}
@@ -35,9 +78,7 @@ func TestMeilisearchClientConfiguresMutatesAndQueriesIndex(t *testing.T) {
 		case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, "/tasks/"):
 			_, _ = writer.Write([]byte(`{"status":"succeeded"}`))
 		case request.Method == http.MethodPatch && request.URL.Path == "/indexes/projects/settings":
-			var payload struct {
-				FilterableAttributes []string `json:"filterableAttributes"`
-			}
+			var payload indexSettingsPayload
 			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
 				t.Errorf("decode settings payload: %v", err)
 			}
@@ -48,6 +89,7 @@ func TestMeilisearchClientConfiguresMutatesAndQueriesIndex(t *testing.T) {
 			if !foundReferenceCode {
 				t.Error("reference_code must be filterable for exact identifier matching")
 			}
+			assertExplicitIndexSettings(t, payload)
 			writer.WriteHeader(http.StatusAccepted)
 			_, _ = writer.Write([]byte(`{"taskUid":0}`))
 		case request.Method == http.MethodPost && request.URL.Path == "/indexes/projects/search":
@@ -141,7 +183,7 @@ func TestEnsureIndexSendsExplicitFacetingSettings(t *testing.T) {
 			DisableOnAttributes []string `json:"disableOnAttributes"`
 		} `json:"typoTolerance"`
 		Faceting struct {
-			MaxValuesPerFacet int            `json:"maxValuesPerFacet"`
+			MaxValuesPerFacet int               `json:"maxValuesPerFacet"`
 			SortFacetValuesBy map[string]string `json:"sortFacetValuesBy"`
 		} `json:"faceting"`
 	}
@@ -179,28 +221,7 @@ func TestEnsureIndexSendsExplicitFacetingSettings(t *testing.T) {
 	// The nested faceting contract is asserted structurally: the named bound
 	// replaces the engine's silent 100-value cap, Person ID facets truncate
 	// by count, and everything else stays alphabetical.
-	if settingsPayload.Faceting.MaxValuesPerFacet != maxFacetValues {
-		t.Fatalf("maxValuesPerFacet was %d, expected %d", settingsPayload.Faceting.MaxValuesPerFacet, maxFacetValues)
-	}
-	if got := settingsPayload.Faceting.SortFacetValuesBy["*"]; got != "alpha" {
-		t.Fatalf("default facet ordering was %q", got)
-	}
-	if got := settingsPayload.Faceting.SortFacetValuesBy["person_ids"]; got != "count" {
-		t.Fatalf("person_ids facet ordering was %q", got)
-	}
-	if got := settingsPayload.Faceting.SortFacetValuesBy["advisor_person_ids"]; got != "count" {
-		t.Fatalf("advisor_person_ids facet ordering was %q", got)
-	}
-	// The accepted settings around faceting remain unchanged.
-	if len(settingsPayload.SearchableAttributes) == 0 || len(settingsPayload.FilterableAttributes) == 0 || len(settingsPayload.SortableAttributes) == 0 {
-		t.Fatal("searchable, filterable, or sortable attributes were dropped")
-	}
-	if strings.Join(settingsPayload.RankingRules, ",") != "sort,words,typo,proximity,attribute,exactness,academic_year:desc,semester_order:desc,title_sort:asc,id:asc" {
-		t.Fatalf("ranking rules were %v", settingsPayload.RankingRules)
-	}
-	if strings.Join(settingsPayload.TypoTolerance.DisableOnAttributes, ",") != "student_ids,reference_code" {
-		t.Fatalf("typo tolerance attributes were %v", settingsPayload.TypoTolerance.DisableOnAttributes)
-	}
+	assertExplicitIndexSettings(t, settingsPayload)
 }
 
 func TestDeleteIndexWaitsForTaskAndTreatsMissingAsSuccess(t *testing.T) {
