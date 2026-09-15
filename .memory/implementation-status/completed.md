@@ -23,6 +23,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668`, post-acceptance visual correction `95bd9fc` |
 | Filter panel ordering, sort toggles, and expansion focus | `../docs/increments/20-filter-panel-ordering-and-focus.md`, commit `eedeecd` |
 | Route transition scroll reset | `../docs/increments/21-route-transition-scroll-reset.md`, commit `0591de0`, correction commit `170f5a8` |
+| Complete Person facet values | `../docs/increments/22-complete-person-facet-values.md`, commit `afb6864`, correction commit `7388627` |
 | VM deployment and proxy correction | `../sasta-dev-notes/records/vm-deployment-2026-09-13.md` |
 | VM 0.5 in-place preservation upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-15-v0.5.md` |
 
@@ -299,6 +300,25 @@ frontend suite without jsdom scroll noise, ESLint, `tsc -b`, the
 default-subpath production build, and all six focused Chromium route tests
 against the local-test stack. No layout workaround, dependency, backend, API,
 database, search, storage, deployment, or infrastructure change was introduced.
+
+29. **Implemented and accepted as Increment 22, 2026-09-15**
+(`.memory/docs/increments/22-complete-person-facet-values.md`). Commit `afb6864`,
+corrected by `7388627`, replaces Meilisearch's accidental 100-value Person
+facet limit with an explicit 1,000-value bound. People and Advisor facet
+truncation is count-first while other facets remain alphabetical. Search schema
+version 3 invalidates version-2 cursors through the existing controlled path.
+A pinned Meilisearch regression proves all 121 seeded Person UUID values below
+the bound are returned, including a target dropped by the old UUID-alphabetical
+cap, with separate People and Advisor counts. Local acceptance confirmed all
+383 published People are returned, Phyo Min Tun appears with People count 11
+and Advisor count 6, local People filtering finds the specific Person among
+other legitimate Phyo matches, and both autocomplete dimensions appear without
+typing requests. Independent verification passed the complete backend
+integration suite, focused client and cursor tests, the tracked Go-format gate,
+Go vet, all 174 frontend component tests, and the corrected three-test Chromium
+acceptance. No database migration, Search Document field, OpenAPI,
+generated-client, endpoint, frontend implementation, dependency, publication,
+or deployment change was introduced.
 
 ## Completed correction work
 
