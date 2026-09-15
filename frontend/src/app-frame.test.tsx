@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
-import { MemoryRouter, useLocation } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from './app/i18n'
@@ -106,6 +106,104 @@ describe('shared application shell', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByRole('alert').textContent).toContain('The credentials could not be verified.')
     expect(screen.getByRole('heading', { name: 'Administrator sign in' })).toBeTruthy()
+  })
+
+  describe('route transition scroll policy', () => {
+    let scrollTo: ReturnType<typeof vi.spyOn>
+    let focus: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+      focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    })
+    afterEach(() => {
+      scrollTo.mockRestore()
+      focus.mockRestore()
+    })
+
+    it('does not focus or scroll on initial rendering', () => {
+      renderAt('/')
+      expect(focus).not.toHaveBeenCalled()
+      expect(scrollTo).not.toHaveBeenCalled()
+    })
+
+    it('focuses main with preventScroll and requests position zero on a different pathname', async () => {
+      const user = userEvent.setup()
+      renderAt('/')
+      await user.click(screen.getByRole('link', { name: 'Browse the archive' }))
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0))
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+      expect(document.activeElement?.id).toBe('main-content')
+    })
+
+    it('returns to the landing page at position zero through the brand link', async () => {
+      const user = userEvent.setup()
+      renderAt('/search')
+      await user.click(screen.getByRole('link', { name: 'AUSE Discovery' }))
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0))
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+      expect(document.activeElement?.id).toBe('main-content')
+    })
+
+    it('returns the landing page to position zero when the brand activates on Home', async () => {
+      const user = userEvent.setup()
+      renderAt('/')
+      scrollTo.mockClear()
+      await user.click(screen.getByRole('link', { name: 'AUSE Discovery' }))
+      expect(scrollTo).toHaveBeenCalledWith(0, 0)
+      expect(focus).not.toHaveBeenCalledWith({ preventScroll: true })
+    })
+
+    it('keeps scroll position on a same-path Search query transition', async () => {
+      const user = userEvent.setup()
+      let location = ''
+      renderAt('/search?q=vision', (value) => { location = value })
+      await screen.findByRole('heading', { name: 'Search projects' })
+      scrollTo.mockClear()
+      focus.mockClear()
+      const input = screen.getByLabelText('Search terms') as HTMLInputElement
+      await user.clear(input)
+      await user.type(input, 'neural')
+      await user.click(screen.getByRole('button', { name: 'Search projects' }))
+      await waitFor(() => expect(location).toBe('/search?q=neural'))
+      expect(scrollTo).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalledWith({ preventScroll: true })
+    })
+
+    it('keeps the restored scroll position on history POP navigation', async () => {
+      const user = userEvent.setup()
+      let goBack: ((delta: number) => void) | undefined
+      function NavigationProbe() {
+        goBack = useNavigate()
+        return null
+      }
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nextProvider i18n={i18n}>
+            <MemoryRouter initialEntries={['/search']}>
+              <SessionProvider><NavigationProbe /><AppRoutes /></SessionProvider>
+            </MemoryRouter>
+          </I18nextProvider>
+        </QueryClientProvider>,
+      )
+      await screen.findByRole('heading', { name: 'Search projects' })
+      await user.click(screen.getByRole('link', { name: 'AUSE Discovery' }))
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0))
+      scrollTo.mockClear()
+      focus.mockClear()
+      // Browser Back is a POP navigation with a pathname change.
+      goBack?.(-1)
+      await waitFor(() => expect(focus).toHaveBeenCalledWith({ preventScroll: true }))
+      expect(scrollTo).not.toHaveBeenCalled()
+    })
+
+    it('leaves the skip link as a native hash anchor', () => {
+      renderAt('/')
+      const skipLink = screen.getByRole('link', { name: 'Skip to main content' })
+      expect(skipLink.getAttribute('href')).toBe('#main-content')
+      expect(skipLink.tagName).toBe('A')
+    })
   })
 
   it('renders the pending contact route and a recoverable Not Found page', () => {

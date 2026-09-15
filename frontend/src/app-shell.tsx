@@ -2,7 +2,7 @@ import { Component, type ReactNode, createContext, useContext, useEffect, useMem
 import { I18nextProvider, useTranslation } from 'react-i18next'
 import { QueryClient, QueryClientProvider, keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm, type UseFormRegister, type UseFormReturn } from 'react-hook-form'
-import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
+import { BrowserRouter, Link, NavLink, Navigate, Outlet, Route, Routes, useLocation, useNavigationType, useNavigate, useParams, useSearchParams } from 'react-router'
 import { createProject, deleteArtifact, deleteProject, getAdminProject, getCatalogs, getCsrfToken, getPublicPerson, getPublicProject, getSession, listAdminPeople, login, logout, publishProject, replaceArtifact, replaceProject, restoreArtifact, restoreProject, searchProjects, updateArtifact, uploadArtifact } from './api/generated/sdk.gen'
 import type { AdminPerson, AdminProject, Artifact, ArtifactType, CatalogsResponse, Problem, RevisionConflictProblem, SearchFacet, SearchFacets, SessionResponse, TaxonomyValue } from './api/generated/types.gen'
 import i18n from './app/i18n'
@@ -104,19 +104,32 @@ class ApplicationErrorBoundary extends Component<{ children: ReactNode }, { fail
 function AppFrame() {
   const { t } = useTranslation()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const mainRef = useRef<HTMLElement>(null)
-  const focusedOnce = useRef(false)
+  const firstRender = useRef(true)
+  const previousPathname = useRef(location.pathname)
   useEffect(() => {
-    if (!focusedOnce.current) {
-      focusedOnce.current = true
+    if (firstRender.current) {
+      firstRender.current = false
       return
     }
-    mainRef.current?.focus()
+    const pathnameChanged = location.pathname !== previousPathname.current
+    previousPathname.current = location.pathname
+    // Main keeps route focus with preventScroll so focusing can never move
+    // the viewport below the site header.
+    mainRef.current?.focus({ preventScroll: true })
+    // A new pathname begins at document position zero. History POP keeps the
+    // browser's restored scroll position, and same-path search changes are
+    // application state, not new pages, so they never reach this effect.
+    if (pathnameChanged && navigationType !== 'POP') window.scrollTo(0, 0)
+    // The navigation type is read from the render that changed the pathname;
+    // it must not key the effect, or same-path state transitions would
+    // re-focus main.
   }, [location.pathname])
   return <div className={styles.page}>
     <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
-      <Link className={styles.brand} to="/" aria-label={t('brand')}>
+      <Link className={styles.brand} onClick={() => { if (location.pathname === '/') window.scrollTo(0, 0) }} to="/" aria-label={t('brand')}>
         <span className={styles.brandLogoCrop} aria-hidden="true">
           <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-v1.svg`} alt="" />
         </span>

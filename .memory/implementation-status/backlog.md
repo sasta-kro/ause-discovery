@@ -21,6 +21,7 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
 | 30 | Implemented as Increment 20, pending independent review | Filter option ordering, sort toggles, and expansion focus |
+| 32 | Implemented as Increment 21, pending independent review | Route transition scroll reset and preserved main focus |
 
 ## Current activity
 
@@ -36,6 +37,13 @@ Completed work and historical verification evidence belong in `completed.md`.
   independent accessible toggle to alphabetical ordering, and user-initiated
   expansion focuses the group filter-search input while initial rendering does
   not steal focus. The item awaits independent review.
+- Increment 21 implemented the shared route transition scroll policy on
+  2026-09-15 per
+  `.memory/docs/increments/21-route-transition-scroll-reset.md`. Internal
+  pathname navigation begins at document position zero with the complete
+  header visible, main keeps route focus through `preventScroll`, history and
+  same-path Search state changes preserve scroll, and the brand returns Home
+  to the top. The item awaits independent review.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -161,6 +169,19 @@ focus for disclosures opened by initial rendering, restored state, or responsive
 layout, and do nothing for groups without a search input. Preserve selections,
 counts, OR-within-dimension behavior, keyboard disclosure behavior, scroll
 regions, and 200 percent zoom support.
+
+32. **Implemented as Increment 21, pending independent review.** Implemented
+2026-09-15 per `.memory/docs/increments/21-route-transition-scroll-reset.md`
+at the accepted Increment 20 baseline `eedeecd`. The shared AppFrame now
+focuses the main landmark with `preventScroll` on every pathname change and
+places the document at position zero for non-POP navigations, so brand,
+Browse, landing-search, and every other internal pathname transition begin
+with the complete header visible. History POP navigation keeps the browser's
+restored position, same-path Search query, filter, sort, suggestion, and
+pagination changes never reach the transition effect, the skip link keeps its
+native hash behavior, and activating the brand while already on Home returns
+the page to the top through the link itself. No layout workaround or
+dependency was added.
 
 ## Parked possibilities
 
