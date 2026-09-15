@@ -17,8 +17,10 @@ var ErrProjectNotPublished = errors.New("Project is not published")
 // SchemaVersion is the source-controlled search schema version. It covers
 // index settings and ranking semantics: version 2 added the academic-newest
 // custom ranking rules, the id sortable attribute, and ordering-aware cursor
-// binding.
-const SchemaVersion = 2
+// binding; version 3 made the faceting distribution bound and per-facet
+// ordering explicit so People facet values are no longer truncated by the
+// engine default.
+const SchemaVersion = 3
 
 type CatalogReference struct {
 	ID    uuid.UUID `json:"id"`

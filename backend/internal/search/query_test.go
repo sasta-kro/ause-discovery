@@ -1,8 +1,13 @@
 package search
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -164,6 +169,41 @@ func TestCursorBindsToResolvedOrderingAndSchema(t *testing.T) {
 	changed.Text = ""
 	if _, err := decodeCursor(changed, cursor); err != ErrInvalidCursor {
 		t.Fatal("empty-text cursor accepted against textual query")
+	}
+}
+
+func TestCursorRejectsOlderSchemaVersion(t *testing.T) {
+	query := Query{Text: "vision", Limit: 20}
+	cursor, err := encodeCursor(query, 20)
+	if err != nil {
+		t.Fatalf("encodeCursor returned an error: %v", err)
+	}
+	if _, err := decodeCursor(query, cursor); err != nil {
+		t.Fatalf("current-version cursor rejected: %v", err)
+	}
+
+	// Recreate a version-2 cursor exactly as the previous schema encoded it.
+	// The settings change to schema version 3 must invalidate it through the
+	// controlled invalid-cursor path rather than paging old positions.
+	legacy := query
+	legacy.Cursor = ""
+	legacy.Text = strings.TrimSpace(legacy.Text)
+	legacy.Sort = ResolveOrder(legacy.Sort, legacy.Text).Name
+	encoded, err := json.Marshal(struct {
+		SchemaVersion int   `json:"schema_version"`
+		Query         Query `json:"query"`
+	}{SchemaVersion: 2, Query: legacy})
+	if err != nil {
+		t.Fatalf("marshal legacy hash payload: %v", err)
+	}
+	digest := sha256.Sum256(encoded)
+	legacyCursor, err := json.Marshal(cursorPayload{Offset: 20, QueryHash: hex.EncodeToString(digest[:8])})
+	if err != nil {
+		t.Fatalf("marshal legacy cursor: %v", err)
+	}
+	stale := base64.RawURLEncoding.EncodeToString(legacyCursor)
+	if _, err := decodeCursor(query, stale); err != ErrInvalidCursor {
+		t.Fatalf("version-2 cursor accepted under schema version %d: %v", SchemaVersion, err)
 	}
 }
 

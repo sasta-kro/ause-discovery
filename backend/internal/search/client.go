@@ -52,6 +52,12 @@ type MeilisearchClient struct {
 	TaskTimeout time.Duration
 }
 
+// maxFacetValues is the explicit source-controlled faceting distribution
+// bound. The engine default of 100 silently truncated the People facet, whose
+// values are Person UUIDs, so every participating Person below this bound
+// stays reachable in the contextual facet distribution.
+const maxFacetValues = 1000
+
 func (client MeilisearchClient) Health(ctx context.Context) error {
 	response, err := client.request(ctx, http.MethodGet, "/health", nil)
 	if err != nil {
@@ -91,12 +97,26 @@ func (client MeilisearchClient) EnsureIndex(ctx context.Context, indexUID string
 	// relevance ties. The custom rules end with the unique Project ID so any
 	// order they fully determine is stable across offset pages. Relevance
 	// mode sends no query-time sort; see ResolveOrder.
+	//
+	// The faceting settings are explicit: the distribution bound raises the
+	// engine's silent 100-value cap that truncated the People facet, and the
+	// Person ID facets sort by count so a future truncation above the bound
+	// keeps the most frequent matching People instead of an accidental UUID
+	// lexicographic subset. All other facets keep alphabetical order.
 	settings := map[string]any{
 		"searchableAttributes": []string{"student_ids", "reference_code", "title", "title_aliases", "student_names", "advisor_names", "co_advisor_names", "committee_names", "taxonomy_labels", "taxonomy_keys", "program.label", "major.label", "course.label", "abstract"},
 		"filterableAttributes": []string{"reference_code", "academic_year", "semester", "program_key", "major_key", "course_key", "person_ids", "student_ids", "advisor_person_ids", "category_keys", "platform_keys", "domain_keys", "topic_keys", "technology_keys", "artifact_types", "has_artifacts", "has_report", "has_slides", "has_source_code", "has_dataset"},
 		"sortableAttributes":   []string{"academic_year", "semester_order", "title_sort", "id", "published_at", "updated_at"},
 		"rankingRules":         []string{"sort", "words", "typo", "proximity", "attribute", "exactness", "academic_year:desc", "semester_order:desc", "title_sort:asc", "id:asc"},
 		"typoTolerance":        map[string]any{"disableOnAttributes": []string{"student_ids", "reference_code"}},
+		"faceting": map[string]any{
+			"maxValuesPerFacet": maxFacetValues,
+			"sortFacetValuesBy": map[string]any{
+				"*":                   "alpha",
+				"person_ids":          "count",
+				"advisor_person_ids": "count",
+			},
+		},
 	}
 	response, err = client.request(ctx, http.MethodPatch, "/indexes/"+url.PathEscape(indexUID)+"/settings", settings)
 	if err != nil {

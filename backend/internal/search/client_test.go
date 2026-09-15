@@ -131,6 +131,78 @@ func TestEnsureIndexDoesNotRecreateExistingIndex(t *testing.T) {
 	}
 }
 
+func TestEnsureIndexSendsExplicitFacetingSettings(t *testing.T) {
+	var settingsPayload struct {
+		SearchableAttributes []string `json:"searchableAttributes"`
+		FilterableAttributes []string `json:"filterableAttributes"`
+		SortableAttributes   []string `json:"sortableAttributes"`
+		RankingRules         []string `json:"rankingRules"`
+		TypoTolerance        struct {
+			DisableOnAttributes []string `json:"disableOnAttributes"`
+		} `json:"typoTolerance"`
+		Faceting struct {
+			MaxValuesPerFacet int            `json:"maxValuesPerFacet"`
+			SortFacetValuesBy map[string]string `json:"sortFacetValuesBy"`
+		} `json:"faceting"`
+	}
+	var mutex sync.Mutex
+	settingsRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/indexes/projects":
+			_, _ = writer.Write([]byte(`{"uid":"projects","primaryKey":"id"}`))
+		case request.Method == http.MethodPatch && request.URL.Path == "/indexes/projects/settings":
+			mutex.Lock()
+			settingsRequests++
+			mutex.Unlock()
+			if err := json.NewDecoder(request.Body).Decode(&settingsPayload); err != nil {
+				t.Errorf("decode settings payload: %v", err)
+			}
+			writer.WriteHeader(http.StatusAccepted)
+			_, _ = writer.Write([]byte(`{"taskUid":7}`))
+		case request.Method == http.MethodGet && request.URL.Path == "/tasks/7":
+			_, _ = writer.Write([]byte(`{"status":"succeeded"}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := MeilisearchClient{BaseURL: server.URL, HTTPClient: server.Client(), TaskTimeout: time.Second}
+	if err := client.EnsureIndex(context.Background(), "projects"); err != nil {
+		t.Fatalf("EnsureIndex returned an error: %v", err)
+	}
+	if settingsRequests != 1 {
+		t.Fatalf("settings patched %d times for an existing index", settingsRequests)
+	}
+	// The nested faceting contract is asserted structurally: the named bound
+	// replaces the engine's silent 100-value cap, Person ID facets truncate
+	// by count, and everything else stays alphabetical.
+	if settingsPayload.Faceting.MaxValuesPerFacet != maxFacetValues {
+		t.Fatalf("maxValuesPerFacet was %d, expected %d", settingsPayload.Faceting.MaxValuesPerFacet, maxFacetValues)
+	}
+	if got := settingsPayload.Faceting.SortFacetValuesBy["*"]; got != "alpha" {
+		t.Fatalf("default facet ordering was %q", got)
+	}
+	if got := settingsPayload.Faceting.SortFacetValuesBy["person_ids"]; got != "count" {
+		t.Fatalf("person_ids facet ordering was %q", got)
+	}
+	if got := settingsPayload.Faceting.SortFacetValuesBy["advisor_person_ids"]; got != "count" {
+		t.Fatalf("advisor_person_ids facet ordering was %q", got)
+	}
+	// The accepted settings around faceting remain unchanged.
+	if len(settingsPayload.SearchableAttributes) == 0 || len(settingsPayload.FilterableAttributes) == 0 || len(settingsPayload.SortableAttributes) == 0 {
+		t.Fatal("searchable, filterable, or sortable attributes were dropped")
+	}
+	if strings.Join(settingsPayload.RankingRules, ",") != "sort,words,typo,proximity,attribute,exactness,academic_year:desc,semester_order:desc,title_sort:asc,id:asc" {
+		t.Fatalf("ranking rules were %v", settingsPayload.RankingRules)
+	}
+	if strings.Join(settingsPayload.TypoTolerance.DisableOnAttributes, ",") != "student_ids,reference_code" {
+		t.Fatalf("typo tolerance attributes were %v", settingsPayload.TypoTolerance.DisableOnAttributes)
+	}
+}
+
 func TestDeleteIndexWaitsForTaskAndTreatsMissingAsSuccess(t *testing.T) {
 	var mutex sync.Mutex
 	requests := []string{}

@@ -21,6 +21,7 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
 | 31 | Discussion required | Organization-only Artifact access through Microsoft Entra ID |
+| 33 | Implemented as Increment 22, pending independent review | Complete high-cardinality People and Advisor facets |
 
 ## Current activity
 
@@ -147,6 +148,36 @@ pages show in place of file actions, including availability badges and counts;
 and whether Project Logo serving, Project Repository Links, and administrator
 preview flows stay public or follow the same gate. Record the accepted model,
 then write the implementation brief.
+
+33. **Implemented as Increment 22, pending independent review.** Implemented
+2026-09-15 per `.memory/docs/increments/22-complete-person-facet-values.md` at
+the accepted Increment 21 baseline `f455971`. EnsureIndex now sends explicit
+faceting settings: a named 1,000-value distribution bound replaces the
+engine's default 100-value cap, `person_ids` and `advisor_person_ids` sort by
+count as a defensive truncation policy, and every other facet stays
+alphabetical. The search schema version advanced from 2 to 3, so version-2
+cursors fail through the existing controlled invalid-cursor path while
+current cursors round-trip. A pinned Meilisearch regression proves a
+121-value Person UUID distribution returns every seeded value including a
+target that alphabetical truncation dropped, with separate People and Advisor
+counts. The local-test API applied the settings to its existing active index
+without re-import: the empty-search People facet grew from 100 to all 383
+participating People, Phyo Min Tun appears with People count 11 and Advisor
+count 6, and both local autocomplete dimensions offer him without any
+per-keystroke request.
+
+The People facet and Person-name suggestions
+inherit Meilisearch's default `maxValuesPerFacet: 100` cap over UUID-valued
+`person_ids`. The current local-test archive has 383 People participating in
+published Projects, so 283 are omitted from an empty-search distribution by
+UUID order. Phyo Min Tun is correctly stored and projected into 11 Projects but
+is absent from People while remaining visible in the 23-value Advisor facet.
+Set an explicit bounded 1,000-value distribution, use count-first truncation
+for People and Advisor as a future safety fallback, advance the search schema
+version, and prove more than 100 values against pinned Meilisearch. Preserve
+contextual counts, the frontend-only autocomplete interaction, current filter
+semantics, and every existing response shape. The implementation brief is
+`../docs/increments/22-complete-person-facet-values.md`.
 
 ## Parked possibilities
 
