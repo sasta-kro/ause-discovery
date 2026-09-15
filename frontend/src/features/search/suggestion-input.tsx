@@ -31,7 +31,6 @@ export function SearchSuggestionInput({
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const listboxId = useId()
-  const helpId = useId()
   const [focused, setFocused] = useState(false)
   const [collapsedCaret, setCollapsedCaret] = useState(true)
   const [caretAtEnd, setCaretAtEnd] = useState(true)
@@ -124,7 +123,6 @@ export function SearchSuggestionInput({
       ref={inputRef}
       aria-autocomplete="list"
       aria-controls={listboxId}
-      aria-describedby={helpId}
       aria-expanded={open}
       aria-activedescendant={active ? optionId(listboxId, active.id) : undefined}
       role="combobox"
@@ -154,7 +152,6 @@ export function SearchSuggestionInput({
         {index === activeOptionIndex ? <span aria-hidden="true" className={styles.suggestionHint}><kbd className={styles.keycap}>Tab</kbd> {t('search.suggestionSelectHint')}</span> : null}
       </li>)}
     </ul> : null}
-    <p className={styles.suggestionHelp} id={helpId}>{t('search.suggestionHelp')}</p>
   </div>
 }
 

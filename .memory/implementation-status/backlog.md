@@ -16,11 +16,12 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 20 | Open | Projects without a recorded advisor |
 | Correction | Partial | Acknowledge all import warnings |
 | Correction | Open | Bounded import-preview text layout |
-| Correction | Completed | Explain classification filter combination semantics |
 | 24 | Parked | Optional Project Logo payload optimization |
 | 26 | Discussion required | Ownership, institutional license, public legal text, and developer credit |
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
+| 29 | Open, frontend extension | Person-name Search Filter Suggestions |
+| 30 | Open, frontend UX | Filter option ordering, sort toggles, and expansion focus |
 
 ## Current activity
 
@@ -80,10 +81,6 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 - **Open:** import preview rows wrap text permanently. The 200 percent zoom
   behavior is resolved. Long values still need bounded truncation or normal
   wrapping inside a horizontally scrollable table region.
-- **Completed in Increment 18:** the Search Filter Suggestions combobox help
-  explains that multiple selected values within one filter dimension match any
-  selected value, while different filter dimensions must all match. The
-  accepted search behavior did not change.
 
 ## Open implementation work
 
@@ -122,16 +119,36 @@ or persistent public visitor identities. Unique-visitor or session analytics
 remain a separate decision. This work requires backend persistence and APIs as
 well as frontend dashboards and is not a frontend-only addition.
 
-28. **Discussion required before deciding whether this is copy or a product
-change.** The current `People` search facet uses `person_ids`, which includes
-every Project Participation role: student, advisor, co-advisor, and committee
-member. The separate `Advisor` facet uses the narrower advisor role set.
-Renaming `People` to `Students` without changing the search projection would be
-incorrect. Candidate directions are: rename the current public label to
-`Participants` with concise role guidance, or add a true student-only search
-field and facet while preserving the narrower Advisor facet. Update the domain
-glossary only after the public terminology and intended filtering semantics are
-selected.
+
+
+29. **Open, frontend-only extension to Increment 18.** Include loaded People
+and Advisor facet choices in Search Filter Suggestions. A case-insensitive
+prefix such as `Phyo` or `Phyo Mi` should suggest `Phyo Min Tun`; acceptance
+adds the same `person_id` or `advisor_id` filter as the corresponding left-panel
+choice. When one Person is eligible in both dimensions, show separate
+dimension-labelled suggestions rather than guessing the intended role. Preserve
+one-at-a-time Tab acceptance, free-text removal, selected-value exclusion, and
+no result request while typing. A matched person-name prefix may remain open
+across an internal or trailing space so another name segment can be typed, while
+unrelated trailing terms still close the suggestion. Reuse already-loaded facet
+data and make no backend, OpenAPI, or search-document change. Public wording
+may follow the current People and Advisor labels until item 28 resolves the
+broader People terminology.
+
+30. **Open, frontend-only filter-panel improvement.** Order Academic year
+choices newest first. Keep explicitly ordinal dimensions such as Semester in
+their defined academic order. Default every non-ordinal choice list to
+descending occurrence count with alphabetical label and stable key tie-breakers;
+missing or zero counts belong after positive counts. Add a small accessible sort
+icon button within each applicable expanded filter body, not nested inside the
+`summary`, that toggles that group between occurrence-descending and
+alphabetical order and communicates the active mode. No icon library is needed.
+When a visitor expands a filter disclosure that contains a filter-search input,
+focus that input automatically after the user-initiated expansion. Do not steal
+focus for disclosures opened by initial rendering, restored state, or responsive
+layout, and do nothing for groups without a search input. Preserve selections,
+counts, OR-within-dimension behavior, keyboard disclosure behavior, scroll
+regions, and 200 percent zoom support.
 
 ## Parked possibilities
 

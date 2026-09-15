@@ -65,6 +65,8 @@ describe('search suggestion combobox', () => {
     expect(input.getAttribute('role')).toBe('combobox')
     expect(input.getAttribute('aria-autocomplete')).toBe('list')
     expect(input.getAttribute('aria-expanded')).toBe('true')
+    expect(input.getAttribute('aria-describedby')).toBeNull()
+    expect(screen.queryByText(/^Suggestions:/)).toBeNull()
     const listbox = screen.getByRole('listbox')
     expect(input.getAttribute('aria-controls')).toBe(listbox.id)
     const options = screen.getAllByRole('option')

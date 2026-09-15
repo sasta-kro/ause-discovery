@@ -212,8 +212,11 @@ one nearest trailing suffix per Tab action, preserves and submits unmatched
 free text, excludes selected values, labels collisions, and issues no result
 request while typing. The accessible combobox keeps Enter for free-text search,
 supports mouse and clamped arrow navigation, uses two-stage Escape behavior,
-and preserves ordinary Shift+Tab navigation. Filter acceptance shares the
-left-panel mutation path without breaking People or Advisor toggles. Verification
+and preserves ordinary Shift+Tab navigation. The active suggestion carries the
+small contextual Tab keycap; a later maintainer-directed visual correction
+removed the persistent instructional paragraph beneath the search bar. Filter
+acceptance shares the left-panel mutation path without breaking People or
+Advisor toggles. Verification
 passed with 41 focused tests, the full 26-file 125-test frontend suite, ESLint,
 `tsc -b`, the default-subpath build, 10 Chromium interaction tests, and diff
 checks. No backend, OpenAPI, generated-client, Meilisearch, PostgreSQL,
@@ -226,8 +229,8 @@ change was introduced.
   confirmed the accepted search contract. Multiple values within one filter
   dimension use OR, and different dimensions combine with AND. The maintainer
   retained this behavior, so no search defect or backend semantic change
-  remains. A small user-facing explanation is tracked separately in the
-  backlog.
+  remains. A later visual review removed the persistent explanatory paragraph;
+  no separate user-facing instruction is planned.
 - **Implemented:** the SP metadata extractor moved to its own repository, `tools/ausesp-data-extractor` (remote `git@github.com:sasta-kro/ausesp-data-extractor.git`, nested and gitignored by the main repository). The main repository consumes generated deliverables rather than the extraction pipeline.
 - **Implemented:** the extractor reached agent-reviewed corpus quality. `ause-discovery-projects-metadata-import.csv`, built from dataset records, is the metadata source of truth; the superseded regex pipeline output is not used.
 

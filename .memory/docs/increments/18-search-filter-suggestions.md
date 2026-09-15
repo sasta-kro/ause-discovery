@@ -1,5 +1,13 @@
 # Search Filter Suggestions increment
 
+## Post-acceptance visual correction
+
+Recorded 2026-09-15: remove the persistent instructional paragraph beneath the
+search input and align the input, sort select, and Search button to one shared
+height. Retain the small contextual Tab keycap inside the active suggestion.
+The maintainer determined that the persistent keyboard and filter-combination
+copy was visually intrusive and unnecessary in this interface.
+
 ## Assignment
 
 Implement and commit conservative Search Filter Suggestions in the public

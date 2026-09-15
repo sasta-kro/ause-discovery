@@ -90,9 +90,9 @@
 .searchPage { min-width: 0; }
 .searchPageHeader { border-bottom: 1px solid var(--color-line); margin-bottom: .5rem; padding-bottom: .75rem; }
 .searchPageHeader h1 { font-family: var(--font-display); font-size: clamp(2.2rem, 3.5vw, 2.5rem); font-weight: 500; letter-spacing: -.04em; line-height: 1; margin: 0; }
-.searchToolbar { display: grid; grid-template-columns: minmax(0, 1fr) 11rem auto; margin: 0 0 1.25rem; }
-.suggestionWrapper { display: grid; gap: .2rem; position: relative; }
-.suggestionWrapper input { width: 100%; }
+.searchToolbar { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) 11rem auto; margin: 0 0 1.25rem; }
+.suggestionWrapper { min-width: 0; position: relative; }
+.suggestionWrapper input { box-sizing: border-box; height: 3.25rem; width: 100%; }
 .suggestionList { background: var(--color-surface-raised, #f4f2f7); border: 1px solid var(--color-line); border-radius: .4rem; box-shadow: 0 .35rem 1rem rgb(0 0 0 / 12%); left: 0; list-style: none; margin: 0; max-height: 20rem; overflow-y: auto; padding: 0; position: absolute; right: 0; top: 100%; z-index: 30; }
 .suggestionOption, .suggestionOptionActive { align-items: center; border-bottom: 1px solid var(--color-line); cursor: pointer; display: flex; gap: .5rem; justify-content: space-between; padding: .55rem .7rem; }
 .suggestionOption:last-child, .suggestionOptionActive:last-child { border-bottom: 0; }
@@ -101,9 +101,7 @@
 .suggestionDimension { color: var(--color-muted, #666); flex-shrink: 0; font-size: .85rem; }
 .suggestionHint { color: var(--color-muted, #666); flex-shrink: 0; font-size: .78rem; }
 .keycap { border: 1px solid var(--color-line); border-radius: .25rem; font-family: var(--font-display); font-size: .72rem; padding: 0 .3rem; }
-.suggestionHelp { color: var(--color-muted, #666); font-size: .78rem; margin: 0; }
-.searchToolbar input, .searchToolbar select { min-height: 3.25rem; }
-.suggestionWrapper .suggestionHelp { grid-column: 1; }
+.searchToolbar select, .searchToolbar > .searchPrimaryButton { box-sizing: border-box; height: 3.25rem; }
 .searchPrimaryButton { background: var(--color-accent); border: 1px solid var(--color-accent); border-radius: var(--radius-small); color: white; cursor: pointer; font-weight: 700; padding: .75rem 1.2rem; }
 .searchPrimaryButton:not(:disabled):hover { background: var(--color-accent-strong); border-color: var(--color-accent-strong); }
 .searchPrimaryButton:disabled { cursor: default; opacity: .55; }
