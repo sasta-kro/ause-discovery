@@ -136,7 +136,7 @@ function AppFrame() {
         <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink className={styles.adminNavigationLink} to="/admin">{t('nav.admin')}</NavLink>
       </nav>
     </div></header>
-    <main id="main-content" ref={mainRef} tabIndex={-1} className={`${styles.main} ${location.pathname === '/search' ? styles.searchMain : ''}`}><Outlet /></main>
+    <main id="main-content" ref={mainRef} tabIndex={-1} className={`${styles.main} ${location.pathname === '/' ? styles.homeMain : ''} ${location.pathname === '/search' ? styles.searchMain : ''}`}><Outlet /></main>
     <footer className={styles.footer}><div className={styles.footerInner}>
       <span>{t('footer.credit')}</span><nav className={styles.footerNav} aria-label={t('nav.footer')}>
         <Link to="/about">{t('footer.about')}</Link><Link to="/privacy">{t('footer.privacy')}</Link><Link to="/accessibility">{t('footer.accessibility')}</Link><Link to="/terms">{t('footer.terms')}</Link><Link to="/contact">{t('footer.contact')}</Link>

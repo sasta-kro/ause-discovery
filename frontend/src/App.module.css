@@ -13,11 +13,14 @@
 .navigation a[aria-current='page'] { color: var(--color-accent-strong); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .45rem; }
 .adminNavigationLink { border: 1px solid var(--color-line-strong); padding: .62rem .85rem; }
 .main { flex: 1; padding-block: clamp(2rem, 5vw, 5rem); }
+.homeMain { --home-space-top: clamp(2rem, 4vh, 2.5rem); --home-space-bottom: clamp(1rem, 2vh, 1.5rem); display: flex; flex-direction: column; justify-content: center; padding-block: var(--home-space-top) var(--home-space-bottom); }
 .footer { margin-top: var(--space-6); border-top: 1px solid var(--color-line); color: var(--color-muted); }
-.footerInner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding-block: var(--space-5); font-size: .9rem; }
+.homeMain + .footer { --footer-space-block: 1.5rem; margin-top: 0; }
+.footerInner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding-block: var(--footer-space-block, var(--space-5)); font-size: .9rem; }
 .footerNav { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .footer a { color: inherit; }
 .hero { max-width: 53rem; padding-block: clamp(2rem, 8vw, 7rem); }
+.homeMain .hero { padding-block: 0; width: 100%; }
 .eyebrow { color: var(--color-accent); font-size: .78rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
 .hero h1 { font-family: var(--font-display); font-size: clamp(2.6rem, 7vw, 5.5rem); font-weight: 500; letter-spacing: -.045em; line-height: .98; margin: var(--space-3) 0; }
 .lede { max-width: 42rem; color: var(--color-muted); font-size: 1.12rem; line-height: 1.7; }
