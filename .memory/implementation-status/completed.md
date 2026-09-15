@@ -22,6 +22,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Person-name Search Filter Suggestions | `../docs/increments/19-person-filter-suggestions.md`, commit `eb84ae7` |
 | Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668`, post-acceptance visual correction `95bd9fc` |
 | Filter panel ordering, sort toggles, and expansion focus | `../docs/increments/20-filter-panel-ordering-and-focus.md`, commit `eedeecd` |
+| Route transition scroll reset | `../docs/increments/21-route-transition-scroll-reset.md`, commit `0591de0`, correction commit `170f5a8` |
 | VM deployment and proxy correction | `../sasta-dev-notes/records/vm-deployment-2026-09-13.md` |
 | VM 0.5 in-place preservation upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-15-v0.5.md` |
 
@@ -278,6 +279,26 @@ Chromium tests against the local-test stack. One acceptance-Project browser
 test remained skipped because its optional fixture was not configured. No
 backend, OpenAPI, generated-client, Search Document, Meilisearch, PostgreSQL,
 dependency, publication, or deployment change was introduced.
+
+28. **Implemented and accepted as Increment 21, 2026-09-15**
+(`.memory/docs/increments/21-route-transition-scroll-reset.md`). Commit
+`0591de0`, corrected by `170f5a8`, gives the shared AppFrame an explicit route
+scroll and focus policy. A non-history pathname navigation focuses
+`#main-content` with `preventScroll` and resets the document to position zero,
+so the brand, Browse the archive, landing search, and other internal page
+transitions retain the complete header. History POP navigation keeps browser
+scroll restoration while still focusing main. Query, filter, sort, suggestion,
+and pagination changes on the same Search pathname do not reset scroll. The
+Home brand link is the single same-path top-reset exception, and Skip to main
+content remains a native hash link. Independent review found that the original
+first-render boolean allowed React Strict Mode's development effect replay to
+focus main without a pathname change. Correction `170f5a8` replaced it with a
+real pathname comparison and added a Strict Mode regression test. Independent
+verification passed the 14-test AppFrame suite, the full 28-file 174-test
+frontend suite without jsdom scroll noise, ESLint, `tsc -b`, the
+default-subpath production build, and all six focused Chromium route tests
+against the local-test stack. No layout workaround, dependency, backend, API,
+database, search, storage, deployment, or infrastructure change was introduced.
 
 ## Completed correction work
 

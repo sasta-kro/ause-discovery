@@ -21,7 +21,6 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
 | 31 | Discussion required | Organization-only Artifact access through Microsoft Entra ID |
-| 32 | Correction committed, pending independent review | Route transition scroll reset and preserved main focus |
 
 ## Current activity
 
@@ -31,10 +30,8 @@ Completed work and historical verification evidence belong in `completed.md`.
   to `completed.md`.
 - Increment 20 was implemented at commit `eedeecd` and independently accepted
   on 2026-09-15. Its record moved to `completed.md`.
-- Increment 21 was implemented at commit `0591de0`. Independent review found
-  that development Strict Mode repeats the initial effect and focuses main even
-  though the pathname did not change. Bounded correction commit `170f5a8` and
-  its Strict Mode regression test await independent review.
+- Increment 21 was implemented at `0591de0`, corrected at `170f5a8`, and
+  independently accepted on 2026-09-15. Its record moved to `completed.md`.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -150,27 +147,6 @@ pages show in place of file actions, including availability badges and counts;
 and whether Project Logo serving, Project Repository Links, and administrator
 preview flows stay public or follow the same gate. Record the accepted model,
 then write the implementation brief.
-
-32. **Implemented as Increment 21, correction committed and pending review.** Implemented
-2026-09-15 per `.memory/docs/increments/21-route-transition-scroll-reset.md`
-at the accepted Increment 20 baseline `eedeecd`. The shared AppFrame now
-focuses the main landmark with `preventScroll` on every pathname change and
-places the document at position zero for non-POP navigations, so brand,
-Browse, landing-search, and every other internal pathname transition begin
-with the complete header visible. History POP navigation keeps the browser's
-restored position, same-path Search query, filter, sort, suggestion, and
-pagination changes never reach the transition effect, the skip link keeps its
-native hash behavior, and activating the brand while already on Home returns
-the page to the top through the link itself. No layout workaround or
-dependency was added.
-
-Correction requested during independent review: make the first-render guard
-stable under the application's React Strict Mode mount, where effects repeat in
-development. Initial rendering must not focus main on the repeated setup. Keep
-the accepted pathname, history, same-path, focus, and scroll behavior unchanged,
-add a Strict Mode regression test, and remove jsdom's unimplemented `scrollTo`
-noise from the frontend test run. Correction commit `170f5a8` awaits
-independent review.
 
 ## Parked possibilities
 
