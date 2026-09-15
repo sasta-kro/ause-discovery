@@ -4,7 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from './app/i18n'
 import { client } from './api/generated/client.gen'
@@ -58,6 +58,12 @@ describe('shared application shell', () => {
     apiMocks.getSession.mockRejectedValue(unauthorized)
     apiMocks.getCsrfToken.mockResolvedValue({ data: { token: 'csrf-token' } })
     document.title = ''
+    // jsdom has no scroll implementation; the route policy calls scrollTo on
+    // pathname navigation, so it is stubbed for the whole shell file.
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('renders one main landmark, correct skip link, and named navigation on a public route', () => {
@@ -123,7 +129,22 @@ describe('shared application shell', () => {
 
     it('does not focus or scroll on initial rendering', () => {
       renderAt('/')
-      expect(focus).not.toHaveBeenCalled()
+      expect(focus).not.toHaveBeenCalledWith({ preventScroll: true })
+      expect(scrollTo).not.toHaveBeenCalled()
+    })
+
+    it('does not focus or scroll on initial rendering under the real StrictMode replay', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+      render(
+        <QueryClientProvider client={queryClient}>
+          <I18nextProvider i18n={i18n}>
+            <MemoryRouter initialEntries={['/']}>
+              <StrictMode><SessionProvider><AppRoutes /></SessionProvider></StrictMode>
+            </MemoryRouter>
+          </I18nextProvider>
+        </QueryClientProvider>,
+      )
+      expect(focus).not.toHaveBeenCalledWith({ preventScroll: true })
       expect(scrollTo).not.toHaveBeenCalled()
     })
 

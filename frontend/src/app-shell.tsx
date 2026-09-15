@@ -106,22 +106,20 @@ function AppFrame() {
   const location = useLocation()
   const navigationType = useNavigationType()
   const mainRef = useRef<HTMLElement>(null)
-  const firstRender = useRef(true)
+  // The ref starts at the current pathname, so the initial effect run and any
+  // development StrictMode replay of it see no pathname change and do nothing.
   const previousPathname = useRef(location.pathname)
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false
-      return
-    }
     const pathnameChanged = location.pathname !== previousPathname.current
     previousPathname.current = location.pathname
+    if (!pathnameChanged) return
     // Main keeps route focus with preventScroll so focusing can never move
     // the viewport below the site header.
     mainRef.current?.focus({ preventScroll: true })
     // A new pathname begins at document position zero. History POP keeps the
     // browser's restored scroll position, and same-path search changes are
     // application state, not new pages, so they never reach this effect.
-    if (pathnameChanged && navigationType !== 'POP') window.scrollTo(0, 0)
+    if (navigationType !== 'POP') window.scrollTo(0, 0)
     // The navigation type is read from the render that changed the pathname;
     // it must not key the effect, or same-path state transitions would
     // re-focus main.
