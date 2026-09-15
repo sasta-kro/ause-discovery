@@ -1,8 +1,12 @@
 # Senior Project Discovery Portal
 ## Comprehensive MVP Product and Technical Specification
 
-**Status:** Draft baseline specification  
-**Version:** 0.1  
+**Status:** Historical MVP scope record. The MVP was completed 2026-09-05 at
+commit `1cc5dc6` and deployed at `https://life.au.edu/ause-discovery/`. This
+document no longer governs current work: active scope lives in
+`../implementation-status/backlog.md` and built behavior in
+`../implementation-status/completed.md`.  
+**Version:** 0.1, archived unchanged  
 **Primary audience:** Developer, faculty stakeholders, university administrators, project reviewers  
 **Institutional context:** Assumption University of Thailand, Vincent Mary School of Science, Engineering and Technology  
 **Purpose:** Define the MVP product scope, behavior, architecture, data model, search model, administration workflow, security baseline, deployment expectations, and future extension points for a searchable institutional archive of senior projects.

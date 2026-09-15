@@ -17,7 +17,10 @@ Read these files in order before planning or implementation:
    for current work or `implementation-status/completed.md` for accepted history
 6. `lessons_learned.md`, when substantive lessons exist
 
-Read `CONTEXT.md` before changing domain terminology. Read `docs/ause-discovery_implementation_specification_v1.md` before implementation.
+Read `CONTEXT.md` before changing domain terminology. The record of what
+was actually built is `implementation-status/completed.md` with the accepted
+briefs in `docs/increments/`. The historical MVP scope record is
+`archives/mvp-specification-v1.md`.
 
 ## Memory files
 
