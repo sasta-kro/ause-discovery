@@ -20,8 +20,10 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Project Logo loading experience | `../docs/increments/16-project-logo-loading-experience.md`, commit `af53e63`, correction commit `bfb1cff` (grid overlay and stale-request isolation) |
 | Newest-first academic search ordering | `../docs/increments/17-newest-first-academic-search-ordering.md`, commit `07db502`, correction commit `5f4bac7` |
 | Person-name Search Filter Suggestions | `../docs/increments/19-person-filter-suggestions.md`, commit `eb84ae7` |
-| Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668` |
-| VM deployment and proxy correction | `../sasta-dev-notes/vm-deployment-2026-09-13.md` |
+| Search Filter Suggestions | `../docs/increments/18-search-filter-suggestions.md`, commit `9278808`, correction commit `7cfc668`, post-acceptance visual correction `95bd9fc` |
+| Filter panel ordering, sort toggles, and expansion focus | `../docs/increments/20-filter-panel-ordering-and-focus.md`, commit `eedeecd` |
+| VM deployment and proxy correction | `../sasta-dev-notes/records/vm-deployment-2026-09-13.md` |
+| VM 0.5 in-place preservation upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-15-v0.5.md` |
 
 
 ## Technical completion
@@ -165,7 +167,7 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 
 5. **Resolved or accepted.** The later corpus pass confirmed 1934's title and 2238's full student list; 26010 retains the selected approval title. Abstract-based classification remains the deliberate evidence boundary.
 
-6. **Implemented and deployed 2026-09-13.** The VM Compose override binds the published web port to `127.0.0.1:8088`, leaving host Nginx as the only public entry point. Web image `sastakro/ause-discovery-web:0.4.1` preserves a valid incoming `X-Forwarded-Proto` value through the container Nginx, so HTTPS same-origin validation receives the scheme established by the trusted host proxy. The deployment incident and correction are recorded in `.memory/sasta-dev-notes/vm-deployment-2026-09-13.md`.
+6. **Implemented and deployed 2026-09-13.** The VM Compose override binds the published web port to `127.0.0.1:8088`, leaving host Nginx as the only public entry point. Web image `sastakro/ause-discovery-web:0.4.1` preserves a valid incoming `X-Forwarded-Proto` value through the container Nginx, so HTTPS same-origin validation receives the scheme established by the trusted host proxy. The deployment incident and correction are recorded in `.memory/sasta-dev-notes/records/vm-deployment-2026-09-13.md`.
 
 7. **Implemented.** Public Project details now render nonempty classification groups under localized dimension names. Major and Topic remain absent from public interfaces by product decision.
 
@@ -252,6 +254,30 @@ local-test stack with 205 imported Projects. No backend, OpenAPI,
 generated-client, Search Document, Meilisearch, PostgreSQL, dependency,
 People-terminology, filter-semantic, publication, or deployment change was
 introduced.
+
+27. **Implemented and accepted as Increment 20, 2026-09-15**
+(`.memory/docs/increments/20-filter-panel-ordering-and-focus.md`). Commit
+`eedeecd`, built on accepted Increment 19 commit `eb84ae7`, adds one pure
+non-mutating ordering module for the public left filter panel. Academic years
+sort numerically newest first, Semester and Project File availability retain
+their fixed product order, and Program, Course, People, Advisor, Category,
+Platform, Domain, and Technology default to positive occurrence count
+descending. Equal counts use case-insensitive label then stable value ordering;
+zero and missing counts share the trailing tier. Each non-ordinal disclosure
+has an independent accessible inline-SVG toggle between Most common first and
+Alphabetical. Local ordering and local option search do not enter the URL or
+issue result requests, and selected values stay bound after reordering.
+User-initiated pointer or keyboard expansion focuses an available group search
+input with its caret at the end. Initial rendering, default-open Technology,
+closing, sort-toggle activation, Semester, and Project File availability do not
+receive artificial input focus. Search Filter Suggestions remain on their
+independent ranking path. Independent verification passed 82 focused ordering,
+disclosure, SearchPage, and suggestion tests; the full 28-file 166-test
+frontend suite; ESLint; `tsc -b`; the default-subpath production build; and 21
+Chromium tests against the local-test stack. One acceptance-Project browser
+test remained skipped because its optional fixture was not configured. No
+backend, OpenAPI, generated-client, Search Document, Meilisearch, PostgreSQL,
+dependency, publication, or deployment change was introduced.
 
 ## Completed correction work
 

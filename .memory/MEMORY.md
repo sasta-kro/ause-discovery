@@ -48,12 +48,17 @@ briefs in `docs/increments/`. The historical MVP scope record is
 
 ## Current checkpoint
 
-As of 2026-09-13, the AUSE Discovery technical MVP is complete at commit
+As of 2026-09-15, the AUSE Discovery technical MVP is complete at commit
 `1cc5dc6`, the application is deployed at
 `https://life.au.edu/ause-discovery/`, and post-MVP implementation through
 Search Filter Suggestions Increment 18 was implemented at commit `9278808` and
-corrected through commit `7cfc668`, which is the latest accepted implementation
-baseline. Read
+corrected through commit `7cfc668`, followed by the maintainer-directed visual
+correction at commit `95bd9fc`. Post-release frontend work through filter-panel
+ordering and expansion focus Increment 20 is independently accepted at commit
+`eedeecd`, the current accepted implementation baseline. Increment 21 was
+implemented at `0591de0` and corrected at `170f5a8`, pending independent review.
+API and web release 0.5 from `95bd9fc` were deployed successfully on 2026-09-15
+without resetting PostgreSQL or B2. Read
 `implementation-status/backlog.md` for current work and constraints. Read
 `implementation-status/completed.md` only for accepted history, detailed
 behavior, or verification evidence.

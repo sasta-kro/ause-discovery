@@ -4,10 +4,11 @@ This note is the current operator reference for local Docker testing, publishing
 Linux images to Docker Hub, and deploying the Compose stack on the VM. The
 commands assume the repository base path `/ause-discovery/`.
 
-The dated record
-`vm-deployment-2026-09-13.md` captures the exact local rehearsal, VM commands,
-errors, fixes, image digests, and cleanup from the latest deployment. This file
-keeps the reusable command flow.
+The dated record `records/vm-deployment-2026-09-15-v0.5.md` captures the successful first
+in-place production upgrade, including image digests, preserved data, timing,
+and the Increment 17 search rebuild. The earlier
+`records/vm-deployment-2026-09-13.md` captures the initial fresh reset, imports,
+errors, and fixes. This file keeps the reusable command flow.
 
 Project metadata and Project Content remain external source-of-truth files
 during development. The `ause-local-test` Compose project is fully disposable:
@@ -162,25 +163,90 @@ sastakro/ause-discovery-web:0.4.1
 sha256:1be451f6b0e5d9c93113f0778a3aea72aa69e5ffd14d5fb95c38b6d372623f9e
 ```
 
+The 2026-09-15 in-place upgrade published API and web `0.5` from commit
+`95bd9fc`. The image index digests were:
+
+```text
+sastakro/ause-discovery-api:0.5
+sha256:a668c3f358960815bf05f6be6189864eab95ae4dbddc4262231513fb525969d1
+
+sastakro/ause-discovery-web:0.5
+sha256:9f67b100632631c8ad99651b13d2160e12163f75514feb543fdd3c4cb936c38a
+```
+
 The repository's tagged release workflow currently publishes to GHCR. The
 commands above are the separate manual Docker Hub publication path used by the
 current VM release.
 
-## Quick copy: deploy or refresh the VM
+## Quick copy: routine production image upgrade
+
+Routine upgrades preserve PostgreSQL, B2, Meilisearch, and every named volume.
+They do not use `down`, `down -v`, metadata import, Project Content transfer,
+or B2 clearing. The successful 0.5 upgrade used this flow:
+
+```sh
+cd /home/saiaike/apps/ause-discover
+mkdir -p backups
+
+docker compose -p ause-discovery --env-file .env \
+  exec -T postgres \
+  sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  > "backups/ause-discovery-pre-<release>-$(date +%Y%m%d-%H%M%S).sql"
+
+docker compose -p ause-discovery --env-file .env config --quiet
+docker compose -p ause-discovery --env-file .env pull
+
+docker compose -p ause-discovery --env-file .env \
+  run --rm migrate
+
+docker compose -p ause-discovery --env-file .env \
+  run --rm --no-deps --entrypoint /usr/local/bin/ausectl \
+  api migrations status
+
+docker compose -p ause-discovery --env-file .env \
+  up -d --no-build --wait
+
+docker compose -p ause-discovery --env-file .env ps
+curl -fsS http://127.0.0.1:8088/ause-discovery/health/live
+curl -fsS http://127.0.0.1:8088/ause-discovery/health/ready
+
+docker compose -p ause-discovery --env-file .env \
+  exec -T api printenv AUSE_ARTIFACT_STORAGE_BACKEND
+```
+
+Update the API and web image references in `.env` before `config` and `pull`.
+Verify that the backup file is nonempty. The storage-provider output must remain
+`b2`.
+
+When the release changes Meilisearch schema or ranking settings, queue a rebuild
+after the new API becomes healthy:
+
+```sh
+docker compose -p ause-discovery --env-file .env \
+  run --rm --no-deps \
+  --entrypoint /usr/local/bin/ausectl \
+  api search rebuild
+```
+
+The command only queues the rebuild. Confirm completion through the
+administrator Search page. Release 0.5 required this operation for Increment
+17. Increment 18 itself required no backend operation.
+
+## Quick copy: fresh VM deployment
 
 The current VM deployment directory is
 `/home/saiaike/apps/ause-discover`. It contains the current `compose.yaml`,
 `compose.override.yaml`, and a private `.env`. Run all VM commands from that
 directory. The reusable configuration below uses the tags deployed on
-2026-09-13. Immutable digests remain preferable for later releases.
+2026-09-15. Immutable digests remain preferable for later releases.
 
 ```dotenv
 AUSE_ENV=production
 AUSE_COOKIE_SECURE=true
 MEILI_ENV=production
 
-AUSE_API_IMAGE=sastakro/ause-discovery-api:0.4
-AUSE_WEB_IMAGE=sastakro/ause-discovery-web:0.4.1
+AUSE_API_IMAGE=sastakro/ause-discovery-api:0.5
+AUSE_WEB_IMAGE=sastakro/ause-discovery-web:0.5
 
 AUSE_PUBLIC_BASE_PATH=/ause-discovery/
 AUSE_WEB_PORT=8088
@@ -492,7 +558,7 @@ from readiness because search degrades independently and can be rebuilt.
 web image currently compiles `/ause-discovery/`; changing that path requires a
 new web build.
 
-## VM release flow
+## Fresh VM release flow
 
 The Docker Hub build commands publish `linux/amd64` images so the VM can pull
 them even when the development machine uses another CPU architecture.

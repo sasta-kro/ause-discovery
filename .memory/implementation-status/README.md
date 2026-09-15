@@ -18,9 +18,14 @@ so routine planning does not require loading the full technical record.
 ## Current checkpoint
 
 The technical MVP was completed at commit `1cc5dc6`. Post-MVP work through
-Search Filter Suggestions Increment 18 was implemented at commit `9278808` and
-corrected through commit `7cfc668`, the latest accepted implementation
-baseline. No implementation item is currently in progress.
+Search Filter Suggestions Increment 18 was implemented at commit `9278808`,
+corrected through commit `7cfc668`, and received its maintainer-directed visual
+correction at commit `95bd9fc`. Post-release frontend work through filter-panel
+ordering and expansion focus Increment 20 is independently accepted at commit
+`eedeecd`, the current accepted implementation baseline. Increment 21 was
+implemented at `0591de0` and corrected at `170f5a8`, pending independent review.
+API and web release 0.5 from `95bd9fc` were deployed successfully through the
+production-preserving upgrade path on 2026-09-15.
 
 ## Status lifecycle
 

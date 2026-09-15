@@ -20,8 +20,8 @@ Completed work and historical verification evidence belong in `completed.md`.
 | 26 | Discussion required | Ownership, institutional license, public legal text, and developer credit |
 | 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
 | 28 | Discussion required | Clarify the People search facet terminology and scope |
-| 30 | Implemented as Increment 20, pending independent review | Filter option ordering, sort toggles, and expansion focus |
-| 32 | Implemented as Increment 21, pending independent review | Route transition scroll reset and preserved main focus |
+| 31 | Discussion required | Organization-only Artifact access through Microsoft Entra ID |
+| 32 | Correction committed, pending independent review | Route transition scroll reset and preserved main focus |
 
 ## Current activity
 
@@ -29,21 +29,12 @@ Completed work and historical verification evidence belong in `completed.md`.
 - Increment 19, Person-name Search Filter Suggestions, was implemented at
   commit `eb84ae7` on 2026-09-15 and independently accepted; its record moved
   to `completed.md`.
-- Increment 20 implemented filter panel ordering, per-group sort toggles, and
-  expansion focus on 2026-09-15 per
-  `.memory/docs/increments/20-filter-panel-ordering-and-focus.md`. Academic
-  years display newest first, non-ordinal groups default to occurrence count
-  descending with deterministic tie-breakers, each such group carries an
-  independent accessible toggle to alphabetical ordering, and user-initiated
-  expansion focuses the group filter-search input while initial rendering does
-  not steal focus. The item awaits independent review.
-- Increment 21 implemented the shared route transition scroll policy on
-  2026-09-15 per
-  `.memory/docs/increments/21-route-transition-scroll-reset.md`. Internal
-  pathname navigation begins at document position zero with the complete
-  header visible, main keeps route focus through `preventScroll`, history and
-  same-path Search state changes preserve scroll, and the brand returns Home
-  to the top. The item awaits independent review.
+- Increment 20 was implemented at commit `eedeecd` and independently accepted
+  on 2026-09-15. Its record moved to `completed.md`.
+- Increment 21 was implemented at commit `0591de0`. Independent review found
+  that development Strict Mode repeats the initial effect and focuses main even
+  though the pathname did not change. Bounded correction commit `170f5a8` and
+  its Strict Mode regression test await independent review.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -139,38 +130,28 @@ well as frontend dashboards and is not a frontend-only addition.
 
 
 
-30. **Implemented as Increment 20, pending independent review.** Implemented
-2026-09-15 per `.memory/docs/increments/20-filter-panel-ordering-and-focus.md`
-at the accepted Increment 19 baseline `eb84ae7`. Academic year choices sort
-numerically newest first, Semester and Project File availability keep their
-explicit fixed order, and every other public facet group defaults to positive
-occurrence count descending with case-insensitive label then stable value
-tie-breakers, where zero and missing counts follow positive counts. Each
-non-ordinal group carries one compact accessible icon button that toggles only
-that group between Most common first and Alphabetical, keeps its mode across
-close and reopen while mounted, never enters the URL, and never issues a
-request. User-initiated pointer or keyboard expansion focuses the group's
-filter-search input with the caret at the end, while initial rendering,
-default-open Technology, closing, and groups without an input never receive
-artificial focus.
+31. **Open, discussion required. Organization-only Artifact access through
+Microsoft Entra ID.** Project File viewing and downloading must become
+available only to authenticated organization users signing in with Microsoft
+Entra ID, with every Entra role eligible for access. Public visitors receive
+neither view nor download access to Project Files. This replaces the accepted
+public Artifact contract: the public `/artifacts/{artifact_id}/view` and
+`/artifacts/{artifact_id}/download` endpoints, inline PDF viewing, the View
+and Download actions on public Project pages, and Artifact availability search
+facets all need an access-model decision. Public search over Artifact metadata
+is expected to remain. Decisions required before any brief: whether Entra ID
+replaces or joins the existing local administrator authentication for
+Application Users; the Entra tenant, application registration, redirect, and
+single- or multi-tenant configuration; how an authenticated organization user
+is modeled beside Application Users and People, given administrators remain a
+distinct privileged role; session, cookie, CSRF, and rate-limit handling for
+the OIDC flow behind the existing reverse-proxy trust; what public Project
+pages show in place of file actions, including availability badges and counts;
+and whether Project Logo serving, Project Repository Links, and administrator
+preview flows stay public or follow the same gate. Record the accepted model,
+then write the implementation brief.
 
-Implement
-`.memory/docs/increments/20-filter-panel-ordering-and-focus.md`. Order Academic year
-choices newest first. Keep explicitly ordinal dimensions such as Semester in
-their defined academic order. Default every non-ordinal choice list to
-descending occurrence count with alphabetical label and stable key tie-breakers;
-missing or zero counts belong after positive counts. Add a small accessible sort
-icon button within each applicable expanded filter body, not nested inside the
-`summary`, that toggles that group between occurrence-descending and
-alphabetical order and communicates the active mode. No icon library is needed.
-When a visitor expands a filter disclosure that contains a filter-search input,
-focus that input automatically after the user-initiated expansion. Do not steal
-focus for disclosures opened by initial rendering, restored state, or responsive
-layout, and do nothing for groups without a search input. Preserve selections,
-counts, OR-within-dimension behavior, keyboard disclosure behavior, scroll
-regions, and 200 percent zoom support.
-
-32. **Implemented as Increment 21, pending independent review.** Implemented
+32. **Implemented as Increment 21, correction committed and pending review.** Implemented
 2026-09-15 per `.memory/docs/increments/21-route-transition-scroll-reset.md`
 at the accepted Increment 20 baseline `eedeecd`. The shared AppFrame now
 focuses the main landmark with `preventScroll` on every pathname change and
@@ -182,6 +163,14 @@ pagination changes never reach the transition effect, the skip link keeps its
 native hash behavior, and activating the brand while already on Home returns
 the page to the top through the link itself. No layout workaround or
 dependency was added.
+
+Correction requested during independent review: make the first-render guard
+stable under the application's React Strict Mode mount, where effects repeat in
+development. Initial rendering must not focus main on the repeated setup. Keep
+the accepted pathname, history, same-path, focus, and scroll behavior unchanged,
+add a Strict Mode regression test, and remove jsdom's unimplemented `scrollTo`
+noise from the frontend test run. Correction commit `170f5a8` awaits
+independent review.
 
 ## Parked possibilities
 
