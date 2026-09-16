@@ -322,6 +322,11 @@ or deployment change was introduced.
 
 ## Completed correction work
 
+- **Resolved 2026-09-15, former backlog item 28:** the `People` search facet is
+  intentionally the broad `person_ids` superset covering students, advisors,
+  co-advisors, and committee members. The separate `Advisor` facet is a narrower
+  subset. The maintainer chose to retain the accurate `People` label and current
+  semantics, so no copy, projection, API, or filter change remains.
 - **Resolved 2026-09-13, former backlog item 23:** live public API diagnosis
   confirmed the accepted search contract. Multiple values within one filter
   dimension use OR, and different dimensions combine with AND. The maintainer

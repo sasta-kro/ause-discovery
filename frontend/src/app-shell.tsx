@@ -138,7 +138,7 @@ function AppFrame() {
     </div></header>
     <main id="main-content" ref={mainRef} tabIndex={-1} className={`${styles.main} ${location.pathname === '/' ? styles.homeMain : ''} ${location.pathname === '/search' ? styles.searchMain : ''}`}><Outlet /></main>
     <footer className={styles.footer}><div className={styles.footerInner}>
-      <span>{t('footer.credit')}</span><nav className={styles.footerNav} aria-label={t('nav.footer')}>
+      <span>{t('footer.creditPrefix')} <a href="https://github.com/sasta-kro" rel="noopener noreferrer" target="_blank">{t('footer.creditName')}</a></span><nav className={styles.footerNav} aria-label={t('nav.footer')}>
         <Link to="/about">{t('footer.about')}</Link><Link to="/privacy">{t('footer.privacy')}</Link><Link to="/accessibility">{t('footer.accessibility')}</Link><Link to="/terms">{t('footer.terms')}</Link><Link to="/contact">{t('footer.contact')}</Link>
       </nav>
     </div></footer>
@@ -447,11 +447,27 @@ function ClassificationGroups({ values }: { values: TaxonomyValue[] }) {
 function Definition({ label, value }: { label: string; value?: string | null }) { return value ? <div><dt>{label}</dt><dd>{value}</dd></div> : null }
 function formatBytes(bytes: number, translate: (key: string, options: { count: string }) => string): string { return translate('units.megabytes', { count: (bytes / 1024 / 1024).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1) }) }
 
-function InformationalPage({ titleKey, bodyKey, pendingKey }: { titleKey: 'aboutTitle' | 'privacyTitle' | 'accessibilityTitle' | 'termsTitle' | 'contactTitle'; bodyKey: 'aboutBody' | 'privacyBody' | 'accessibilityBody' | 'termsBody' | 'contactBody'; pendingKey?: 'privacyPending' | 'termsPending' | 'contactPending' }) {
+function InformationalPage({ titleKey, bodyKey, pendingKey }: { titleKey: 'privacyTitle' | 'accessibilityTitle' | 'termsTitle' | 'contactTitle'; bodyKey: 'privacyBody' | 'accessibilityBody' | 'termsBody' | 'contactBody'; pendingKey?: 'privacyPending' | 'termsPending' | 'contactPending' }) {
   const { t } = useTranslation()
   return <section className={styles.prose}><PageTitle title={t(`legal.${titleKey}`)} /><div className={styles.pageHeader}><h1>{t(`legal.${titleKey}`)}</h1></div>
     <p className={styles.lede}>{t(`legal.${bodyKey}`)}</p>
     {pendingKey ? <p className={styles.notice}>{t(`legal.${pendingKey}`)}</p> : null}
+  </section>
+}
+
+function AboutPage() {
+  const { t } = useTranslation()
+  return <section className={styles.prose}><PageTitle title={t('legal.aboutTitle')} /><div className={styles.pageHeader}><h1>{t('legal.aboutTitle')}</h1></div>
+    <p className={styles.lede}>{t('legal.aboutBody')}</p>
+    <section className={styles.aboutSection}>
+      <h2>{t('legal.aboutDevelopmentTitle')}</h2>
+      <p>{t('legal.aboutDevelopmentBody')}</p>
+      <p className={styles.developerByline}><span>{t('footer.creditName')}</span><span className={styles.developerRole}>{t('legal.aboutDeveloperRole')}</span><a href="https://github.com/sasta-kro" rel="noopener noreferrer" target="_blank">{t('legal.aboutProfileLink')}</a></p>
+    </section>
+    <section className={styles.aboutSection}>
+      <h2>{t('legal.aboutContentTitle')}</h2>
+      <p>{t('legal.aboutContentBody')}</p>
+    </section>
   </section>
 }
 
@@ -495,7 +511,7 @@ function LoginPage() {
     } finally {
       setSubmitting(false)
     }
-  })}><FormField label={t('fields.username')} error={form.formState.errors.username?.message}><input {...form.register('username', { required: t('feedback.required') })} autoComplete="username" /></FormField><FormField label={t('fields.password')} error={form.formState.errors.password?.message}><input {...form.register('password', { required: t('feedback.required') })} autoComplete="current-password" type="password" /></FormField><button className={styles.button} disabled={submitting} type="submit">{t('action.signIn')}</button></form></section>
+  })}><FormField label={t('fields.username')} error={form.formState.errors.username?.message}><input {...form.register('username', { required: t('feedback.required') })} autoComplete="username" /></FormField><FormField label={t('fields.password')} error={form.formState.errors.password?.message}><input {...form.register('password', { required: t('feedback.required') })} autoComplete="current-password" type="password" /></FormField><button className={styles.button} disabled={submitting} type="submit">{t('action.signIn')}</button></form><p className={styles.sessionNotice}>{t('admin.sessionCookieNotice')}</p></section>
 }
 
 function AdminHome() { const { t } = useTranslation(); return <div><PageTitle title={t('admin.overviewTitle')} /><h1>{t('admin.title')}</h1><p className={styles.lede}>{t('admin.overview')}</p></div> }
@@ -697,7 +713,7 @@ function AdminPersonRoutePage() { const { t } = useTranslation(); const { csrfTo
 function AdminProjectNewPage() { const { t } = useTranslation(); return <div><PageTitle title={t('admin.newProject')} /><ProjectFormPage isNew /></div> }
 function AdminProjectEditPage() { return <ProjectFormPage isNew={false} /> }
 
-export function AppRoutes() { return <Routes><Route element={<AppFrame />}><Route index element={<HomePage />} /><Route path="search" element={<SearchPage />} /><Route path="projects/:projectId" element={<ProjectPage />} /><Route path="people/:personId" element={<PersonPage />} /><Route path="about" element={<InformationalPage bodyKey="aboutBody" titleKey="aboutTitle" />} /><Route path="privacy" element={<InformationalPage bodyKey="privacyBody" pendingKey="privacyPending" titleKey="privacyTitle" />} /><Route path="accessibility" element={<InformationalPage bodyKey="accessibilityBody" titleKey="accessibilityTitle" />} /><Route path="terms" element={<InformationalPage bodyKey="termsBody" pendingKey="termsPending" titleKey="termsTitle" />} /><Route path="contact" element={<InformationalPage bodyKey="contactBody" pendingKey="contactPending" titleKey="contactTitle" />} /><Route path="admin/login" element={<LoginPage />} /><Route path="admin" element={<AdminGuard />}><Route index element={<AdminHome />} /><Route path="projects" element={<AdminProjectsRoutePage />} /><Route path="projects/new" element={<AdminProjectNewPage />} /><Route path="projects/:projectId/edit" element={<AdminProjectEditPage />} /><Route path="people" element={<AdminPeopleRoutePage />} /><Route path="people/:personId" element={<AdminPersonRoutePage />} /><Route path="imports" element={<AdminImportUploadPage />} /><Route path="imports/:batchId" element={<AdminImportReviewPage />} /><Route path="search" element={<AdminSearchPage />} /><Route path="audit" element={<AdminAuditPage />} /></Route><Route path="*" element={<NotFound />} /></Route></Routes> }
+export function AppRoutes() { return <Routes><Route element={<AppFrame />}><Route index element={<HomePage />} /><Route path="search" element={<SearchPage />} /><Route path="projects/:projectId" element={<ProjectPage />} /><Route path="people/:personId" element={<PersonPage />} /><Route path="about" element={<AboutPage />} /><Route path="privacy" element={<InformationalPage bodyKey="privacyBody" pendingKey="privacyPending" titleKey="privacyTitle" />} /><Route path="accessibility" element={<InformationalPage bodyKey="accessibilityBody" titleKey="accessibilityTitle" />} /><Route path="terms" element={<InformationalPage bodyKey="termsBody" pendingKey="termsPending" titleKey="termsTitle" />} /><Route path="contact" element={<InformationalPage bodyKey="contactBody" pendingKey="contactPending" titleKey="contactTitle" />} /><Route path="admin/login" element={<LoginPage />} /><Route path="admin" element={<AdminGuard />}><Route index element={<AdminHome />} /><Route path="projects" element={<AdminProjectsRoutePage />} /><Route path="projects/new" element={<AdminProjectNewPage />} /><Route path="projects/:projectId/edit" element={<AdminProjectEditPage />} /><Route path="people" element={<AdminPeopleRoutePage />} /><Route path="people/:personId" element={<AdminPersonRoutePage />} /><Route path="imports" element={<AdminImportUploadPage />} /><Route path="imports/:batchId" element={<AdminImportReviewPage />} /><Route path="search" element={<AdminSearchPage />} /><Route path="audit" element={<AdminAuditPage />} /></Route><Route path="*" element={<NotFound />} /></Route></Routes> }
 
 export function App() {
   useEffect(() => installSessionExpiryNotification(() => queryClient.setQueryData(['session'], null)), [])

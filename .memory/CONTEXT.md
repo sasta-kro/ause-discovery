@@ -124,3 +124,28 @@ _Avoid_: Tag, live result search, AI intent detection
 **Search Synchronization**:
 The projection of canonical Project data into the search index.
 _Avoid_: Replication
+
+## Governance and Attribution
+
+**Developer and Maintainer**:
+The person publicly credited for AUSE Discovery software design, development,
+and technical maintenance. The current credited person is Sai Aike Shwe Tun
+Aung. This role does not imply university employment, an institutional office,
+ownership of submitted Project content, or authority over institutional
+content-policy and correction decisions.
+_Avoid_: University administrator, content owner, institutional operator
+
+**Institutional Content Stewardship**:
+Content-policy, correction, access, and takedown decisions made by authorized
+university administrators for institutionally supplied Project records and
+source material. This responsibility remains distinct from software
+development and technical maintenance.
+_Avoid_: Developer content ownership, developer accuracy guarantee
+
+**Institutional Operating License**:
+The planned written permission for Assumption University to host, operate,
+reproduce, back up, and reasonably maintain independently developed AUSE
+Discovery software without transferring software ownership. Exact terms remain
+subject to a written agreement and qualified legal review, so this term
+describes the selected direction rather than an executed license.
+_Avoid_: Copyright transfer, public open-source license, informal verbal permission

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nextProvider } from 'react-i18next'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router'
@@ -224,6 +224,74 @@ describe('shared application shell', () => {
       const skipLink = screen.getByRole('link', { name: 'Skip to main content' })
       expect(skipLink.getAttribute('href')).toBe('#main-content')
       expect(skipLink.tagName).toBe('A')
+    })
+  })
+
+  describe('developer attribution and session-cookie disclosure', () => {
+    it('shows the exact footer credit with the profile link on home and another route', () => {
+      renderAt('/')
+      const credit = screen.getByText('Developed and maintained by', { exact: false })
+      expect(credit.textContent).toBe('Developed and maintained by Sai Aike Shwe Tun Aung')
+      const profile = screen.getByRole('link', { name: 'Sai Aike Shwe Tun Aung' })
+      expect(profile.getAttribute('href')).toBe('https://github.com/sasta-kro')
+      expect(profile.getAttribute('rel')).toContain('noopener')
+      expect(profile.getAttribute('rel')).toContain('noreferrer')
+      expect(profile.getAttribute('target')).toBe('_blank')
+      cleanup()
+
+      renderAt('/search')
+      expect(screen.getByText('Developed and maintained by', { exact: false }).textContent).toBe('Developed and maintained by Sai Aike Shwe Tun Aung')
+    })
+
+    it('keeps the credit outside the footer navigation landmark', () => {
+      renderAt('/')
+      const footerNavigation = screen.getByRole('navigation', { name: 'Footer navigation' })
+      expect(footerNavigation.querySelectorAll('a')).toHaveLength(5)
+      expect(within(footerNavigation).queryByRole('link', { name: 'Sai Aike Shwe Tun Aung' })).toBeNull()
+      for (const label of ['About', 'Privacy', 'Accessibility', 'Terms', 'Contact information pending']) {
+        expect(within(footerNavigation).getByRole('link', { name: label })).toBeTruthy()
+      }
+    })
+
+    it('renders the structured About page with the approved factual content', () => {
+      renderAt('/about')
+      expect(screen.getByRole('heading', { level: 1, name: 'About AUSE Discovery' })).toBeTruthy()
+      const headings = screen.getAllByRole('heading').map((heading) => `${heading.tagName}:${heading.textContent}`)
+      expect(headings).toEqual(['H1:About AUSE Discovery', 'H2:Development and maintenance', 'H2:Content and corrections'])
+      expect(screen.getByText('AUSE Discovery is an institutional archive of historical senior projects. Visitors can search public project metadata by people, academic context, and controlled classifications. Authorized administrators maintain the records, project files, and search state.')).toBeTruthy()
+      expect(screen.getByText('AUSE Discovery is an independent software project designed, developed, and maintained by Sai Aike Shwe Tun Aung, a Computer Science student at Assumption University. The platform is hosted on university infrastructure with authorization and support from faculty administrators for the benefit of the university community.')).toBeTruthy()
+      expect(screen.getByText('Project metadata is transcribed and processed from source materials supplied by authorized university administrators. Content-policy and correction decisions are handled through authorized university administrators. Institutional contact information is pending approval.')).toBeTruthy()
+      expect(screen.getByText('Developer and maintainer')).toBeTruthy()
+      const profile = screen.getByRole('link', { name: 'Developer GitHub profile' })
+      expect(profile.getAttribute('href')).toBe('https://github.com/sasta-kro')
+      expect(profile.getAttribute('rel')).toContain('noopener')
+      expect(profile.getAttribute('target')).toBe('_blank')
+    })
+
+    it('adds no email, repository link, copyright notice, or license claim', () => {
+      renderAt('/about')
+      const text = document.body.textContent ?? ''
+      expect(text).not.toContain('©')
+      expect(text).not.toContain('All rights reserved')
+      expect(text).not.toMatch(/\bMIT\b|GNU|Apache license|software license/i)
+      expect(text).not.toMatch(/[\w.]+@[\w.]+\.[a-z]{2,}/)
+      const links = Array.from(document.querySelectorAll('a')).map((link) => link.getAttribute('href'))
+      expect(links).not.toContain('https://github.com/ause-discovery')
+      // The only external destinations are the footer and About profile links.
+      expect(links.filter((href) => href?.startsWith('https://'))).toEqual(['https://github.com/sasta-kro', 'https://github.com/sasta-kro'])
+    })
+
+    it('renders the exact session-cookie disclosure below the sign-in form', () => {
+      renderAt('/admin/login')
+      const disclosure = screen.getByText('A strictly necessary session cookie is used to authenticate authorized administrators. It is not used for public tracking or advertising.')
+      expect(disclosure.tagName).toBe('P')
+      expect(disclosure.getAttribute('role')).toBeNull()
+      expect(disclosure.getAttribute('aria-live')).toBeNull()
+      const form = screen.getByRole('button', { name: 'Sign in' }).closest('form')!
+      expect(disclosure.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+      expect(screen.queryByRole('checkbox')).toBeNull()
+      expect(screen.getByLabelText('Username')).toBeTruthy()
+      expect(screen.getByLabelText('Password')).toBeTruthy()
     })
   })
 

@@ -17,10 +17,9 @@ Completed work and historical verification evidence belong in `completed.md`.
 | Correction | Partial | Acknowledge all import warnings |
 | Correction | Open | Bounded import-preview text layout |
 | 24 | Parked | Optional Project Logo payload optimization |
-| 26 | Discussion required | Ownership, institutional license, public legal text, and developer credit |
-| 27 | Discussion required | Privacy-preserving telemetry and administrator analytics |
-| 28 | Discussion required | Clarify the People search facet terminology and scope |
-| 31 | Discussion required | Organization-only Artifact access through Microsoft Entra ID |
+| 26 | Implemented in part as Increment 23, pending independent review; external legal review still required | Ownership, institutional license, public legal text, and developer credit |
+| 27 | Deferred | Privacy-preserving telemetry and administrator analytics |
+| 31 | External policy decision | Public or organization-only Project File access |
 
 ## Current activity
 
@@ -34,6 +33,14 @@ Completed work and historical verification evidence belong in `completed.md`.
   independently accepted on 2026-09-15. Its record moved to `completed.md`.
 - Increment 22 was implemented at `afb6864`, corrected at `7388627`, and
   independently accepted on 2026-09-15. Its record moved to `completed.md`.
+- Increment 23 implemented the factual developer attribution portion on
+  2026-09-16 per
+  `.memory/docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`.
+  The shared footer and About page credit Sai Aike Shwe Tun Aung as Developer
+  and maintainer with a GitHub profile link, and the administrator sign-in
+  carries the compact strictly-necessary session-cookie disclosure. The item
+  awaits independent review, and final legal and institutional policy remains
+  outside the implementation boundary.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -101,18 +108,54 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 
 20. **Open, future product increment.** The import schema rejects any metadata row without at least one advisor (`missing_advisor` error, `backend/internal/imports/validation.go`). Four corpus projects genuinely print no advisor in any staged document (verified by full-text search on 2026-09-13: sp-1800 report without an approval page, and the slide-only decks sp-2021, sp-2031, sp-2032). The maintainer dropped these four from the import CSV for now (documented in the extractor's `DROPPED_NO_ADVISOR` set) rather than invent names, and the dataset records remain as ground truth. A future implementation should treat a missing advisor as an import warning with an honest public display ("advisor not recorded"), so advisorless legacy documents can join the archive.
 
-26. **Discussion required before an implementation brief.** Establish the
-copyright owner, the rights granted to Assumption University, maintenance and
-modification rights after graduation, institutional approval of public legal
-text, and professional developer attribution. The intended presentation is a
-short developer credit in the site footer and a fuller About-page section with
-the developer's approved name, GitHub profile, and contact route. No public
-copyright ownership claim or license notice should be published until written
-agreements, applicable university policy, contributor rights, and Thai legal
-advice have been checked. Privacy, Terms of Use, Contact, and any separate
-copyright or license notice should use approved institutional content.
+26. **Implemented in part as Increment 23, pending independent review;
+external legal review remains required for final legal text.** The factual
+attribution portion shipped 2026-09-16 per
+`.memory/docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`:
+the shared footer credits Sai Aike Shwe Tun Aung as developer and maintainer
+with a profile link to `https://github.com/sasta-kro`, the About page
+separates software development from institutional content stewardship, and
+the administrator sign-in carries the compact strictly-necessary
+session-cookie disclosure. No copyright notice, software license, email
+address, or repository link was published, and the final legal instruments
+below remain open.
 
-27. **Discussion required, future product increment separate from item 26.**
+External review remains required for final
+legal text. AUSE Discovery was independently initiated and
+developed by bachelor Computer Science student Sai Aike Shwe Tun Aung, without
+an employee role, official university position, formal commission, or current
+written ownership agreement. The preferred direction is developer ownership of
+the software plus a written institutional operating license that lets
+Assumption University host, operate, reproduce, back up, and maintain it,
+including reasonable security and continuity work, without creating an
+absolute modification prohibition. Exact modification, successor-maintainer,
+redistribution, commercialization, termination, and attribution rights remain
+for a written agreement and qualified Thai legal review.
+
+Public attribution is settled for Increment 23: use the accurate role `Developer and
+maintainer`, the name `Sai Aike Shwe Tun Aung`, and the GitHub profile
+`https://github.com/sasta-kro`. Do not invent a university title. Direct email
+publication is deferred to avoid spam; use GitHub as the initial public contact
+route. A public source-repository link is also deferred. The intended UI is a
+short footer credit and a fuller About section that distinguishes software
+development and maintenance from institutional content stewardship. Increment
+23 implements this attribution plus a compact factual disclosure beside the
+administrator sign-in form for the existing strictly necessary session cookie.
+
+Public legal copy should state neutrally that Project metadata is transcribed
+and processed from institutionally supplied source material, while corrections
+and content-policy decisions are handled through authorized university
+administrators. It should not make the developer the guarantor of report or
+metadata accuracy, the sole public operator, or the owner of submitted Project
+content. Terms should target educational and noncommercial use and prohibit
+commercial exploitation, access-control circumvention, and abusive automated
+extraction, subject to institutional approval and applicable law. Project File
+rights, public availability, correction and takedown routes, institutional
+branding, the public operator or data controller, and final Privacy, Terms of
+Use, Contact, copyright, and license wording still require written university
+approval. No public ownership claim should ship before that review.
+
+27. **Deferred, far-future product work separate from item 26.**
 Add first-party telemetry for institutional insight and an administrator-only
 analytics area with appropriate tables, graphs, and charts. Candidate measures
 include search phrases, zero-result searches, selected filters, traffic by
@@ -124,31 +167,30 @@ cost. The preferred first stage is cookieless, privacy-minimized aggregate
 telemetry without cross-site tracking, advertising identifiers, fingerprinting,
 or persistent public visitor identities. Unique-visitor or session analytics
 remain a separate decision. This work requires backend persistence and APIs as
-well as frontend dashboards and is not a frontend-only addition.
+well as frontend dashboards and is not a frontend-only addition. No telemetry,
+analytics cookie, visitor identifier, or implementation brief is planned until
+the maintainer explicitly resumes this item.
 
 
 
 
-31. **Open, discussion required. Organization-only Artifact access through
-Microsoft Entra ID.** Project File viewing and downloading must become
-available only to authenticated organization users signing in with Microsoft
-Entra ID, with every Entra role eligible for access. Public visitors receive
-neither view nor download access to Project Files. This replaces the accepted
-public Artifact contract: the public `/artifacts/{artifact_id}/view` and
-`/artifacts/{artifact_id}/download` endpoints, inline PDF viewing, the View
-and Download actions on public Project pages, and Artifact availability search
-facets all need an access-model decision. Public search over Artifact metadata
-is expected to remain. Decisions required before any brief: whether Entra ID
-replaces or joins the existing local administrator authentication for
-Application Users; the Entra tenant, application registration, redirect, and
-single- or multi-tenant configuration; how an authenticated organization user
-is modeled beside Application Users and People, given administrators remain a
-distinct privileged role; session, cookie, CSRF, and rate-limit handling for
-the OIDC flow behind the existing reverse-proxy trust; what public Project
-pages show in place of file actions, including availability badges and counts;
-and whether Project Logo serving, Project Repository Links, and administrator
-preview flows stay public or follow the same gate. Record the accepted model,
-then write the implementation brief.
+31. **External policy decision; no implementation brief yet. Public or
+organization-only Project File access.** The university administrator has not
+yet decided whether Project Files remain publicly viewable and downloadable or
+become available only to authenticated Assumption University organization
+members. Preserve the current public Artifact contract until that decision is
+authorized. The candidate restricted model uses Microsoft Entra ID for any
+organization member without role differentiation for file access, while local
+administrator authorization remains a separate privileged concern unless later
+decided otherwise. Public Project metadata and search are expected to remain.
+If restricted access is selected, the future increment must cover the public
+`/artifacts/{artifact_id}/view` and `/artifacts/{artifact_id}/download`
+endpoints, inline PDF viewing, public View and Download actions, Artifact
+availability search facets, tenant and application registration, OIDC sessions,
+cookies, CSRF, rate limiting, public locked-file presentation, Project Logos,
+Repository Links, and administrator previews. Confirm the university's rights
+and policy for submitted Project content before choosing either public or
+organization-only delivery.
 
 ## Parked possibilities
 

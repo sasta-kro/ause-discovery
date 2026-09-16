@@ -144,6 +144,12 @@
 .filterChoiceCount { color: var(--color-muted); font-size: .7rem; font-variant-numeric: tabular-nums; }
 .filterChoiceAction { color: var(--color-accent-strong); font-size: .68rem; font-weight: 700; text-transform: uppercase; }
 .filterEmpty { color: var(--color-muted); font-size: .82rem; margin: .4rem 0; }
+.aboutSection { margin-top: var(--space-5); }
+.aboutSection h2 { font-size: 1.15rem; margin: 0 0 .6rem; }
+.developerByline { align-items: baseline; color: var(--color-muted); display: flex; flex-wrap: wrap; gap: .5rem; margin: .8rem 0 0; }
+.developerByline > span:first-child { color: var(--color-ink); font-weight: 600; }
+.developerRole { font-size: .82rem; }
+.sessionNotice { color: var(--color-muted); font-size: .78rem; line-height: 1.5; margin: .7rem 0 0; max-width: 30rem; }
 .studentIdFilter { display: grid; gap: .4rem; grid-template-columns: minmax(0, 1fr) auto; padding-bottom: .9rem; }
 .studentIdFilter input { min-width: 0; }
 .studentIdFilter button { background: var(--color-secondary); border: 1px solid var(--color-secondary); color: white; cursor: pointer; padding-inline: .8rem; }
