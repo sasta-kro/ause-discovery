@@ -24,13 +24,14 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Filter panel ordering, sort toggles, and expansion focus | `../docs/increments/20-filter-panel-ordering-and-focus.md`, commit `eedeecd` |
 | Route transition scroll reset | `../docs/increments/21-route-transition-scroll-reset.md`, commit `0591de0`, correction commit `170f5a8` |
 | Complete Person facet values | `../docs/increments/22-complete-person-facet-values.md`, commit `afb6864`, correction commit `7388627` |
+| Developer attribution and current public policies | `../docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`, commit `7af6120`, direct correction commit `5b48ccb` |
 | VM deployment and proxy correction | `../sasta-dev-notes/records/vm-deployment-2026-09-13.md` |
 | VM 0.5 in-place preservation upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-15-v0.5.md` |
 
 
 ## Technical completion
 
-Status as of 2026-09-05: the technical MVP is complete at commit `1cc5dc6`. All planned implementation increments and final product-completion verification passed. Remaining production ownership, infrastructure, approved content, and legal values are launch-readiness inputs rather than technical MVP blockers.
+Status as of 2026-09-05: the technical MVP is complete at commit `1cc5dc6`. All planned implementation increments and final product-completion verification passed. Current public Terms, Privacy, Accessibility, Contact, and developer attribution are implemented. The private institutional operating agreement and remaining external infrastructure or content inputs are separate from public site copy.
 
 ## Verified increments
 
@@ -319,6 +320,29 @@ Go vet, all 174 frontend component tests, and the corrected three-test Chromium
 acceptance. No database migration, Search Document field, OpenAPI,
 generated-client, endpoint, frontend implementation, dependency, publication,
 or deployment change was introduced.
+
+30. **Implemented and accepted as Increment 23, 2026-09-16**
+(`.memory/docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`).
+Commit `7af6120`, directly corrected by `5b48ccb`, adds the shared footer and
+structured About-page credit for Sai Aike Shwe Tun Aung as Developer and
+maintainer, linking only the public GitHub profile and distinguishing software
+maintenance from institutional content stewardship. The administrator sign-in
+has one compact disclosure covering the necessary authentication and CSRF
+cookies without a banner or consent control. Direct correction `5b48ccb`
+removed internal pending-approval placeholders from public pages and replaced
+them with current Terms, Privacy, Accessibility, and Contact copy. Terms record
+educational and non-commercial use, content-rights boundaries, access-control
+and anti-abuse rules, source-record accuracy limits, and possible correction or
+restriction. Privacy records current public and administrator data, absence of
+behavioral analytics and advertising cookies, ordinary hosting request data,
+operational purposes, retention basis, and the university privacy framework.
+Contact separates technical questions through the developer GitHub profile
+from institutional requests through the public VMES contact. The private
+institutional software operating agreement remains open and is not presented
+as a public-site approval state. Verification passed the focused 20-test shared
+frame suite, `tsc -b`, repository text scans, and `git diff --check`. No backend,
+API, database, authentication behavior, telemetry, dependency, publication, or
+deployment change was introduced.
 
 ## Completed correction work
 

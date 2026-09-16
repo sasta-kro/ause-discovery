@@ -25,8 +25,9 @@ ordering and expansion focus Increment 20 is independently accepted at commit
 `eedeecd`. Route transition scroll reset Increment 21 was implemented at
 `0591de0` and corrected and independently accepted at `170f5a8`. Complete
 Person facet values Increment 22 was implemented at `afb6864` and corrected and
-independently accepted at `7388627`, the current accepted implementation
-baseline.
+independently accepted at `7388627`. Developer attribution and current public
+policy copy Increment 23 was implemented at `7af6120` and corrected directly at
+`5b48ccb`, the current accepted implementation baseline.
 API and web release 0.5 from `95bd9fc` were deployed successfully through the
 production-preserving upgrade path on 2026-09-15.
 

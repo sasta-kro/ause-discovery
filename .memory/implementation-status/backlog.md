@@ -41,7 +41,8 @@ Completed work and historical verification evidence belong in `completed.md`.
   carries the compact strictly-necessary authentication-cookie disclosure. A
   direct product-owner correction on 2026-09-16 replaced public
   pending-approval placeholders with current Terms, Privacy, Accessibility,
-  and Contact copy. The private institutional operating agreement remains
+  and Contact copy. The implementation commit `7af6120` and direct correction
+  `5b48ccb` are accepted. The private institutional operating agreement remains
   separate.
 
 No status-specific in-progress file exists. Add one only when work must remain
