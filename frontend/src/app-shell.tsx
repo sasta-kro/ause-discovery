@@ -128,9 +128,7 @@ function AppFrame() {
     <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
       <Link className={styles.brand} onClick={() => { if (location.pathname === '/') window.scrollTo(0, 0) }} to="/" aria-label={t('brand')}>
-        <span className={styles.brandLogoCrop} aria-hidden="true">
-          <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-v1.svg`} alt="" />
-        </span>
+        <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-header.svg`} alt="" aria-hidden="true" />
       </Link>
       <nav className={styles.navigation} aria-label={t('nav.primary')}>
         <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink className={styles.adminNavigationLink} to="/admin">{t('nav.admin')}</NavLink>

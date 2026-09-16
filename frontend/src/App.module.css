@@ -6,8 +6,7 @@
 .main { width: min(100% - 2rem, var(--layout-width)); margin-inline: auto; }
 .headerInner { min-height: 5.2rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .brand { display: block; flex: 0 0 auto; text-decoration: none; }
-.brandLogoCrop { display: block; height: clamp(3.35rem, 5vw, 4.1rem); overflow: hidden; position: relative; width: clamp(9.75rem, 16vw, 12rem); }
-.brandLogo { display: block; height: auto; left: -15.1%; max-width: none; position: absolute; top: -43.7%; width: 129.25%; }
+.brandLogo { display: block; height: 3.6rem; width: auto; }
 .navigation { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .navigation a { color: var(--color-muted); text-decoration: none; }
 .navigation a[aria-current='page'] { color: var(--color-accent-strong); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: .45rem; }

@@ -73,7 +73,7 @@ describe('shared application shell', () => {
     expect(document.querySelectorAll('main')).toHaveLength(1)
     const skipLink = screen.getByRole('link', { name: 'Skip to main content' })
     expect(skipLink.getAttribute('href')).toBe('#main-content')
-    const brandLogo = document.querySelector<HTMLImageElement>('img[src$="ause-discover-logo-v1.svg"]')
+    const brandLogo = document.querySelector<HTMLImageElement>('img[src$="ause-discover-logo-header.svg"]')
     expect(brandLogo?.alt).toBe('')
     expect(screen.getByRole('navigation', { name: 'Primary navigation' })).toBeTruthy()
     expect(screen.getByRole('navigation', { name: 'Footer navigation' })).toBeTruthy()
