@@ -248,7 +248,7 @@ describe('shared application shell', () => {
       const footerNavigation = screen.getByRole('navigation', { name: 'Footer navigation' })
       expect(footerNavigation.querySelectorAll('a')).toHaveLength(5)
       expect(within(footerNavigation).queryByRole('link', { name: 'Sai Aike Shwe Tun Aung' })).toBeNull()
-      for (const label of ['About', 'Privacy', 'Accessibility', 'Terms', 'Contact information pending']) {
+      for (const label of ['About', 'Privacy', 'Accessibility', 'Terms', 'Contact']) {
         expect(within(footerNavigation).getByRole('link', { name: label })).toBeTruthy()
       }
     })
@@ -260,7 +260,7 @@ describe('shared application shell', () => {
       expect(headings).toEqual(['H1:About AUSE Discovery', 'H2:Development and maintenance', 'H2:Content and corrections'])
       expect(screen.getByText('AUSE Discovery is an institutional archive of historical senior projects. Visitors can search public project metadata by people, academic context, and controlled classifications. Authorized administrators maintain the records, project files, and search state.')).toBeTruthy()
       expect(screen.getByText('AUSE Discovery is an independent software project designed, developed, and maintained by Sai Aike Shwe Tun Aung, a Computer Science student at Assumption University. The platform is hosted on university infrastructure with authorization and support from faculty administrators for the benefit of the university community.')).toBeTruthy()
-      expect(screen.getByText('Project metadata is transcribed and processed from source materials supplied by authorized university administrators. Content-policy and correction decisions are handled through authorized university administrators. Institutional contact information is pending approval.')).toBeTruthy()
+      expect(screen.getByText('Project metadata is transcribed and processed from source materials supplied by authorized university administrators. Content-policy and correction decisions are handled through authorized university administrators. Requests concerning project records, corrections, privacy, or institutional policy may be sent through the Contact page.')).toBeTruthy()
       expect(screen.getByText('Developer and maintainer')).toBeTruthy()
       const profile = screen.getByRole('link', { name: 'Developer GitHub profile' })
       expect(profile.getAttribute('href')).toBe('https://github.com/sasta-kro')
@@ -283,7 +283,7 @@ describe('shared application shell', () => {
 
     it('renders the exact session-cookie disclosure below the sign-in form', () => {
       renderAt('/admin/login')
-      const disclosure = screen.getByText('A strictly necessary session cookie is used to authenticate authorized administrators. It is not used for public tracking or advertising.')
+      const disclosure = screen.getByText('Strictly necessary cookies are used to authenticate authorized administrators and protect administrative requests. They are not used for public tracking or advertising.')
       expect(disclosure.tagName).toBe('P')
       expect(disclosure.getAttribute('role')).toBeNull()
       expect(disclosure.getAttribute('aria-live')).toBeNull()
@@ -295,12 +295,29 @@ describe('shared application shell', () => {
     })
   })
 
-  it('renders the pending contact route and a recoverable Not Found page', () => {
-    renderAt('/contact')
-    expect(screen.getByRole('heading', { name: 'Contact and institutional information' })).toBeTruthy()
-    expect(screen.getByText('Institutional contact information is pending approval.')).toBeTruthy()
+  it('renders settled privacy, terms, and contact information without internal approval status', () => {
+    renderAt('/privacy')
+    expect(screen.getByRole('heading', { name: 'Privacy policy' })).toBeTruthy()
+    expect(screen.getByText(/does not use behavioral analytics, advertising cookies, or persistent public visitor identifiers/)).toBeTruthy()
+    expect(screen.getByText(/strictly necessary cookies authenticate administrators and protect administrative requests/)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/pending approval/i)
     cleanup()
 
+    renderAt('/terms')
+    expect(screen.getByRole('heading', { name: 'Terms of use' })).toBeTruthy()
+    expect(screen.getByText(/educational, research, and non-commercial reference use/)).toBeTruthy()
+    expect(screen.getByText(/does not transfer ownership or grant permission to republish, sell, or commercially exploit/)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/pending approval/i)
+    cleanup()
+
+    renderAt('/contact')
+    expect(screen.getByRole('heading', { name: 'Contact and institutional information' })).toBeTruthy()
+    expect(screen.getByText(/Vincent Mary School of Engineering, Science and Technology at vmes@au.edu/)).toBeTruthy()
+    expect(screen.getByText(/Developer GitHub profile on the About page/)).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/pending approval/i)
+  })
+
+  it('renders a recoverable Not Found page', () => {
     renderAt('/missing-route')
     expect(screen.getByRole('heading', { name: 'The requested page was not found.' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Back to home' })).toBeTruthy()

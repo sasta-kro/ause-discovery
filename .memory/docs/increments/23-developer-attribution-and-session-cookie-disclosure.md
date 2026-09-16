@@ -4,15 +4,15 @@
 
 Add accurate, professional developer attribution to the shared footer and the
 About page. Add one compact disclosure beside the administrator sign-in form
-for the strictly necessary administrator session cookie. Preserve the current
-pending status of final institutional Terms, Privacy, Contact, copyright, and
-software-license language.
+for the strictly necessary administrator authentication cookies. Replace the
+public placeholder language with current Terms, Privacy, and Contact text based
+on the settled product decisions.
 
 This is a bounded frontend content and presentation increment. It implements
 settled factual attribution and current technical behavior. It does not create
 a binding software license, transfer copyright, assign ownership of Project
 content, designate a legal operator or data controller, or publish terms that
-still require institutional and legal approval.
+claim an executed institutional software agreement.
 
 Start from the current repository chain through `3bfbcd3`, whose accepted
 implementation baseline is Increment 22 corrected through `7388627`. Preserve
@@ -151,18 +151,18 @@ position.
 Use this text:
 
 ```text
-Project metadata is transcribed and processed from source materials supplied by authorized university administrators. Content-policy and correction decisions are handled through authorized university administrators. Institutional contact information is pending approval.
+Project metadata is transcribed and processed from source materials supplied by authorized university administrators. Content-policy and correction decisions are handled through authorized university administrators. Requests concerning project records, corrections, privacy, or institutional policy may be sent through the Contact page.
 ```
 
-Do not add a correction email or direct content requests to the developer.
-Keep the existing Contact page and pending institutional-contact message.
+Do not direct content requests to the developer. The Contact page separates the
+developer's technical contact route from the public VMES institutional contact.
 
 ### Administrator session-cookie disclosure
 
 Place one short disclosure directly below the administrator sign-in form:
 
 ```text
-A strictly necessary session cookie is used to authenticate authorized administrators. It is not used for public tracking or advertising.
+Strictly necessary cookies are used to authenticate authorized administrators and protect administrative requests. They are not used for public tracking or advertising.
 ```
 
 This is intentionally quiet supporting text. Add a dedicated style that is
@@ -176,21 +176,21 @@ The disclosure describes the existing administrator authentication behavior.
 It does not authorize analytics. No public visitor cookie banner is needed in
 this increment because no optional analytics or advertising cookie exists.
 
-### Existing Privacy, Terms, and Contact pages
+### Privacy, Terms, and Contact pages
 
-Preserve the current truthful technical statements and pending-approval
-notices. Small wording adjustments are allowed only to keep the new About and
-cookie text consistent. The following boundaries remain mandatory:
+Publish the current operating statements without exposing internal approval
+status. Privacy describes the existing public records, absence of behavioral
+analytics and advertising cookies, necessary administrator cookies, ordinary
+hosting request data, operational purposes, retention basis, and the
+institutional privacy framework. Terms records the settled educational and
+non-commercial use boundary, content-rights boundary, access-control and abuse
+rules, source-record accuracy limitation, and ability to correct or restrict
+access. Contact separates technical questions through the developer's GitHub
+profile from institutional requests through the public VMES contact address.
 
-- Privacy continues to state that no behavioral analytics are collected.
-- Terms continues to state only the current study-and-reference behavior and
-  that final institutional terms are pending approval.
-- Contact continues to state that institutional contact details are pending.
-- No final copyright, ownership, institutional-license, Project-content rights,
-  acceptable-use prohibition, warranty, liability, governing-law, privacy
-  controller, takedown, or dispute language ships in this increment.
-
-Those subjects require approved wording rather than coder-authored legal text.
+No public software-copyright claim, executed institutional operating license,
+governing-law clause, liability allocation, or ownership claim over submitted
+Project content ships in this increment.
 
 ## Interaction and accessibility contract
 
@@ -215,7 +215,10 @@ Those subjects require approved wording rather than coder-authored legal text.
 - GitHub profile link on the credited name.
 - Structured About page with archive, developer, hosting-context, and
   content-stewardship sections.
-- One compact administrator session-cookie disclosure below the sign-in form.
+- One compact administrator authentication-cookie disclosure below the sign-in
+  form.
+- Current public Privacy, Terms, Accessibility-contact, and Contact copy without
+  internal approval-status messages.
 - Focused frontend tests for exact public content, destinations, structure,
   route coverage, and disclosure placement.
 - Relevant internal implementation-status updates.
@@ -228,10 +231,8 @@ Those subjects require approved wording rather than coder-authored legal text.
 - Microsoft Entra ID or Project File access-control changes.
 - Telemetry, analytics, tracking, consent management, visitor identifiers, or
   cookie banners.
-- Direct public email address, contact form, or source-repository link.
+- Direct personal email address, contact form, or source-repository link.
 - An official university title or employment claim.
-- Final Terms of Use, Privacy Policy, Contact route, correction route, takedown
-  procedure, or acceptable-use rules.
 - Public software copyright or license claims.
 - Project-content ownership or republication-rights claims.
 - A LICENSE file, bespoke legal agreement, MOU, or ADR.
@@ -311,8 +312,8 @@ does not change those boundaries.
 6. Add minimal styles for About structure and the low-emphasis disclosure.
 7. Run focused tests and responsive inspection.
 8. Run the bounded frontend regression and static checks.
-9. Mark the implemented portion of item 26 pending independent review while
-   leaving final legal approval work open.
+9. Mark the public-copy portion of item 26 complete while leaving the private
+   institutional operating agreement open.
 10. Commit once and stop.
 
 ## Completion criteria
@@ -325,8 +326,8 @@ does not change those boundaries.
   content stewardship and does not invent a university position.
 - The administrator sign-in page carries the exact compact necessary-cookie
   disclosure without a banner or consent interaction.
-- Current Privacy, Terms, and Contact pending-approval boundaries remain
-  truthful and unchanged in substance.
+- Current Privacy, Terms, Accessibility, and Contact pages contain settled
+  public copy without internal approval-status messages.
 - No ownership transfer, executed license, Project-content ownership, sole
   operator, or final institutional-policy claim is published.
 - Existing authentication and all backend behavior remain unchanged.
@@ -347,14 +348,14 @@ Stop after the implementation commit. Report:
 - cookie-disclosure placement, visual treatment, and semantics;
 - confirmation that no email, repository link, official title, copyright
   notice, or public software license was added;
-- confirmation that pending Privacy, Terms, Contact, Project-content, and
-  institutional-license decisions remain pending;
+- confirmation that public Privacy, Terms, and Contact placeholders were
+  replaced while the private institutional operating agreement remains open;
 - focused, full frontend, lint, typecheck, build, responsive, and accessibility
   results;
 - any failed, skipped, or residual concern;
 - confirmation that every excluded boundary remains unchanged;
-- confirmation that item 26 remains open for external legal and institutional
-  approval after the implemented portion is marked pending independent review;
+- confirmation that item 26 remains open only for the private institutional
+  operating agreement and later policy changes;
 - final `git status --short`.
 
 ## Legal and policy references

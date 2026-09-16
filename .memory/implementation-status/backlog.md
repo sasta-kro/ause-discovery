@@ -17,7 +17,7 @@ Completed work and historical verification evidence belong in `completed.md`.
 | Correction | Partial | Acknowledge all import warnings |
 | Correction | Open | Bounded import-preview text layout |
 | 24 | Parked | Optional Project Logo payload optimization |
-| 26 | Implemented in part as Increment 23, pending independent review; external legal review still required | Ownership, institutional license, public legal text, and developer credit |
+| 26 | Public copy implemented; private agreement remains | Ownership, institutional license, public legal text, and developer credit |
 | 27 | Deferred | Privacy-preserving telemetry and administrator analytics |
 | 31 | External policy decision | Public or organization-only Project File access |
 
@@ -38,9 +38,11 @@ Completed work and historical verification evidence belong in `completed.md`.
   `.memory/docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`.
   The shared footer and About page credit Sai Aike Shwe Tun Aung as Developer
   and maintainer with a GitHub profile link, and the administrator sign-in
-  carries the compact strictly-necessary session-cookie disclosure. The item
-  awaits independent review, and final legal and institutional policy remains
-  outside the implementation boundary.
+  carries the compact strictly-necessary authentication-cookie disclosure. A
+  direct product-owner correction on 2026-09-16 replaced public
+  pending-approval placeholders with current Terms, Privacy, Accessibility,
+  and Contact copy. The private institutional operating agreement remains
+  separate.
 
 No status-specific in-progress file exists. Add one only when work must remain
 active across sessions without being represented by an implementation brief.
@@ -74,7 +76,7 @@ deliberately selected non-production storage targets.
 
 ### Launch-only inputs
 
-GitHub ownership, registry ownership, production URL, VM details, branding, approved legal content, privacy approval, TLS ownership, and final institutional catalog content remain launch-readiness inputs rather than technical MVP blockers.
+GitHub ownership, registry ownership, production URL, VM details, branding, TLS ownership, and final institutional catalog content remain launch-readiness inputs rather than technical MVP blockers.
 
 ## Recurring operations
 
@@ -108,29 +110,32 @@ Applied to version-controlled catalogs, pending the next `ausectl catalog sync` 
 
 20. **Open, future product increment.** The import schema rejects any metadata row without at least one advisor (`missing_advisor` error, `backend/internal/imports/validation.go`). Four corpus projects genuinely print no advisor in any staged document (verified by full-text search on 2026-09-13: sp-1800 report without an approval page, and the slide-only decks sp-2021, sp-2031, sp-2032). The maintainer dropped these four from the import CSV for now (documented in the extractor's `DROPPED_NO_ADVISOR` set) rather than invent names, and the dataset records remain as ground truth. A future implementation should treat a missing advisor as an import warning with an honest public display ("advisor not recorded"), so advisorless legacy documents can join the archive.
 
-26. **Implemented in part as Increment 23, pending independent review;
-external legal review remains required for final legal text.** The factual
-attribution portion shipped 2026-09-16 per
+26. **Public copy implemented in Increment 23; the private institutional
+operating agreement remains open.** The factual attribution portion shipped
+2026-09-16 per
 `.memory/docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`:
 the shared footer credits Sai Aike Shwe Tun Aung as developer and maintainer
 with a profile link to `https://github.com/sasta-kro`, the About page
 separates software development from institutional content stewardship, and
 the administrator sign-in carries the compact strictly-necessary
-session-cookie disclosure. No copyright notice, software license, email
-address, or repository link was published, and the final legal instruments
-below remain open.
+authentication-cookie disclosure. The public Terms, Privacy, Accessibility,
+and Contact copy records current behavior and the settled educational,
+non-commercial, content-rights, anti-abuse, correction, and contact boundaries
+without exposing internal approval status. No public software copyright notice,
+executed software license, personal email address, or repository link was
+published.
 
-External review remains required for final
-legal text. AUSE Discovery was independently initiated and
-developed by bachelor Computer Science student Sai Aike Shwe Tun Aung, without
-an employee role, official university position, formal commission, or current
-written ownership agreement. The preferred direction is developer ownership of
-the software plus a written institutional operating license that lets
+AUSE Discovery was independently initiated and developed by bachelor Computer
+Science student Sai Aike Shwe Tun Aung, without an employee role, official
+university position, formal commission, or current written ownership
+agreement. The selected private-agreement direction remains developer ownership
+of the software plus a written institutional operating license that lets
 Assumption University host, operate, reproduce, back up, and maintain it,
 including reasonable security and continuity work, without creating an
 absolute modification prohibition. Exact modification, successor-maintainer,
 redistribution, commercialization, termination, and attribution rights remain
-for a written agreement and qualified Thai legal review.
+for a written agreement and qualified Thai legal review. This private agreement
+is not a public-page placeholder or a blocker for the current site copy.
 
 Public attribution is settled for Increment 23: use the accurate role `Developer and
 maintainer`, the name `Sai Aike Shwe Tun Aung`, and the GitHub profile
@@ -140,20 +145,17 @@ route. A public source-repository link is also deferred. The intended UI is a
 short footer credit and a fuller About section that distinguishes software
 development and maintenance from institutional content stewardship. Increment
 23 implements this attribution plus a compact factual disclosure beside the
-administrator sign-in form for the existing strictly necessary session cookie.
+administrator sign-in form for the existing strictly necessary authentication
+cookies.
 
-Public legal copy should state neutrally that Project metadata is transcribed
-and processed from institutionally supplied source material, while corrections
-and content-policy decisions are handled through authorized university
-administrators. It should not make the developer the guarantor of report or
-metadata accuracy, the sole public operator, or the owner of submitted Project
-content. Terms should target educational and noncommercial use and prohibit
-commercial exploitation, access-control circumvention, and abusive automated
-extraction, subject to institutional approval and applicable law. Project File
-rights, public availability, correction and takedown routes, institutional
-branding, the public operator or data controller, and final Privacy, Terms of
-Use, Contact, copyright, and license wording still require written university
-approval. No public ownership claim should ship before that review.
+Public copy states neutrally that Project metadata is transcribed and processed
+from institutionally supplied source material, while corrections and
+content-policy decisions are handled through authorized university
+administrators. It does not make the developer the guarantor of report or
+metadata accuracy, the owner of submitted Project content, or the institutional
+contact for content decisions. The future public-versus-organization-only
+Project File access decision remains item 31 and will require corresponding
+policy-copy updates when resolved.
 
 27. **Deferred, far-future product work separate from item 26.**
 Add first-party telemetry for institutional insight and an administrator-only
