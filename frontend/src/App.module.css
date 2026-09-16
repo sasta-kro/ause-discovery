@@ -24,6 +24,11 @@
 .eyebrow { color: var(--color-accent); font-size: .78rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
 .hero h1 { font-family: var(--font-display); font-size: clamp(2.6rem, 7vw, 5.5rem); font-weight: 500; letter-spacing: -.045em; line-height: .98; margin: var(--space-3) 0; }
 .lede { max-width: 42rem; color: var(--color-muted); font-size: 1.12rem; line-height: 1.7; }
+.homeActions { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+.browsePrimary { font-weight: 700; justify-self: start; overflow: hidden; padding: .85rem 1.25rem; position: relative; }
+.browsePrimary::after { animation: browseAttention 650ms 700ms ease-out both; background: var(--color-accent-strong); bottom: 0; content: ''; height: 3px; left: 0; position: absolute; transform: scaleX(0); transform-origin: left; width: 100%; }
+.homeSearchPrompt { color: var(--color-muted); font-size: .9rem; margin: .15rem 0 -.35rem; }
+.homeActions .searchBox { margin-top: 0; }
 .searchBox { display: flex; gap: var(--space-2); margin-top: var(--space-5); }
 .searchBox input { flex: 1; }
 .button, .secondaryButton, .dangerButton { border: 1px solid transparent; border-radius: var(--radius-small); cursor: pointer; display: inline-flex; justify-content: center; padding: .72rem 1rem; text-decoration: none; font: inherit; }
@@ -160,6 +165,7 @@
 .resultBody h2 a:hover { color: var(--color-accent-strong); }
 .resultBody .excerpt { color: var(--color-muted); line-height: 1.5; margin-top: .75rem; }
 .resultBody .tag { border-radius: var(--radius-small); color: var(--color-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .72rem; padding: .25rem .42rem; }
+@keyframes browseAttention { to { transform: scaleX(1); } }
 @media (max-width: 900px) { .searchLayout { grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr); gap: var(--space-4); } }
 @media (max-width: 720px) { .headerInner { align-items: flex-start; flex-direction: column; padding-block: var(--space-3); } .navigation { width: 100%; } .adminNavigationLink { margin-left: auto; } .searchBox { flex-direction: column; } .searchToolbar { grid-template-columns: 1fr 1fr; } .searchToolbar input, .searchToolbar .suggestionWrapper { grid-column: 1 / -1; } .searchLayout, .detailGrid, .adminLayout, .assignmentGrid, .artifactUpload, .artifactControls { grid-template-columns: 1fr; } .filterPanel { border-right: 0; max-height: 18rem; overflow-y: auto; padding-right: .35rem; } .adminNav { border-bottom: 1px solid var(--color-line); border-right: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 0 var(--space-3); } }
 @media (max-width: 720px) { .pageHeaderWithIdentity { align-items: flex-start; flex-direction: column; } }

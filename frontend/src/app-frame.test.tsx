@@ -151,7 +151,7 @@ describe('shared application shell', () => {
     it('focuses main with preventScroll and requests position zero on a different pathname', async () => {
       const user = userEvent.setup()
       renderAt('/')
-      await user.click(screen.getByRole('link', { name: 'Browse the archive' }))
+      await user.click(screen.getByRole('link', { name: 'Browse all projects' }))
       await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 0))
       expect(focus).toHaveBeenCalledWith({ preventScroll: true })
       expect(document.activeElement?.id).toBe('main-content')

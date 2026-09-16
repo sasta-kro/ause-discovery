@@ -161,11 +161,14 @@ function HomePage() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   return <section className={styles.hero}><PageTitle title={t('brand')} /><p className={styles.eyebrow}>{t('home.eyebrow')}</p><h1>{t('home.heading')}</h1><p className={styles.lede}>{t('home.description')}</p>
-    <form className={styles.searchBox} onSubmit={(event) => { event.preventDefault(); navigate(`/search?${new URLSearchParams({ q: query }).toString()}`) }}>
-      <label className="sr-only" htmlFor="home-search">{t('home.searchLabel')}</label><input id="home-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('home.searchPlaceholder')} />
-      <button className={styles.button} type="submit">{t('action.search')}</button>
-    </form>
-    <p><Link className={styles.secondaryButton} to="/search">{t('home.browse')}</Link></p>
+    <div className={styles.homeActions}>
+      <Link className={`${styles.button} ${styles.browsePrimary}`} to="/search">{t('home.browse')}</Link>
+      <p className={styles.homeSearchPrompt}>{t('home.searchPrompt')}</p>
+      <form className={styles.searchBox} onSubmit={(event) => { event.preventDefault(); navigate(`/search?${new URLSearchParams({ q: query }).toString()}`) }}>
+        <label className="sr-only" htmlFor="home-search">{t('home.searchLabel')}</label><input id="home-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('home.searchPlaceholder')} />
+        <button className={styles.secondaryButton} type="submit">{t('action.search')}</button>
+      </form>
+    </div>
   </section>
 }
 
