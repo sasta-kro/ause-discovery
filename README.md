@@ -12,7 +12,7 @@ AUSE Discovery is a searchable institutional archive of historical senior Projec
 
 ## A Brief
 
-The application is a modular monolith with a strict data contract. PostgreSQL is the single source of truth. Meilisearch holds derived, fully rebuildable search projections. Artifact bytes live in controlled local storage outside the database. A React single-page application serves the public and administrator experience through an Nginx front container, which also proxies the versioned Go API. Everything is defined by an OpenAPI 3.1 contract with generated Go and TypeScript clients, so the wire between frontend and backend cannot drift silently.
+The application is a modular monolith with a strict data contract. PostgreSQL is the single source of truth. Meilisearch holds derived, fully rebuildable search projections. Artifact bytes live in pluggable storage outside the database, either the local filesystem or Backblaze B2. A React single-page application serves the public and administrator experience through an Nginx front container, which also proxies the versioned Go API. Everything is defined by an OpenAPI 3.1 contract with generated Go and TypeScript clients, so the wire between frontend and backend cannot drift silently.
 
 The stack deploys under a configurable base path (`/ause-discovery/` by default, root also supported), which lets it live beside other services on a shared host. A demo deployment is currently serving an initial corpus of senior Projects while institutional content review and remaining interface polish continue.
 
@@ -38,7 +38,7 @@ make seed        # start PostgreSQL, apply migrations, synchronize catalogs
 make compose-up  # build and start the full stack
 ```
 
-The site is then served at `http://localhost:8088/ause-discovery/`. The first administrator account is created through the operator CLI prompt described in the runbook. There is no web signup, and passwords never pass through flags or environment variables.
+The site is then served at `http://localhost:8088/ause-discovery/`. The first administrator account is created with `ausectl admin create`, which prompts for credentials interactively. There is no web signup, and passwords never pass through flags or environment variables.
 
 ## Development
 
@@ -63,9 +63,10 @@ api/         OpenAPI contract and generator workspace
 backend/     Go API, CLI (ausectl), migrations, queries
 config/      Academic catalog and taxonomy vocabularies
 deploy/      Nginx configuration templates
-docs/        Specifications, operator runbook, development notes
 frontend/    React application and Playwright acceptance tests
+resources/   Brand assets and source material for the corpus
 scripts/     Repository tooling such as action-pin validation
+tools/       Source-data extractor for the archived corpus
 ```
 
 ## Testing and quality
@@ -74,8 +75,12 @@ Validation runs on every pull request and default-branch push through GitHub Act
 
 ## Deployment
 
-Deployment is human-operated through the runbook: pull digest-pinned images, run forward migrations, synchronize catalogs, create the administrator, and start the stack behind a reverse proxy. Container images are published to GHCR only by the tagged release workflow, CI never deploys. The full procedure, including backup targets, restore ordering, upgrades, and recovery scenarios, lives in the operator runbook.
+Deployment is human-operated: pull digest-pinned images, run forward migrations, synchronize catalogs, create the administrator, and start the stack behind a reverse proxy. Container images are published to GHCR only by the tagged release workflow, CI never deploys.
 
-## Documentation
-In progress..
+## Where to look
+
+- `api/openapi.yaml` is the single source of truth for the HTTP contract, with generated clients in `backend/generated/` and `frontend/src/api/generated/`
+- `config/` holds the version-controlled academic catalog and taxonomy vocabularies
+- `.env.example` documents every configuration value and its constraints
+- `make doctor` and the targets above are the entry points for setup and verification
 
