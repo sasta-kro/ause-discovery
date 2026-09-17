@@ -196,5 +196,5 @@
 .pageHeaderWithIdentity h1 { min-width: 0; }
 
 .brandGroup { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-4); }
-.brandDivider { align-self: center; background: var(--color-line-strong); display: block; height: 3rem; width: 1px; }
-.facultyLogo { display: block; height: 4.2rem; width: auto; }
+.brandDivider { align-self: center; background: var(--color-line-strong); display: block; height: 4rem; width: 1px; }
+.facultyLogo { display: block; height: 4.2rem; width: auto; padding: 2px}
