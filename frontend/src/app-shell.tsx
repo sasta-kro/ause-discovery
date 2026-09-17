@@ -127,9 +127,13 @@ function AppFrame() {
   return <div className={styles.page}>
     <a className={styles.skipLink} href="#main-content">{t('action.skipToMainContent')}</a>
     <header className={styles.header}><div className={styles.headerInner}>
-      <Link className={styles.brand} onClick={() => { if (location.pathname === '/') window.scrollTo(0, 0) }} to="/" aria-label={t('brand')}>
-        <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-header.svg`} alt="" aria-hidden="true" />
-      </Link>
+      <div className={styles.brandGroup}>
+        <Link className={styles.brand} onClick={() => { if (location.pathname === '/') window.scrollTo(0, 0) }} to="/" aria-label={t('brand')}>
+          <img className={styles.brandLogo} src={`${publicBasePath}ause-discover-logo-header.svg`} alt="" aria-hidden="true" />
+        </Link>
+        <span aria-hidden="true" className={styles.brandDivider} />
+        <img className={styles.facultyLogo} src={`${publicBasePath}vmes-logo.png`} alt={t('nav.faculty')} />
+      </div>
       <nav className={styles.navigation} aria-label={t('nav.primary')}>
         <NavLink to="/search">{t('nav.search')}</NavLink><NavLink to="/about">{t('nav.about')}</NavLink><NavLink className={styles.adminNavigationLink} to="/admin">{t('nav.admin')}</NavLink>
       </nav>
