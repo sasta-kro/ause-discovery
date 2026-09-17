@@ -62,7 +62,10 @@ independently accepted at `7388627`. Developer attribution and current public
 policy copy Increment 23 was implemented at `7af6120` and corrected directly at
 `5b48ccb`, the current accepted implementation baseline.
 API and web release 0.5 from `95bd9fc` were deployed successfully on 2026-09-15
-without resetting PostgreSQL or B2. Read
+without resetting PostgreSQL or B2. API and web release 0.6 from `2551425` were
+deployed through the same preservation path on 2026-09-17; catalog validation
+and synchronization retired the `game` Platform while PostgreSQL remained at
+schema version 4 and B2 remained untouched. Read
 `implementation-status/backlog.md` for current work and constraints. Read
 `implementation-status/completed.md` only for accepted history, detailed
 behavior, or verification evidence.

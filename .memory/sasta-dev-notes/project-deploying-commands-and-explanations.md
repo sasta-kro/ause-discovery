@@ -4,9 +4,11 @@ This note is the current operator reference for local Docker testing, publishing
 Linux images to Docker Hub, and deploying the Compose stack on the VM. The
 commands assume the repository base path `/ause-discovery/`.
 
-The dated record `records/vm-deployment-2026-09-15-v0.5.md` captures the successful first
-in-place production upgrade, including image digests, preserved data, timing,
-and the Increment 17 search rebuild. The earlier
+The dated record `records/vm-deployment-2026-09-17-v0.6.md` captures the latest
+in-place production upgrade, including image digests, catalog synchronization,
+search-settings convergence, preserved data, and timing. The preceding
+`records/vm-deployment-2026-09-15-v0.5.md` captures the first in-place upgrade
+and its Increment 17 search rebuild. The earlier
 `records/vm-deployment-2026-09-13.md` captures the initial fresh reset, imports,
 errors, and fixes. This file keeps the reusable command flow.
 
@@ -174,6 +176,17 @@ sastakro/ause-discovery-web:0.5
 sha256:9f67b100632631c8ad99651b13d2160e12163f75514feb543fdd3c4cb936c38a
 ```
 
+The 2026-09-17 in-place upgrade published API and web `0.6` from commit
+`2551425`. The image index digests were:
+
+```text
+sastakro/ause-discovery-api:0.6
+sha256:e8b3fd0c981ec6c7b58e000043ad3a6fbf94424bb2939f4dda444afb498e8e70
+
+sastakro/ause-discovery-web:0.6
+sha256:ec26c5d41fc24516e1d1b86439f44f452b3ff6a3c0833ecd236f37b4f730bee8
+```
+
 The repository's tagged release workflow currently publishes to GHCR. The
 commands above are the separate manual Docker Hub publication path used by the
 current VM release.
@@ -182,7 +195,7 @@ current VM release.
 
 Routine upgrades preserve PostgreSQL, B2, Meilisearch, and every named volume.
 They do not use `down`, `down -v`, metadata import, Project Content transfer,
-or B2 clearing. The successful 0.5 upgrade used this flow:
+or B2 clearing. The successful 0.5 and 0.6 upgrades used this flow:
 
 ```sh
 cd /home/saiaike/apps/ause-discover
@@ -218,6 +231,24 @@ Update the API and web image references in `.env` before `config` and `pull`.
 Verify that the backup file is nonempty. The storage-provider output must remain
 `b2`.
 
+When a release changes version-controlled academic or taxonomy catalogs, run
+validation and synchronization from the new API image before replacing the
+long-running application services:
+
+```sh
+docker compose -p ause-discovery --env-file .env \
+  run --rm --no-deps \
+  --entrypoint /usr/local/bin/ausectl \
+  api catalog validate
+
+docker compose -p ause-discovery --env-file .env \
+  run --rm --no-deps \
+  --entrypoint /usr/local/bin/ausectl \
+  api catalog sync
+```
+
+Release 0.6 required these commands to retire the `game` Platform catalog value.
+
 When the release changes Meilisearch schema or ranking settings, queue a rebuild
 after the new API becomes healthy:
 
@@ -230,7 +261,8 @@ docker compose -p ause-discovery --env-file .env \
 
 The command only queues the rebuild. Confirm completion through the
 administrator Search page. Release 0.5 required this operation for Increment
-17. Increment 18 itself required no backend operation.
+17. Release 0.6 did not require a full rebuild: API startup patched the active
+index with search-schema-version-3 facet settings.
 
 ## Quick copy: fresh VM deployment
 
@@ -238,15 +270,15 @@ The current VM deployment directory is
 `/home/saiaike/apps/ause-discover`. It contains the current `compose.yaml`,
 `compose.override.yaml`, and a private `.env`. Run all VM commands from that
 directory. The reusable configuration below uses the tags deployed on
-2026-09-15. Immutable digests remain preferable for later releases.
+2026-09-17. Immutable digests remain preferable for later releases.
 
 ```dotenv
 AUSE_ENV=production
 AUSE_COOKIE_SECURE=true
 MEILI_ENV=production
 
-AUSE_API_IMAGE=sastakro/ause-discovery-api:0.5
-AUSE_WEB_IMAGE=sastakro/ause-discovery-web:0.5
+AUSE_API_IMAGE=sastakro/ause-discovery-api:0.6
+AUSE_WEB_IMAGE=sastakro/ause-discovery-web:0.6
 
 AUSE_PUBLIC_BASE_PATH=/ause-discovery/
 AUSE_WEB_PORT=8088

@@ -29,7 +29,10 @@ independently accepted at `7388627`. Developer attribution and current public
 policy copy Increment 23 was implemented at `7af6120` and corrected directly at
 `5b48ccb`, the current accepted implementation baseline.
 API and web release 0.5 from `95bd9fc` were deployed successfully through the
-production-preserving upgrade path on 2026-09-15.
+production-preserving upgrade path on 2026-09-15. API and web release 0.6 from
+`2551425` were deployed through the same path on 2026-09-17 with catalog
+validation and synchronization, PostgreSQL schema version 4, search schema
+version 3, and no PostgreSQL, B2, or volume reset.
 
 ## Status lifecycle
 

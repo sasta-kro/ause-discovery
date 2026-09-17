@@ -27,6 +27,7 @@ verification evidence. Routine work planning should read `backlog.md` instead.
 | Developer attribution and current public policies | `../docs/increments/23-developer-attribution-and-session-cookie-disclosure.md`, commit `7af6120`, direct correction commit `5b48ccb` |
 | VM deployment and proxy correction | `../sasta-dev-notes/records/vm-deployment-2026-09-13.md` |
 | VM 0.5 in-place preservation upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-15-v0.5.md` |
+| VM 0.6 in-place catalog and application upgrade | `../sasta-dev-notes/records/vm-deployment-2026-09-17-v0.6.md` |
 
 
 ## Technical completion
