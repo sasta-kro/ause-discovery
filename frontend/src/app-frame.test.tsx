@@ -99,7 +99,9 @@ describe('shared application shell', () => {
     let location = ''
     renderAt('/admin/audit?limit=5', (value) => { location = value })
     await waitFor(() => expect(location).toBe('/admin/login?next=%2Fadmin%2Faudit%3Flimit%3D5'))
-    expect(screen.getByRole('heading', { name: 'Administrator sign in' })).toBeTruthy()
+    // The redirect location settles one commit before the login content is
+    // in the DOM, so the heading is awaited rather than queried synchronously.
+    expect(await screen.findByRole('heading', { name: 'Administrator sign in' })).toBeTruthy()
   })
 
   it('keeps a failed login on the page with the generic credential failure', async () => {
